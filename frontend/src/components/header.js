@@ -26,7 +26,7 @@ const Header = () => {
           <div className="flex items-center">
             <div className="relative" ref={profileRef}>
               <button
-                className="flex items-center space-x-2 cursor-pointer"
+                className="flex items-center space-x-3 cursor-pointer"
                 onClick={() => setIsProfileOpen(!isProfileOpen)}
               >
                 <div className="h-8 w-8 rounded-full bg-blue-600 flex items-center justify-center text-white">
@@ -64,7 +64,7 @@ const Header = () => {
 
                     <a
                       href="#"
-                      className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                      className="block px-4 py-2 text-sm text-red-600 hover:bg-gray-100"
                     >
                       <FontAwesomeIcon icon={faSignOutAlt} className="mr-2" />
                       Sign out

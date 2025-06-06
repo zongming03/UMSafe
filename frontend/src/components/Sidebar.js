@@ -12,7 +12,7 @@ import {
 import "../styles/Sidebar.css"; 
 
 
-const Sidebar = ({ activeTab, setActiveTab }) => (
+const Sidebar = ({ activeTab, setActiveTab,userRole }) => (
   <aside className="side-bar-container">
     <nav className="mt-5 px-2">
       <div className="space-y-1">
@@ -88,24 +88,26 @@ const Sidebar = ({ activeTab, setActiveTab }) => (
           />
           Analytics
         </button>
-        <button
-          onClick={() => setActiveTab("users")}
-          className={`sidebar-btn ${
-            activeTab === "users"
-              ? "bg-blue-100 text-blue-800"
-              : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
-          }`}
-        >
-          <FontAwesomeIcon
-            icon={faUsers}
-            className={`mr-3 text-lg ${
+        {userRole === "Admin" && (
+          <button
+            onClick={() => setActiveTab("users")}
+            className={`sidebar-btn ${
               activeTab === "users"
-                ? "text-blue-600"
-                : "text-gray-400 group-hover:text-gray-500"
+                ? "bg-blue-100 text-blue-800"
+                : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
             }`}
-          />
-          Users
-        </button>
+          >
+            <FontAwesomeIcon
+              icon={faUsers}
+              className={`mr-3 text-lg ${
+                activeTab === "users"
+                  ? "text-blue-600"
+                  : "text-gray-400 group-hover:text-gray-500"
+              }`}
+            />
+            Users
+          </button>
+        )}
         <button
           onClick={() => setActiveTab("rooms")}
           className={`sidebar-btn ${
