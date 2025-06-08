@@ -1,14 +1,27 @@
-const mongoose = require('mongoose');
-require('dotenv').config();
+import mongoose from 'mongoose';
+import dotenv from 'dotenv';
+dotenv.config();
 
-const connectDB = async () => {
-  try {
-    await mongoose.connect(process.env.MONGO_URI);
-    console.log('✅ MongoDB connected successfully');
-  } catch (error) {
-    console.error('❌ MongoDB connection failed:', error.message);
-    process.exit(1);
-  }
+const connectDBAndStartServer = (app) => {
+  mongoose
+    .connect(process.env.MONGO_URI)
+    .then(() => {
+      app.listen(process.env.PORT, () => {
+        console.log(
+          "✅ Connected to db and server listening at port",
+          process.env.PORT
+        );
+      });
+
+    })
+    .catch((error) => {
+      console.error("❌ Error connecting to the database:", error.message);
+      app.get("/", (req, res) => {
+        res
+          .status(500)
+          .send("Internal Server Error. Unable to connect to the database.");
+      });
+    });
 };
 
-module.exports = connectDB;
+export default connectDBAndStartServer;

@@ -14,12 +14,10 @@ import umcampus from "../assets/um-campus5.jpg";
 import "../styles/Login.css";
 import Footer from "../components/footer";
 
+import { useNavigate } from "react-router-dom";
 
-// import { useNavigate } from "react-router-dom";
-
-// const navigate = useNavigate();
-
-const LoginPage = () => {
+const LoginPage = ({ setIsLoggedIn }) => {
+  const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [rememberMe, setRememberMe] = useState(false);
@@ -41,7 +39,8 @@ const LoginPage = () => {
     setTimeout(() => {
       setIsLoading(false);
       if (email === "admin@example.com" && password === "password123") {
-        window.location.href = "/dashboard";
+        setIsLoggedIn(true);
+        navigate("/room");
       } else {
         setLoginError("Invalid email or password.");
       }
@@ -169,8 +168,7 @@ const LoginPage = () => {
               </div>
               <div>
                 <button
-                  type="button"
-                  // onClick={() => navigate("/dashboard")}
+                  type="submit"
                   className="signin-button"
                 >
                   <span className="signin-button-span"></span>
@@ -215,9 +213,7 @@ const LoginPage = () => {
                   <FontAwesomeIcon icon={faComments}></FontAwesomeIcon>
                 </div>
                 <div className="ml-4">
-                  <h3 className="points-wording">
-                    Real-Time Communication
-                  </h3>
+                  <h3 className="points-wording">Real-Time Communication</h3>
                   <p className="mt-1">
                     Direct messaging between students and staff
                   </p>
@@ -228,9 +224,7 @@ const LoginPage = () => {
                   <FontAwesomeIcon icon={faChartBar}></FontAwesomeIcon>
                 </div>
                 <div className="ml-4">
-                  <h3 className="points-wording">
-                    Comprehensive Analytics
-                  </h3>
+                  <h3 className="points-wording">Comprehensive Analytics</h3>
                   <p className="mt-1">
                     Gain insights to improve campus services
                   </p>

@@ -1,6 +1,4 @@
 import React, { useState, useEffect, useRef } from "react";
-import Footer from "../components/footer";
-import Header from "../components/header";
 import "../styles/ComplaintChat.css";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
@@ -197,7 +195,7 @@ const ComplaintChat = () => {
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
-      <Header />
+     
 
       {/* Chat Header */}
       <ComplaintChatHeader
@@ -408,7 +406,6 @@ const ComplaintChat = () => {
           </div>
         </div>
       </div>
-      <Footer />
     </div>
   );
 };

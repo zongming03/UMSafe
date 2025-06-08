@@ -8,6 +8,11 @@ const categorySchema = new mongoose.Schema({
   },
   description: {
     type: String,
+    required: true,
+  },
+  complaintsCount:{
+    type: Number,
+    default: 0,
   },
   createdAt: {
     type: Date,

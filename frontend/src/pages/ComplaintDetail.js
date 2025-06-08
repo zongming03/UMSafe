@@ -1,6 +1,4 @@
 import React, { useState, useEffect, useRef } from "react";
-import Footer from "../components/footer";
-import Header from "../components/header";
 import Sidebar from "../components/Sidebar";
 import "../styles/ComplaintDetail.css";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
@@ -165,10 +163,7 @@ Report generated successfully
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col h-screen">
-      {/* Header */}
-      <header className="bg-white shadow-sm z-10">
-        <Header />
-      </header>
+
       <div className="flex flex-1">
         {/* Sidebar */}
         <Sidebar />
@@ -274,7 +269,6 @@ Report generated successfully
           </div>
         </main>
       </div>
-      <Footer />
     </div>
   );
 };

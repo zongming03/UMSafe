@@ -1,6 +1,4 @@
 import React, { useState } from "react";
-import Footer from "../components/footer";
-import Header from "../components/header";
 import Sidebar from "../components/Sidebar";
 import "../styles/ComplaintCategory.css";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
@@ -14,6 +12,19 @@ import {
 } from "@fortawesome/free-solid-svg-icons";
 import Pagination from "../components/Pagination";
 import SearchFilterSection from "../components/SearchFilterSection";
+import showNotification from "../utils/showNotification";
+import AddCategoryModal from "../components/AddCategoryModal";
+import EditCategoryModal from "../components/EditCategoryModal";
+import DeleteCategoryModal from "../components/DeleteCategoryModal";
+import {
+  fetchCategories,
+  addCategory,
+  editCategory,
+  deleteCategory,
+  bulkDeleteCategories,
+} from "../services/api";
+import LoadingOverlay from "../components/LoadingOverlay";
+
 const ComplaintCategory = () => {
   const [categories, setCategories] = useState([
     {
@@ -97,8 +108,8 @@ const ComplaintCategory = () => {
       createdAt: "2025-04-15",
     },
   ]);
-    const [activeTab, setActiveTab] = useState("categories");
-
+  const [activeTab, setActiveTab] = useState("categories");
+  const [isLoading, setIsLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [sortConfig, setSortConfig] = useState(null);
   const [selectedCategories, setSelectedCategories] = useState([]);
@@ -109,27 +120,7 @@ const ComplaintCategory = () => {
   const [newCategory, setNewCategory] = useState({ name: "", description: "" });
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 8;
-  const handleSort = (key) => {
-    let direction = "ascending";
-    if (
-      sortConfig &&
-      sortConfig.key === key &&
-      sortConfig.direction === "ascending"
-    ) {
-      direction = "descending";
-    }
-    setSortConfig({ key, direction });
-  };
-  const getSortIcon = (key) => {
-    if (!sortConfig || sortConfig.key !== key) {
-      return <FontAwesomeIcon icon={faSort} className="text-gray-300 ml-1" />;
-    }
-    return sortConfig.direction === "ascending" ? (
-      <FontAwesomeIcon icon={faSortUp} className="text-blue-500 ml-1" />
-    ) : (
-      <FontAwesomeIcon icon={faSortDown} className="text-blue-500 ml-1" />
-    );
-  };
+
   const sortedCategories = React.useMemo(() => {
     let sortableCategories = [...categories];
     if (sortConfig !== null) {
@@ -145,6 +136,7 @@ const ComplaintCategory = () => {
     }
     return sortableCategories;
   }, [categories, sortConfig]);
+
   const filteredCategories = sortedCategories.filter(
     (category) =>
       category.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -155,6 +147,30 @@ const ComplaintCategory = () => {
     currentPage * itemsPerPage
   );
   const totalPages = Math.ceil(filteredCategories.length / itemsPerPage);
+
+  const handleSort = (key) => {
+    let direction = "ascending";
+    if (
+      sortConfig &&
+      sortConfig.key === key &&
+      sortConfig.direction === "ascending"
+    ) {
+      direction = "descending";
+    }
+    setSortConfig({ key, direction });
+  };
+
+  const getSortIcon = (key) => {
+    if (!sortConfig || sortConfig.key !== key) {
+      return <FontAwesomeIcon icon={faSort} className="text-gray-300 ml-1" />;
+    }
+    return sortConfig.direction === "ascending" ? (
+      <FontAwesomeIcon icon={faSortUp} className="text-blue-500 ml-1" />
+    ) : (
+      <FontAwesomeIcon icon={faSortDown} className="text-blue-500 ml-1" />
+    );
+  };
+
   const handleSelectAll = (e) => {
     if (e.target.checked) {
       setSelectedCategories(filteredCategories.map((category) => category.id));
@@ -162,6 +178,20 @@ const ComplaintCategory = () => {
       setSelectedCategories([]);
     }
   };
+
+  const fetchAndSetCategories = async () => {
+    setIsLoading(true);
+    try {
+      const res = await fetchCategories();
+      const categories = res.data;
+      setCategories(categories);
+    } catch {
+      setError("Failed to fetch categories. Please try again.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const handleSelectCategory = (id) => {
     if (selectedCategories.includes(id)) {
       setSelectedCategories(
@@ -171,25 +201,32 @@ const ComplaintCategory = () => {
       setSelectedCategories([...selectedCategories, id]);
     }
   };
-  const handleAddCategory = () => {
+  const handleAddCategory = async (e) => {
     if (newCategory.name.trim() === "") return;
-    const newId = Math.max(...categories.map((c) => c.id)) + 1;
-    const today = new Date().toISOString().split("T")[0];
-    setCategories([
-      ...categories,
-      {
-        id: newId,
-        name: newCategory.name,
-        description: newCategory.description,
-        complaintsCount: 0,
-        createdAt: today,
-      },
-    ]);
-    setNewCategory({ name: "", description: "" });
-    setIsAddModalOpen(false);
-    // Show success notification
-    showNotification("Category added successfully");
+    e.preventDefault();
+    setIsLoading(true);
+    try {
+      const categoryName = newCategory.name.trim();
+      const categoryDescription = newCategory.description.slice(0, 200);
+
+      const newCategoryData = {
+        name: categoryName,
+        description: categoryDescription,
+      };
+
+      // Call API to add category
+      await addCategory(newCategoryData);
+      await fetchAndSetCategories();
+      setIsAddModalOpen(false);
+      showNotification("Category added successfully");
+    } catch (error) {
+      console.error("Error adding category:", error);
+      showNotification("Failed to add category");
+    } finally {
+      setIsLoading(false);
+    }
   };
+
   const handleEditCategory = () => {
     if (
       !currentCategory ||
@@ -233,23 +270,12 @@ const ComplaintCategory = () => {
       `${selectedCategories.length} categories deleted successfully`
     );
   };
-  const showNotification = (message) => {
-    const notification = document.createElement("div");
-    notification.className =
-      "fixed top-4 right-4 bg-green-50 text-green-800 px-4 py-3 rounded-lg shadow-lg z-50 flex items-center";
-    notification.innerHTML = `<span>${message}</span>`;
-    document.body.appendChild(notification);
-    setTimeout(() => {
-      notification.remove();
-    }, 3000);
-  };
+
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
-      {/* Header */}
-      <Header />
       <div className="flex flex-1">
         {/* Sidebar */}
-        <Sidebar  activeTab={activeTab} setActiveTab={setActiveTab}/>
+        <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} />
 
         {/* Main Content */}
         <main className="flex-1 overflow-y-auto bg-gray-50 p-6">
@@ -284,17 +310,22 @@ const ComplaintCategory = () => {
               </div>
               <p className="mt-2 text-sm text-gray-600">
                 Manage complaint categories to help organize and classify
-                incoming complaints. Categories help users select the
-                appropriate department for their issues.
+                incoming complaints.-{" "}
+                {new Date().toLocaleDateString("en-US", {
+                  weekday: "long",
+                  year: "numeric",
+                  month: "long",
+                  day: "numeric",
+                })}
               </p>
             </div>
 
             <SearchFilterSection
-            searchTerm={searchTerm}
-            setSearchTerm={setSearchTerm}
-            selectedCategories={selectedCategories}
-            handleBulkDelete={handleBulkDelete}
-            inputPlaceholder="Search categories by name or description...."
+              searchTerm={searchTerm}
+              setSearchTerm={setSearchTerm}
+              selectedCategories={selectedCategories}
+              handleBulkDelete={handleBulkDelete}
+              inputPlaceholder="Search categories by name or description...."
             />
 
             {/* Categories Table */}
@@ -475,248 +506,30 @@ const ComplaintCategory = () => {
       </div>
 
       {/* Add Category Modal */}
-      {isAddModalOpen && (
-        <div className="fixed inset-0 z-50 overflow-y-auto">
-          <div className="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-            <div
-              className="fixed inset-0 transition-opacity"
-              aria-hidden="true"
-            >
-              <div
-                className="absolute inset-0 bg-gray-500/30 backdrop-blur-sm"
-                onClick={() => setIsAddModalOpen(false)}
-              ></div>
-            </div>
-            <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
-              <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
-                <h3 className="text-lg leading-6 font-medium text-gray-900 mb-4">
-                  Add New Category
-                </h3>
-                <div className="space-y-4">
-                  <div>
-                    <label
-                      htmlFor="category-name"
-                      className="block text-sm font-medium text-gray-700 mb-1"
-                    >
-                      Category Name <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      id="category-name"
-                      value={newCategory.name}
-                      onChange={(e) =>
-                        setNewCategory({ ...newCategory, name: e.target.value })
-                      }
-                      className="category-addC-text-box"
-                      placeholder="Enter category name"
-                    />
-                  </div>
-                  <div>
-                    <label
-                      htmlFor="category-description"
-                      className="block text-sm font-medium text-gray-700 mb-1"
-                    >
-                      Description
-                    </label>
-                    <textarea
-                      id="category-description"
-                      value={newCategory.description}
-                      onChange={(e) =>
-                        setNewCategory({
-                          ...newCategory,
-                          description: e.target.value.slice(0, 200),
-                        })
-                      }
-                      rows={3}
-                      maxLength={200}
-                      className="category-addC-text-box"
-                      placeholder="Enter category description"
-                    ></textarea>
-                    <p className="mt-1 text-xs text-gray-500 text-right">
-                      {newCategory.description.length}/200 characters
-                    </p>
-                  </div>
-                </div>
-              </div>
-              <div className="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse gap-2">
-                <button
-                  type="button"
-                  onClick={handleAddCategory}
-                  className="!rounded-button whitespace-nowrap w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-blue-600 text-base font-medium text-white hover:bg-blue-700 focus:outline-none sm:ml-3 sm:w-auto sm:text-sm"
-                >
-                  Add Category
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsAddModalOpen(false);
-                    setNewCategory({ name: "", description: "" });
-                  }}
-                  className="!rounded-button whitespace-nowrap mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none sm:mt-0 sm:w-auto sm:text-sm"
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      <AddCategoryModal
+        isOpen={isAddModalOpen}
+        onClose={() => setIsAddModalOpen(false)}
+        newCategory={newCategory}
+        setNewCategory={setNewCategory}
+        onAdd={handleAddCategory}
+      />
+
       {/* Edit Category Modal */}
-      {isEditModalOpen && currentCategory && (
-        <div className="fixed inset-0 z-50 overflow-y-auto">
-          <div className="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-            <div
-              className="fixed inset-0 transition-opacity"
-              aria-hidden="true"
-            >
-              <div
-                className="absolute inset-0 bg-gray-500/30 backdrop-blur-sm"
-                onClick={() => setIsEditModalOpen(false)}
-              ></div>
-            </div>
-            <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
-              <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
-                <h3 className="text-lg leading-6 font-medium text-gray-900 mb-4">
-                  Edit Category
-                </h3>
-                <div className="space-y-4">
-                  <div>
-                    <label
-                      htmlFor="edit-category-name"
-                      className="block text-sm font-medium text-gray-700 mb-1"
-                    >
-                      Category Name <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      id="edit-category-name"
-                      value={currentCategory.name}
-                      onChange={(e) =>
-                        setCurrentCategory({
-                          ...currentCategory,
-                          name: e.target.value,
-                        })
-                      }
-                      className="category-addC-text-box"
-                    />
-                  </div>
-                  <div>
-                    <label
-                      htmlFor="edit-category-description"
-                      className="block text-sm font-medium text-gray-700 mb-1"
-                    >
-                      Description
-                    </label>
-                    <textarea
-                      id="edit-category-description"
-                      value={currentCategory.description}
-                      onChange={(e) =>
-                        setCurrentCategory({
-                          ...currentCategory,
-                          description: e.target.value,
-                        })
-                      }
-                      rows={3}
-                      className="category-addC-text-box"
-                    ></textarea>
-                    <p className="mt-1 text-xs text-gray-500 text-right">
-                      {currentCategory.description.length}/200 characters
-                    </p>
-                  </div>
-                </div>
-              </div>
-              <div className="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse gap-2">
-                <button
-                  type="button"
-                  onClick={handleEditCategory}
-                  className="rounded-button whitespace-nowrap w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-blue-600 text-base font-medium text-white hover:bg-blue-700 focus:outline-none sm:ml-3 sm:w-auto sm:text-sm"
-                >
-                  Save Changes
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setIsEditModalOpen(false)}
-                  className="rounded-button whitespace-nowrap mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none sm:mt-0 sm:w-auto sm:text-sm"
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      <EditCategoryModal
+        isOpen={isEditModalOpen}
+        onClose={() => setIsEditModalOpen(false)}
+        currentCategory={currentCategory}
+        setCurrentCategory={setCurrentCategory}
+        onEdit={handleEditCategory}
+      />
+
       {/* Delete Category Modal */}
-      {isDeleteModalOpen && currentCategory && (
-        <div className="fixed inset-0 z-50 overflow-y-auto">
-          <div className="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-            <div
-              className="fixed inset-0 transition-opacity"
-              aria-hidden="true"
-            >
-              <div
-                className="absolute inset-0 bg-gray-500/30 backdrop-blur-sm"
-                onClick={() => setIsDeleteModalOpen(false)}
-              ></div>
-            </div>
-            <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
-              <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
-                <div className="sm:flex sm:items-start">
-                  <div className="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-red-100 sm:mx-0 sm:h-10 sm:w-10">
-                    <i className="fas fa-exclamation-triangle text-red-600"></i>
-                  </div>
-                  <div className="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left">
-                    <h3 className="text-lg leading-6 font-medium text-gray-900">
-                      Delete Category
-                    </h3>
-                    <div className="mt-2">
-                      <p className="text-sm text-gray-500">
-                        Are you sure you want to delete the category{" "}
-                        <span className="font-medium">
-                          {currentCategory.name}
-                        </span>
-                        ?
-                      </p>
-                      {currentCategory.complaintsCount > 0 && (
-                        <div className="mt-2 p-3 bg-yellow-50 rounded-md">
-                          <p className="text-sm text-yellow-700">
-                            <i className="fas fa-exclamation-circle mr-2"></i>
-                            This category has{" "}
-                            <span className="font-bold">
-                              {currentCategory.complaintsCount}
-                            </span>{" "}
-                            associated complaints. Deleting it may affect
-                            complaint categorization.
-                          </p>
-                        </div>
-                      )}
-                      <p className="mt-2 text-sm text-red-500">
-                        This action cannot be undone.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div className="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse gap-2">
-                <button
-                  type="button"
-                  onClick={handleDeleteCategory}
-                  className="!rounded-button whitespace-nowrap w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-red-600 text-base font-medium text-white hover:bg-red-700 focus:outline-none sm:ml-3 sm:w-auto sm:text-sm"
-                >
-                  Delete
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setIsDeleteModalOpen(false)}
-                  className="!rounded-button whitespace-nowrap mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none sm:mt-0 sm:w-auto sm:text-sm"
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-      <Footer />
+      <DeleteCategoryModal
+        isOpen={isDeleteModalOpen}
+        onClose={() => setIsDeleteModalOpen(false)}
+        currentCategory={currentCategory}
+        onDelete={handleDeleteCategory}
+      />
     </div>
   );
 };

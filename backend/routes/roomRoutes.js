@@ -1,10 +1,17 @@
-const express = require('express');
+import express from "express";
 const router = express.Router();
-const roomcontroller = require('../controllers/roomController');
+import {
+  getAllRooms,
+  addRoom,
+  editRoom,
+  deleteRoom,
+  bulkDeleteRooms
+} from "../controllers/roomController.js";
 
-router.get('/', roomcontroller.getAllRooms);
-router.post('/', roomcontroller.addRoom);
-router.patch('/:id', roomcontroller.editRoom);
-router.delete('/:facultyId/:blockId/:roomId', roomcontroller.deleteRoom);
+router.get("/", getAllRooms);
+router.post("/", addRoom);
+router.patch('/:facultyId/:blockId/:roomId', editRoom);
+router.delete("/:facultyId/:blockId/:roomId",deleteRoom);
+router.post('/bulk-delete', bulkDeleteRooms);
 
-module.exports = router;
+export default router;

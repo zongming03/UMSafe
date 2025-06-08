@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import * as echarts from "echarts";
-import Footer from "../components/footer";
-import Header from "../components/header";
+
 import Sidebar from "../components/Sidebar";
 import "../styles/Dashboard.css";
 import SummaryCard from "../components/SummaryCard";
@@ -345,8 +344,7 @@ const Dashboard = () => {
 
   return (
     <div className="dashboard-container ">
-      {/* Header */}
-      <Header />
+
 
       <div className="flex flex-1">
         {/* SideBar */}
@@ -740,7 +738,6 @@ const Dashboard = () => {
           </div>
         </main>
       </div>
-      <Footer />
     </div>
   );
 };

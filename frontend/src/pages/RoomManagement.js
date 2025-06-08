@@ -1,13 +1,11 @@
-import { useState } from "react";
-import Footer from "../components/footer";
-import Header from "../components/header";
+import { useState, useEffect } from "react";
 import Sidebar from "../components/Sidebar";
 import LoadingOverlay from "../components/LoadingOverlay";
 import Pagination from "../components/Pagination";
 import "../styles/RoomManagement.css";
+import ErrorModal from "../components/ErrorModal";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
-  faTimes,
   faPlus,
   faEdit,
   faTrashAlt,
@@ -15,9 +13,20 @@ import {
   faSort,
   faSortUp,
   faSortDown,
-  faCheck,
 } from "@fortawesome/free-solid-svg-icons";
 import SearchFilterSection from "../components/SearchFilterSection";
+import {
+  fetchRooms,
+  addRoom,
+  editRoom,
+  deleteRoom,
+  bulkDeleteRooms,
+} from "../services/api";
+import AddRoomModal from "../components/AddRoomModal";
+import EditRoomModal from "../components/EditRoomModal";
+import DeleteRoomModal from "../components/DeleteRoomModal";
+import showNotification from "../utils/showNotification";
+
 const RoomManagement = () => {
   const [activeTab, setActiveTab] = useState("rooms");
   const [isLoading, setIsLoading] = useState(false);
@@ -30,75 +39,17 @@ const RoomManagement = () => {
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [roomToDelete, setRoomToDelete] = useState(null);
   const [sortConfig, setSortConfig] = useState(null);
-
+  const [error, setError] = useState(null);
+  const [rooms, setRoom] = useState([]);
   const [newRoom, setNewRoom] = useState({
     building: "",
     roomName: "",
   });
-  const [rooms, setRoom] = useState([
-    {
-      id: "RM-1001",
-      building: "Science Building",
-      roomName: "S302",
-    },
-    {
-      id: "RM-1002",
-      building: "Engineering Block",
-      roomNumber: "E105",
-      roomName: "Computer Lab",
-    },
-    {
-      id: "RM-1003",
-      building: "Arts Building",
-      roomName: "A201",
-    },
-    {
-      id: "RM-1004",
-      building: "Library",
-      roomName: "L001",
-    },
-    {
-      id: "RM-1005",
-      building: "Business School",
-      roomName: "B102",
-    },
-    {
-      id: "RM-1006",
-      building: "Science Building",
-      roomName: "S105",
-    },
-    {
-      id: "RM-1007",
-      building: "Medical Center",
-      roomName: "M001",
-    },
-    {
-      id: "RM-1008",
-      building: "Sports Complex",
-      roomName: "SP01",
-    },
-    {
-      id: "RM-1009",
-      building: "Engineering Block",
-      roomName: "E205",
-    },
-    {
-      id: "RM-1010",
-      building: "Arts Building",
-      roomName: "A105",
-    },
-    {
-      id: "RM-1011",
-      building: "Library",
-      roomName: "L102",
-    },
-    {
-      id: "RM-1012",
-      building: "Business School",
-      roomName: "B205",
-    },
-  ]);
+  // Example: Assume you have user info from context, props, or API
+  const userFacultyName =
+    "Faculty of Computer Science and Information Technology"; // Replace with real user faculty
 
+    
   const sortedRooms = [...rooms].sort((a, b) => {
     if (!sortConfig) return 0;
     const aValue = a[sortConfig.key];
@@ -122,7 +73,7 @@ const RoomManagement = () => {
     (room) =>
       room.id.toString().toLowerCase().includes(searchTerm.toLowerCase()) ||
       room.building.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      room.roomNumber.toLowerCase().includes(searchTerm.toLowerCase())
+      room.roomName.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const itemsPerPage = 10;
@@ -131,6 +82,7 @@ const RoomManagement = () => {
     (currentPage - 1) * itemsPerPage,
     currentPage * itemsPerPage
   );
+
   const getSortIcon = (key) => {
     if (!sortConfig || sortConfig.key !== key) {
       return (
@@ -153,22 +105,11 @@ const RoomManagement = () => {
     );
   };
 
-  const handleRoomClick = (room) => {
-    setCurrentRoom(room);
-    setIsEditModalOpen(true);
-  };
   const handleSelectAll = (e) => {
     if (e.target.checked) {
       setSelectedRooms(filteredRooms.map((room) => room.id));
     } else {
       setSelectedRooms([]);
-    }
-  };
-  const handleSelectRoom = (id) => {
-    if (selectedRooms.includes(id)) {
-      setSelectedRooms(selectedRooms.filter((roomId) => roomId !== id));
-    } else {
-      setSelectedRooms([...selectedRooms, id]);
     }
   };
   const handleSort = (key) => {
@@ -182,324 +123,182 @@ const RoomManagement = () => {
     }
     setSortConfig({ key, direction });
   };
-
-  const closeModal = () => {
-    setIsEditModalOpen(false);
-    setCurrentRoom(null);
+  const handleSelectRoom = (id) => {
+    if (selectedRooms.includes(id)) {
+      setSelectedRooms(selectedRooms.filter((roomId) => roomId !== id));
+    } else {
+      setSelectedRooms([...selectedRooms, id]);
+    }
   };
+
   const handleAddRoom = () => {
     setIsAddRoomModalOpen(true);
   };
-  const closeAddRoomModal = () => {
-    setIsAddRoomModalOpen(false);
-    setNewRoom({
-      building: "",
-      roomNumber: "",
-      capacity: "",
-      roomType: "Lecture Hall",
-      facilities: [],
-      status: "Available",
-    });
+  
+  const handleEditRoomClick = (room) => {
+    console.log("Edit clicked:", room);
+    setCurrentRoom(room);
+    setIsEditModalOpen(true);
   };
 
-  const handleSubmitNewRoom = (e) => {
-    e.preventDefault();
-    // Here you would typically save the new room to your database
-    console.log("New room data:", newRoom);
-    closeAddRoomModal();
-    showNotification("Rooms added successfully");
-  };
   const handleDeleteClick = (room) => {
     setRoomToDelete(room);
     setIsDeleteModalOpen(true);
   };
+
+  const closeEditModal = () => {
+    setIsEditModalOpen(false);
+    setCurrentRoom(null);
+  };
+
+  const closeAddRoomModal = () => {
+    setIsAddRoomModalOpen(false);
+    setNewRoom({
+      building: "",
+      roomName: "",
+    });
+  };
+
+  const fetchAndSetRooms = async () => {
+    setIsLoading(true);
+    try {
+      const res = await fetchRooms();
+      const faculties = res.data;
+      const userFaculty = faculties.find((fac) => fac.name === userFacultyName);
+      if (!userFaculty) {
+        setRoom([]);
+        setIsLoading(false);
+        return;
+      }
+      const allRooms = [];
+      userFaculty.faculty_blocks.forEach((block) => {
+        (block.faculty_block_rooms || []).forEach((room) => {
+          allRooms.push({
+            id: room.code,
+            roomId: room._id,
+            blockId: block._id,
+            building: block.name,
+            roomName: room.name,
+          });
+        });
+      });
+      setRoom(allRooms);
+    } catch {
+      setError("Failed to fetch rooms. Please try again.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSubmitNewRoom = async (e) => {
+    e.preventDefault();
+    setIsLoading(true);
+
+    try {
+      const facultyId = "6842ad78c4d2971c14fd13c1"; // 之后Replace with actual faculty ID
+      const blockName = newRoom.building;
+      const roomName = newRoom.roomName;
+
+      if (!facultyId || !blockName || !roomName) {
+        setError("Please fill in all fields.");
+        setIsLoading(false);
+        return;
+      }
+
+      await addRoom({ facultyId, blockName, roomName });
+      await fetchAndSetRooms();
+      closeAddRoomModal();
+      showNotification("Room added successfully");
+    } catch (err) {
+      setError("Failed to add room. Please try again.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleEditRoom = async (e) => {
+    e.preventDefault();
+    setIsLoading(true);
+
+    if (
+      !currentRoom ||
+      !currentRoom.roomName ||
+      currentRoom.roomName.trim() === "" ||
+      !currentRoom.building ||
+      currentRoom.building.trim() === ""
+    ) {
+      setError("Block and Room name cannot be empty.");
+      setIsLoading(false);
+      return;
+    }
+
+    const facultyId = "6842ad78c4d2971c14fd13c1"; // 之后Replace with actual faculty ID if dynamic
+    const blockId = currentRoom.blockId;
+    const roomId = currentRoom.roomId;
+
+    try {
+      await editRoom(facultyId, blockId, roomId, {
+        newBlockName: currentRoom.building,
+        newRoomName: currentRoom.roomName,
+      });
+
+      await fetchAndSetRooms();
+      setIsEditModalOpen(false);
+      showNotification("Room updated successfully");
+    } catch (err) {
+      setError("Failed to update room. Please try again.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const closeDeleteModal = () => {
     setIsDeleteModalOpen(false);
     setRoomToDelete(null);
   };
-  const confirmDelete = () => {
-    // Here you would typically delete the room from your database
-    console.log("Deleting room:", roomToDelete);
-    closeDeleteModal();
-    showNotification("Rooms deleted successfully");
+
+  const confirmDelete = async () => {
+    if (!roomToDelete) return;
+    setIsLoading(true);
+    try {
+      const facultyId = "6842ad78c4d2971c14fd13c1"; // 之后Replace with actual faculty ID 
+
+      if (Array.isArray(roomToDelete)) {
+        await bulkDeleteRooms(
+          facultyId,
+          roomToDelete.map((room) => ({
+            blockId: room.blockId,
+            roomId: room.roomId,
+          }))
+        );
+        showNotification(`${roomToDelete.length} rooms deleted successfully`);
+      } else {
+        await deleteRoom(facultyId, roomToDelete.blockId, roomToDelete.roomId);
+        showNotification("Room deleted successfully");
+      }
+      await fetchAndSetRooms();
+      closeDeleteModal();
+      setSelectedRooms([]);
+    } catch (err) {
+      setError("Failed to delete room(s). Please try again.");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const handleEditRoom = () => {
-    if (
-      !currentRoom ||
-      !currentRoom.roomNumber ||
-      currentRoom.roomNumber.trim() === ""
-    )
-      return;
-    setRoom(
-      rooms.map((room) => (room.id === currentRoom.id ? currentRoom : room))
-    );
-    setIsEditModalOpen(false);
-    showNotification("Rooms updated successfully");
+  const handleBulkDelete = (rooms) => {
+    if (!rooms || rooms.length === 0) return;
+    setRoomToDelete(rooms);
+    setIsDeleteModalOpen(true);
   };
 
-  const handleBulkDelete = () => {
-    if (selectedRooms.length === 0) return;
-    setRoom(rooms.filter((rooms) => !selectedRooms.includes(rooms.id)));
-    setSelectedRooms([]);
-    showNotification(`${selectedRooms.length} categories deleted successfully`);
-  };
-
-  const showNotification = (message) => {
-    const notification = document.createElement("div");
-    notification.className =
-      "fixed top-4 right-4 bg-green-50 text-green-800 px-4 py-3 rounded-lg shadow-lg z-50 flex items-center";
-    notification.innerHTML = `<span>${message}</span>`;
-    document.body.appendChild(notification);
-    setTimeout(() => {
-      notification.remove();
-    }, 3000);
-  };
+  useEffect(() => {
+    fetchAndSetRooms();
+  }, []);
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
       {isLoading && <LoadingOverlay />}
-      {isEditModalOpen && currentRoom && (
-        <div className="fixed inset-0 z-50 overflow-y-auto">
-          <div className="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-            <div
-              className="fixed inset-0 transition-opacity"
-              aria-hidden="true"
-            >
-              <div
-                className="absolute inset-0 bg-gray-500 opacity-75"
-                onClick={closeModal}
-              ></div>
-            </div>
-            <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-3xl sm:w-full">
-              <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
-                <div className="flex justify-between items-start">
-                  <h3 className="text-lg leading-6 font-medium text-gray-900 mb-4">
-                    Room Details
-                  </h3>
-                  <button
-                    onClick={closeModal}
-                    className="text-gray-400 hover:text-gray-500"
-                  >
-                    <FontAwesomeIcon icon={faTimes} />
-                  </button>
-                </div>
-                <div className="grid grid-cols-1 gap-4 mb-6">
-                  <div>
-                    <label
-                      htmlFor="building"
-                      className="block text-sm font-medium text-gray-700"
-                    >
-                      Blocks
-                    </label>
-                    <input
-                      type="text"
-                      id="building"
-                      value={currentRoom.building || ""}
-                      onChange={(e) =>
-                        setCurrentRoom({
-                          ...currentRoom,
-                          building: e.target.value,
-                        })
-                      }
-                      className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                    />
-                  </div>
-                  <div>
-                    <label
-                      htmlFor="roomNumber"
-                      className="block text-sm font-medium text-gray-700"
-                    >
-                      Room Name
-                    </label>
-                    <input
-                      type="text"
-                      id="roomName"
-                      value={currentRoom.roomNumber}
-                      onChange={(e) =>
-                        setCurrentRoom({
-                          ...currentRoom,
-                          roomName: e.target.value,
-                        })
-                      }
-                      className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                    />
-                  </div>
-                </div>
-              </div>
-              <div className="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse gap-2">
-                <button
-                  type="button"
-                  onClick={handleEditRoom}
-                  className=" whitespace-nowrap w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-blue-600 text-base font-medium text-white hover:bg-blue-700 focus:outline-none sm:ml-3 sm:w-auto sm:text-sm cursor-pointer"
-                >
-                  <FontAwesomeIcon icon={faCheck} className="mr-2" />
-                  Update
-                </button>
-                <button
-                  type="button"
-                  className=" whitespace-nowrap mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none sm:mt-0 sm:w-auto sm:text-sm cursor-pointer"
-                  onClick={closeModal}
-                >
-                  Close
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {isAddRoomModalOpen && (
-        <div className="fixed inset-0 z-50 overflow-y-auto">
-          <div className="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-            <div
-              className="fixed inset-0 transition-opacity"
-              aria-hidden="true"
-            >
-              <div
-                className="absolute inset-0 bg-gray-500 opacity-75"
-                onClick={closeAddRoomModal}
-              ></div>
-            </div>
-            <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
-              <form onSubmit={handleSubmitNewRoom}>
-                <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
-                  <div className="flex mb-4">
-                    <h3 className="text-lg leading-6 font-medium text-gray-900">
-                      Add New Room
-                    </h3>
-                    <button
-                      type="button"
-                      onClick={closeAddRoomModal}
-                      className="text-gray-400 hover:text-gray-500"
-                    >
-                      <i className="fas fa-times"></i>
-                    </button>
-                  </div>
-                  <div className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label
-                          htmlFor="building"
-                          className="block text-sm font-medium text-gray-700"
-                        >
-                          Blocks
-                        </label>
-                        <input
-                          type="text"
-                          id="building"
-                          value={newRoom.building}
-                          onChange={(e) =>
-                            setNewRoom({ ...newRoom, building: e.target.value })
-                          }
-                          className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                          required
-                        />
-                      </div>
-                      <div>
-                        <label
-                          htmlFor="roomNumber"
-                          className="block text-sm font-medium text-gray-700"
-                        >
-                          Room Name
-                        </label>
-                        <input
-                          type="text"
-                          id="roomNumber"
-                          value={newRoom.roomNumber}
-                          onChange={(e) =>
-                            setNewRoom({
-                              ...newRoom,
-                              roomNumber: e.target.value,
-                            })
-                          }
-                          className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                          required
-                        />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <div className="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
-                  <button
-                    type="submit"
-                    className=" whitespace-nowrap w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-blue-600 text-base font-medium text-white hover:bg-blue-700 focus:outline-none sm:ml-3 sm:w-auto sm:text-sm cursor-pointer"
-                  >
-                    Add Room
-                  </button>
-                  <button
-                    type="button"
-                    onClick={closeAddRoomModal}
-                    className=" whitespace-nowrap mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none sm:mt-0 sm:w-auto sm:text-sm cursor-pointer"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {isDeleteModalOpen && roomToDelete && (
-        <div className="fixed inset-0 z-50 overflow-y-auto">
-          <div className="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-            <div
-              className="fixed inset-0 transition-opacity"
-              aria-hidden="true"
-            >
-              <div
-                className="absolute inset-0 bg-gray-500 opacity-75"
-                onClick={closeDeleteModal}
-              ></div>
-            </div>
-            <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
-              <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
-                <div className="sm:flex sm:items-start">
-                  <div className="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-red-100 sm:mx-0 sm:h-10 sm:w-10">
-                    <i className="fas fa-exclamation-triangle text-red-600"></i>
-                  </div>
-                  <div className="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left">
-                    <h3 className="text-lg leading-6 font-medium text-gray-900">
-                      Are you sure you want to delete this room?
-                    </h3>
-                    <div className="mt-2">
-                      <p className="text-sm text-gray-500">
-                        Room ID: {roomToDelete.id}
-                      </p>
-                      <p className="text-sm text-gray-500">
-                        Building: {roomToDelete.building}
-                      </p>
-                      <p className="text-sm text-gray-500">
-                        Room Number: {roomToDelete.roomNumber}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div className="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
-                <button
-                  type="button"
-                  className=" whitespace-nowrap w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-red-600 text-base font-medium text-white hover:bg-red-700 focus:outline-none sm:ml-3 sm:w-auto sm:text-sm cursor-pointer"
-                  onClick={confirmDelete}
-                >
-                  Confirm Delete
-                </button>
-                <button
-                  type="button"
-                  className=" whitespace-nowrap mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white  font-medium text-gray-700 hover:bg-gray-50 focus:outline-none sm:mt-0 sm:w-auto sm:text-sm cursor-pointer"
-                  onClick={closeDeleteModal}
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Header */}
-      <Header />
       <div className="flex flex-1">
         {/* Sidebar */}
         <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} />
@@ -538,7 +337,11 @@ const RoomManagement = () => {
               searchTerm={searchTerm}
               setSearchTerm={setSearchTerm}
               selectedCategories={selectedRooms}
-              handleBulkDelete={handleBulkDelete}
+              handleBulkDelete={() =>
+                handleBulkDelete(
+                  rooms.filter((room) => selectedRooms.includes(room.id))
+                )
+              }
               inputPlaceholder="Search Room by ID, Building, or Room Number..."
             />
 
@@ -582,10 +385,10 @@ const RoomManagement = () => {
                       <th
                         scope="col"
                         className=" text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer"
-                        onClick={() => handleSort("roomNumber")}
+                        onClick={() => handleSort("roomName")}
                       >
                         <div className="flex items-center">
-                          Room Name {getSortIcon("roomNumber")}
+                          Room Name {getSortIcon("roomName")}
                         </div>
                       </th>
                       <th
@@ -617,13 +420,13 @@ const RoomManagement = () => {
                           <td className="px-7 py-4 text-sm text-gray-900">
                             {room.building}
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {room.roomNumber}
+                          <td className="px-1 py-4 whitespace-nowrap text-sm text-gray-900">
+                            {room.roomName}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                             <div className="flex justify-end space-x-3">
                               <button
-                                onClick={() => handleRoomClick(room)}
+                                onClick={() => handleEditRoomClick(room)}
                                 className="  text-blue-600 hover:text-blue-900 cursor-pointer p-1.5"
                                 title="Edit"
                               >
@@ -673,7 +476,27 @@ const RoomManagement = () => {
           </div>
         </main>
       </div>
-      <Footer />
+      {error && <ErrorModal message={error} onClose={() => setError(null)} />}
+      <AddRoomModal
+        isOpen={isAddRoomModalOpen}
+        onClose={closeAddRoomModal}
+        onSubmit={handleSubmitNewRoom}
+        newRoom={newRoom}
+        setNewRoom={setNewRoom}
+      />
+      <EditRoomModal
+        isOpen={isEditModalOpen}
+        onClose={closeEditModal}
+        currentRoom={currentRoom}
+        setCurrentRoom={setCurrentRoom}
+        onEdit={handleEditRoom}
+      />
+      <DeleteRoomModal
+        isOpen={isDeleteModalOpen}
+        onClose={closeDeleteModal}
+        roomToDelete={roomToDelete}
+        onConfirm={confirmDelete}
+      />
     </div>
   );
 };

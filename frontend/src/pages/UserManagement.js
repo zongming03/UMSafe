@@ -1,6 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
-import Footer from "../components/footer";
-import Header from "../components/header";
+
 import Sidebar from "../components/Sidebar";
 import "../styles/UserManagement.css";
 import StatsCard from "../components/UserStatsCard";
@@ -262,8 +261,7 @@ const UserManagement = () => {
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
-      {/* Header */}
-      <Header />
+      
       <div className="flex flex-1">
         {/* Sidebar */}
         <Sidebar
@@ -516,8 +514,7 @@ const UserManagement = () => {
           </div>
         </main>
       </div>
-      {/* Footer */}
-      <Footer />
+  
 
       {/* Add User Modal */}
       <AddUserModal

@@ -1,22 +1,64 @@
-const mongoose = require('mongoose');
+import mongoose from "mongoose";
+const { Schema } = mongoose;
 
-const roomSchema = new mongoose.Schema({
-  name: {
-    type: String,
-    required: true,
+// Room Schema
+const facultyBlockRoomSchema = new Schema(
+  {
+    name: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    code: { type: String, required: true, unique: true },
   },
-  block: {
-    type: String,
-    required: true,
-  },
-  type: {
-    type: String, 
-    required: true,
-  },
-  createdAt: {
-    type: Date,
-    default: Date.now,
-  },
-});
+  {
+    timestamps: true,
+    versionKey: "__v",
+  }
+);
 
-module.exports = mongoose.model('Room', roomSchema);
+// Block Schema
+const facultyBlockSchema = new Schema(
+  {
+    name: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    faculty_block_rooms: {
+      type: [facultyBlockRoomSchema],
+      default: [],
+    },
+  },
+  {
+    timestamps: true,
+    versionKey: "__v",
+  }
+);
+
+// Faculty Schema
+const facultySchema = new Schema(
+  {
+    name: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    faculty_blocks: {
+      type: [facultyBlockSchema],
+      default: [],
+    },
+    code: {
+      type: String,
+      required: true,
+      unique: true,
+    },
+  },
+  {
+    timestamps: true,
+    versionKey: "__v",
+  }
+);
+
+const FacultyModel = mongoose.model("Faculty", facultySchema);
+export default FacultyModel;

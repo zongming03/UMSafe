@@ -25,7 +25,7 @@ const SearchFilterSection = ({
           </div>
         </div>
         <div className="flex space-x-2">
-          {selectedCategories.length > 0 && (
+          {selectedCategories.length > 1 && (
             <div className="relative">
               <button
                 onClick={handleBulkDelete}
