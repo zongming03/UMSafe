@@ -1,0 +1,12 @@
+.room-header{
+    display: flex;
+    flex-direction: column;
+}
+
+@media (min-width: 768px) {
+    .room-header {
+        flex-direction: row;
+        align-items: center;
+        justify-content: space-between;
+    }
+}

@@ -1,5 +1,4 @@
-import React, { useState } from "react";
-import Sidebar from "../components/Sidebar";
+import React, { useState, useEffect } from "react";
 import "../styles/ComplaintCategory.css";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
@@ -16,99 +15,19 @@ import showNotification from "../utils/showNotification";
 import AddCategoryModal from "../components/AddCategoryModal";
 import EditCategoryModal from "../components/EditCategoryModal";
 import DeleteCategoryModal from "../components/DeleteCategoryModal";
+import ErrorModal from "../components/ErrorModal";
+import BulkDeleteCategoryModal from "../components/BulkDeleteCategoryModal";
 import {
   fetchCategories,
   addCategory,
-  editCategory,
+  updateCategory,
   deleteCategory,
   bulkDeleteCategories,
 } from "../services/api";
 import LoadingOverlay from "../components/LoadingOverlay";
 
 const ComplaintCategory = () => {
-  const [categories, setCategories] = useState([
-    {
-      id: 1,
-      name: "Academic",
-      description:
-        "Issues related to courses, curriculum, and academic policies",
-      complaintsCount: 42,
-      createdAt: "2025-01-15",
-    },
-    {
-      id: 2,
-      name: "Facilities",
-      description:
-        "Problems with buildings, classrooms, and campus infrastructure",
-      complaintsCount: 28,
-      createdAt: "2025-01-18",
-    },
-    {
-      id: 3,
-      name: "IT Services",
-      description:
-        "Technical issues with university systems, wifi, and software",
-      complaintsCount: 35,
-      createdAt: "2025-02-03",
-    },
-    {
-      id: 4,
-      name: "Administrative",
-      description:
-        "Issues with university administration, procedures, and policies",
-      complaintsCount: 19,
-      createdAt: "2025-02-10",
-    },
-    {
-      id: 5,
-      name: "Financial",
-      description:
-        "Problems related to fees, payments, scholarships, and financial aid",
-      complaintsCount: 23,
-      createdAt: "2025-02-22",
-    },
-    {
-      id: 6,
-      name: "Services",
-      description:
-        "Issues with campus services like cafeteria, library, and transportation",
-      complaintsCount: 31,
-      createdAt: "2025-03-05",
-    },
-    {
-      id: 7,
-      name: "Housing",
-      description:
-        "Problems with dormitories, student housing, and accommodation",
-      complaintsCount: 17,
-      createdAt: "2025-03-12",
-    },
-    {
-      id: 8,
-      name: "Safety & Security",
-      description:
-        "Concerns about campus safety, security incidents, and emergency procedures",
-      complaintsCount: 9,
-      createdAt: "2025-03-20",
-    },
-    {
-      id: 9,
-      name: "Staff Conduct",
-      description:
-        "Issues regarding the behavior or conduct of university staff and faculty",
-      complaintsCount: 14,
-      createdAt: "2025-04-02",
-    },
-    {
-      id: 10,
-      name: "Student Activities",
-      description:
-        "Problems with clubs, events, and extracurricular activities",
-      complaintsCount: 22,
-      createdAt: "2025-04-15",
-    },
-  ]);
-  const [activeTab, setActiveTab] = useState("categories");
+  const [categories, setCategories] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [sortConfig, setSortConfig] = useState(null);
@@ -116,9 +35,15 @@ const ComplaintCategory = () => {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [isBulkDeleteModalOpen, setIsBulkDeleteModalOpen] = useState(false);
   const [currentCategory, setCurrentCategory] = useState(null);
-  const [newCategory, setNewCategory] = useState({ name: "", description: "" });
+  const [newCategory, setNewCategory] = useState({
+    name: "",
+    description: "",
+    priority: "low",
+  });
   const [currentPage, setCurrentPage] = useState(1);
+  const [error, setError] = useState(null);
   const itemsPerPage = 8;
 
   const sortedCategories = React.useMemo(() => {
@@ -171,9 +96,21 @@ const ComplaintCategory = () => {
     );
   };
 
+  const handleSelectCategory = (id) => {
+    if (selectedCategories.includes(id)) {
+      setSelectedCategories(
+        selectedCategories.filter((categoryId) => categoryId !== id)
+      );
+    } else {
+      setSelectedCategories([...selectedCategories, id]);
+    }
+  };
+
   const handleSelectAll = (e) => {
     if (e.target.checked) {
-      setSelectedCategories(filteredCategories.map((category) => category.id));
+      setSelectedCategories(
+        filteredCategories.map((category) => category._id || category.id)
+      );
     } else {
       setSelectedCategories([]);
     }
@@ -192,91 +129,167 @@ const ComplaintCategory = () => {
     }
   };
 
-  const handleSelectCategory = (id) => {
-    if (selectedCategories.includes(id)) {
-      setSelectedCategories(
-        selectedCategories.filter((categoryId) => categoryId !== id)
-      );
-    } else {
-      setSelectedCategories([...selectedCategories, id]);
-    }
-  };
   const handleAddCategory = async (e) => {
-    if (newCategory.name.trim() === "") return;
     e.preventDefault();
+    if (!newCategory.name.trim() || !newCategory.description.trim()) {
+      setError("Both category name and description are required.");
+      return;
+    }
     setIsLoading(true);
+    setError(null);
     try {
       const categoryName = newCategory.name.trim();
       const categoryDescription = newCategory.description.slice(0, 200);
-
+      const categoryPriority = (newCategory.priority || "low").trim();
       const newCategoryData = {
         name: categoryName,
         description: categoryDescription,
+        priority: categoryPriority,
       };
+      console.log("[AddCategory] Input:", newCategoryData);
 
-      // Call API to add category
-      await addCategory(newCategoryData);
-      await fetchAndSetCategories();
-      setIsAddModalOpen(false);
-      showNotification("Category added successfully");
+      const res = await addCategory(newCategoryData);
+      if (res && (res.status === 200 || res.status === 201)) {
+        await fetchAndSetCategories();
+        setIsAddModalOpen(false);
+        setNewCategory({ name: "", description: "", priority: "low" });
+        setCurrentCategory(null);
+        showNotification("Category added successfully");
+      }
     } catch (error) {
-      console.error("Error adding category:", error);
-      showNotification("Failed to add category");
+      if (
+        error.response &&
+        error.response.status === 400 &&
+        error.response.data &&
+        error.response.data.msg === "Category already exists"
+      ) {
+        setError("Category already exists. Please use a different name.");
+      } else {
+        setError("Failed to add category. Please try again.");
+      }
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleEditCategory = () => {
+  const handleEditCategory = async () => {
     if (
       !currentCategory ||
       typeof currentCategory.name !== "string" ||
-      currentCategory.name.trim() === ""
-    )
+      currentCategory.name.trim() === "" ||
+      typeof currentCategory.description !== "string" ||
+      currentCategory.description.trim() === ""
+    ) {
+      setError("Both category name and description are required.");
       return;
-    const updatedCategory = {
-      ...currentCategory,
-      description:
-        typeof currentCategory.description === "string"
-          ? currentCategory.description.slice(0, 200)
-          : "",
-    };
-    setCategories(
-      categories.map((category) =>
-        category.id === currentCategory.id ? updatedCategory : category
-      )
+    }
+    const duplicate = categories.find(
+      (cat) =>
+        (cat._id || cat.id) !== (currentCategory._id || currentCategory.id) &&
+        cat.name.trim().toLowerCase() ===
+          currentCategory.name.trim().toLowerCase()
     );
-    setIsEditModalOpen(false);
-    // Show success notification
-    showNotification("Category updated successfully");
+    if (duplicate) {
+      setError("Category name already exists. Please use a different name.");
+      return;
+    }
+    setIsLoading(true);
+    setError(null);
+    try {
+      const updatedCategory = {
+        ...currentCategory,
+        name:
+          typeof currentCategory.name === "string"
+            ? currentCategory.name.trim().slice(0, 100)
+            : "",
+        description:
+          typeof currentCategory.description === "string"
+            ? currentCategory.description.slice(0, 200)
+            : "",
+        priority: currentCategory.priority || "low",
+      };
+      console.log("[EditCategory] Input:", updatedCategory); // <-- log input
+      const res = await updateCategory(currentCategory._id, updatedCategory);
+      if (res && (res.status === 200 || res.status === 201)) {
+        await fetchAndSetCategories();
+        setIsEditModalOpen(false);
+        showNotification("Category updated successfully");
+      }
+    } catch (error) {
+      console.error("[EditCategory] Error updating category:", error);
+      setError("Failed to update category. Please try again.");
+    } finally {
+      setIsLoading(false);
+    }
   };
-  const handleDeleteCategory = () => {
+
+  const handleDeleteCategory = async () => {
     if (!currentCategory) return;
-    setCategories(
-      categories.filter((category) => category.id !== currentCategory.id)
-    );
-    setIsDeleteModalOpen(false);
-    // Show success notification
-    showNotification("Category deleted successfully");
+    setIsLoading(true);
+    try {
+      const res = await deleteCategory(currentCategory._id);
+      if (res && res.status === 200) {
+        await fetchAndSetCategories();
+        if (paginatedCategories.length === 1 && currentPage > 1) {
+          setCurrentPage(currentPage - 1);
+        }
+        setIsDeleteModalOpen(false);
+        showNotification("Category deleted successfully");
+      }
+    } catch (error) {
+      setError("Failed to delete category. Please try again.");
+    } finally {
+      setIsLoading(false);
+    }
   };
-  const handleBulkDelete = () => {
+
+  const handleBulkDeleteConfirm = async () => {
     if (selectedCategories.length === 0) return;
-    setCategories(
-      categories.filter((category) => !selectedCategories.includes(category.id))
-    );
-    setSelectedCategories([]);
-    // Show success notification
-    showNotification(
-      `${selectedCategories.length} categories deleted successfully`
-    );
+    setIsLoading(true);
+    try {
+      const res = await bulkDeleteCategories(selectedCategories);
+      if (res && res.status === 200) {
+        await fetchAndSetCategories();
+        if (
+          paginatedCategories.length === selectedCategories.length &&
+          currentPage > 1
+        ) {
+          setCurrentPage(currentPage - 1);
+        }
+        setSelectedCategories([]);
+        showNotification(
+          `${selectedCategories.length} categories deleted successfully`
+        );
+        setIsBulkDeleteModalOpen(false);
+      }
+    } catch (error) {
+      setError("Failed to delete categories. Please try again.");
+    } finally {
+      setIsLoading(false);
+    }
   };
+
+  const getPriorityColor = (priority) => {
+    switch (priority) {
+      case "high":
+        return "text-red-600";
+      case "medium":
+        return "text-yellow-600";
+      case "low":
+        return "text-green-600";
+      default:
+        return "text-gray-600";
+    }
+  };
+
+  useEffect(() => {
+    fetchAndSetCategories();
+  }, []);
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
-      <div className="flex flex-1">
-        {/* Sidebar */}
-        <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} />
-
+      {isLoading && <LoadingOverlay />}
+      <div>
         {/* Main Content */}
         <main className="flex-1 overflow-y-auto bg-gray-50 p-6">
           <div className="max-w-7xl mx-auto">
@@ -324,7 +337,7 @@ const ComplaintCategory = () => {
               searchTerm={searchTerm}
               setSearchTerm={setSearchTerm}
               selectedCategories={selectedCategories}
-              handleBulkDelete={handleBulkDelete}
+              handleBulkDelete={() => setIsBulkDeleteModalOpen(true)}
               inputPlaceholder="Search categories by name or description...."
             />
 
@@ -369,6 +382,15 @@ const ComplaintCategory = () => {
                       <th
                         scope="col"
                         className="category-table-th"
+                        onClick={() => handleSort("priority")}
+                      >
+                        <div className="flex items-center"> 
+                          Priority {getSortIcon("priority")}
+                        </div>
+                      </th>
+                      <th
+                        scope="col"
+                        className="category-table-th"
                         onClick={() => handleSort("complaintsCount")}
                       >
                         <div className="flex items-center">
@@ -395,17 +417,22 @@ const ComplaintCategory = () => {
                   <tbody className="bg-white divide-y divide-gray-200">
                     {paginatedCategories.length > 0 ? (
                       paginatedCategories.map((category) => (
-                        <tr key={category.id} className="hover:bg-gray-50">
-                          <td className="px-3 py-4 whitespace-nowrap">
+                        <tr
+                          key={category._id || category.id}
+                          className="hover:bg-gray-50"
+                        >
+                          <td className="px-3 py-6 whitespace-nowrap">
                             <div className="flex items-center">
                               <input
                                 type="checkbox"
-                                className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                                className="h-4 w-4  rounded"
                                 checked={selectedCategories.includes(
-                                  category.id
+                                  category._id || category.id
                                 )}
                                 onChange={() =>
-                                  handleSelectCategory(category.id)
+                                  handleSelectCategory(
+                                    category._id || category.id
+                                  )
                                 }
                               />
                             </div>
@@ -423,6 +450,16 @@ const ComplaintCategory = () => {
                           </td>
 
                           <td className="px-6 py-4 whitespace-nowrap">
+                            <span
+                              className={`text-sm font-medium ${getPriorityColor(
+                                category.priority
+                              )}`}
+                            >
+                              {category.priority}
+                            </span>
+                          </td>
+
+                          <td className="px-6 py-4 whitespace-nowrap">
                             <div className="text-sm text-gray-500">
                               <span className="bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-0.5 rounded-full">
                                 {category.complaintsCount}
@@ -431,7 +468,11 @@ const ComplaintCategory = () => {
                           </td>
 
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            {category.createdAt}
+                            {category.createdAt
+                              ? new Date(category.createdAt).toLocaleDateString(
+                                  "en-CA"
+                                )
+                              : ""}
                           </td>
 
                           <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
@@ -504,7 +545,7 @@ const ComplaintCategory = () => {
           </div>
         </main>
       </div>
-
+      {error && <ErrorModal message={error} onClose={() => setError(null)} />}
       {/* Add Category Modal */}
       <AddCategoryModal
         isOpen={isAddModalOpen}
@@ -529,6 +570,13 @@ const ComplaintCategory = () => {
         onClose={() => setIsDeleteModalOpen(false)}
         currentCategory={currentCategory}
         onDelete={handleDeleteCategory}
+      />
+
+      <BulkDeleteCategoryModal
+        isOpen={isBulkDeleteModalOpen}
+        onClose={() => setIsBulkDeleteModalOpen(false)}
+        onConfirm={handleBulkDeleteConfirm}
+        count={selectedCategories.length}
       />
     </div>
   );

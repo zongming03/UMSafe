@@ -1,7 +1,18 @@
-const mongoose = require('mongoose');
+import mongoose from "mongoose";
 
 const userSchema = new mongoose.Schema({
-  name: String,
+  facultyid: {
+    type: String,
+    required: true,
+  },
+  name: {
+    type: String,
+    required: true,
+  },
+  staffid: {
+    type: String,
+    required: true,
+  },
   email: {
     type: String,
     required: true,
@@ -9,10 +20,14 @@ const userSchema = new mongoose.Schema({
   },
   role: {
     type: String,
-    enum: ['admin', 'officer'],
+    enum: ["admin", "officer"],
     required: true,
   },
-  password: {
+  hashedpassword: {
+    type: String,
+    required: true,
+  },
+  phone: {
     type: String,
     required: true,
   },
@@ -22,4 +37,5 @@ const userSchema = new mongoose.Schema({
   },
 });
 
-module.exports = mongoose.model('User', userSchema);
+const UserModule = mongoose.model("User", userSchema);
+export default UserModule;

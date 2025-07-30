@@ -20,5 +20,12 @@ export const updateCategory = (categoryId, data) => api.patch(`/categories/${cat
 export const deleteCategory = (categoryId) => api.delete(`/categories/${categoryId}`);
 export const bulkDeleteCategories = (categories) => api.post('/categories/bulk-delete', { categories });
 
+// User Management API
+export const addOfficer = (date) => api.post('/users',date);
+export const getAllOfficers = () => api.get('/users');
+export const updateOfficer = (id, data) => api.patch(`/users/${id}`, data);
+export const deleteOfficer = (id) => api.delete(`/users/${id}`);
+export const bulkDeleteOfficers = (officers) => api.post('/users/bulk-delete', { officers });
+
 
 export default api;

@@ -1,69 +1,66 @@
 import mongoose from 'mongoose';
-import FacultyModel  from '../models/Room.js';
+import FacultyModel from '../models/Room.js'; // Assuming Room.js exports FacultyModel
 import dotenv from 'dotenv';
-import { getNextRoomCode } from '../utils/getNextRoomCode.js'; 
+
 dotenv.config();
 
 const main = async () => {
   try {
     await mongoose.connect(process.env.MONGO_URI);
+    console.log('Connected to MongoDB.');
 
-    const facultyCode = 'fcsit';
+
+    await FacultyModel.deleteMany({});
+    console.log('Cleared existing Faculty data to prevent duplicates.');
 
     const blockA = {
       name: 'Block A',
-      faculty_block_rooms: await Promise.all([
-        'MM1 Lab',
-        'MM2 Lab',
-        'Robotic Lab',
-        'CCNA Lab',
-        'BK1',
-        'BK2',
-        'Foyer A',
-        'The Cube',
-        'ML Lab',
-        'A Floor 1 Area',
-        'A Floor 2 Area',
-        'A Floor 3 Area'
-      ].map(async (roomName) => ({
-        name: roomName,
-        code: await getNextRoomCode(facultyCode),
-      })))
+      faculty_block_rooms: [
+        { name: 'MM1 Lab' },
+        { name: 'MM2 Lab' },
+        { name: 'Robotic Lab' },
+        { name: 'CCNA Lab' },
+        { name: 'BK1' },
+        { name: 'BK2' },
+        { name: 'Foyer A' },
+        { name: 'The Cube' },
+        { name: 'ML Lab' },
+        { name: 'A Floor 1 Area' },
+        { name: 'A Floor 2 Area' },
+        { name: 'A Floor 3 Area' }
+      ]
     };
 
     const blockB = {
       name: 'Block B',
-      faculty_block_rooms: await Promise.all([
-        'MM3',
-        'MM4',
-        'MM6',
-        'CCNA Lab',
-        'BK1',
-        'BK2',
-        'Foyer B',
-        'B Floor 1 Area',
-        'B Floor 2 Area',
-        'B Floor 3 Area'
-      ].map(async (roomName) => ({
-        name: roomName,
-        code: await getNextRoomCode(facultyCode),
-      })))
+      faculty_block_rooms: [
+        { name: 'MM3' },
+        { name: 'MM4' },
+        { name: 'MM6' },
+        { name: 'CCNA Lab' },
+        { name: 'BK1' },
+        { name: 'BK2' },
+        { name: 'Foyer B' },
+        { name: 'B Floor 1 Area' },
+        { name: 'B Floor 2 Area' },
+        { name: 'B Floor 3 Area' }
+      ]
     };
 
     const newFaculty = new FacultyModel({
       name: 'Faculty of Computer Science and Information Technology',
-      code: facultyCode,
       faculty_blocks: [blockA, blockB]
     });
 
     await newFaculty.save();
-    console.log('✅ Faculty added successfully with room codes.');
+    console.log('✅ Faculty, blocks, and rooms added successfully.');
+
     process.exit(0);
+
   } catch (err) {
-    console.error('❌ Error inserting faculty:', err);
+    console.error('❌ Error inserting faculty data:', err);
     process.exit(1);
   }
 };
 
 main();
-

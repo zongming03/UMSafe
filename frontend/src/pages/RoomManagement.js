@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react";
-import Sidebar from "../components/Sidebar";
 import LoadingOverlay from "../components/LoadingOverlay";
 import Pagination from "../components/Pagination";
 import "../styles/RoomManagement.css";
@@ -26,9 +25,7 @@ import AddRoomModal from "../components/AddRoomModal";
 import EditRoomModal from "../components/EditRoomModal";
 import DeleteRoomModal from "../components/DeleteRoomModal";
 import showNotification from "../utils/showNotification";
-
 const RoomManagement = () => {
-  const [activeTab, setActiveTab] = useState("rooms");
   const [isLoading, setIsLoading] = useState(false);
   const [selectedRooms, setSelectedRooms] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
@@ -40,16 +37,14 @@ const RoomManagement = () => {
   const [roomToDelete, setRoomToDelete] = useState(null);
   const [sortConfig, setSortConfig] = useState(null);
   const [error, setError] = useState(null);
-  const [rooms, setRoom] = useState([]);
+  const [rooms, setRooms] = useState([]);
   const [newRoom, setNewRoom] = useState({
     building: "",
     roomName: "",
   });
-  // Example: Assume you have user info from context, props, or API
   const userFacultyName =
     "Faculty of Computer Science and Information Technology"; // Replace with real user faculty
 
-    
   const sortedRooms = [...rooms].sort((a, b) => {
     if (!sortConfig) return 0;
     const aValue = a[sortConfig.key];
@@ -112,6 +107,7 @@ const RoomManagement = () => {
       setSelectedRooms([]);
     }
   };
+
   const handleSort = (key) => {
     let direction = "ascending";
     if (
@@ -123,6 +119,7 @@ const RoomManagement = () => {
     }
     setSortConfig({ key, direction });
   };
+  
   const handleSelectRoom = (id) => {
     if (selectedRooms.includes(id)) {
       setSelectedRooms(selectedRooms.filter((roomId) => roomId !== id));
@@ -134,7 +131,7 @@ const RoomManagement = () => {
   const handleAddRoom = () => {
     setIsAddRoomModalOpen(true);
   };
-  
+
   const handleEditRoomClick = (room) => {
     console.log("Edit clicked:", room);
     setCurrentRoom(room);
@@ -159,32 +156,55 @@ const RoomManagement = () => {
     });
   };
 
+  const getFacultyAbbreviation = (facultyName) => {
+    return facultyName
+      .split(/\s+/)
+      .filter(
+        (word) =>
+          word.length > 0 &&
+          word.toLowerCase() !== "of" &&
+          word.toLowerCase() !== "and"
+      )
+      .map((word) => word[0].toUpperCase())
+      .join("");
+  };
+
   const fetchAndSetRooms = async () => {
     setIsLoading(true);
     try {
-      const res = await fetchRooms();
+      const res = await fetchRooms(); // This fetches ALL faculty data
       const faculties = res.data;
       const userFaculty = faculties.find((fac) => fac.name === userFacultyName);
+
       if (!userFaculty) {
-        setRoom([]);
+        setRooms([]);
         setIsLoading(false);
         return;
       }
+
       const allRooms = [];
+      const facultyAbbreviation = getFacultyAbbreviation(userFaculty.name);
+
+      let displayCounter = 1;
       userFaculty.faculty_blocks.forEach((block) => {
         (block.faculty_block_rooms || []).forEach((room) => {
           allRooms.push({
-            id: room.code,
             roomId: room._id,
             blockId: block._id,
             building: block.name,
             roomName: room.name,
+            id: `${facultyAbbreviation}-${String(displayCounter).padStart(
+              3,
+              "0"
+            )}`,
           });
+          displayCounter++;
         });
       });
-      setRoom(allRooms);
-    } catch {
+      setRooms(allRooms);
+    } catch (err) {
       setError("Failed to fetch rooms. Please try again.");
+      console.error("Fetch Rooms Error:", err);
     } finally {
       setIsLoading(false);
     }
@@ -195,7 +215,7 @@ const RoomManagement = () => {
     setIsLoading(true);
 
     try {
-      const facultyId = "6842ad78c4d2971c14fd13c1"; // 之后Replace with actual faculty ID
+      const facultyId = "684eec5249bf1d5f27619af8"; // Replace with actual dynamic ID if needed
       const blockName = newRoom.building;
       const roomName = newRoom.roomName;
 
@@ -205,12 +225,20 @@ const RoomManagement = () => {
         return;
       }
 
-      await addRoom({ facultyId, blockName, roomName });
-      await fetchAndSetRooms();
-      closeAddRoomModal();
-      showNotification("Room added successfully");
+      const res = await addRoom({ facultyId, blockName, roomName });
+
+      if (res && (res.status === 200 || res.status === 201)) {
+        await fetchAndSetRooms();
+        closeAddRoomModal();
+        showNotification("Room added successfully");
+      } 
     } catch (err) {
-      setError("Failed to add room. Please try again.");
+      console.error("Add Room Error:", err);
+      setError(
+        err.response?.data?.msg ||
+          err.message ||
+          "Failed to add room. Please try again."
+      );
     } finally {
       setIsLoading(false);
     }
@@ -232,21 +260,30 @@ const RoomManagement = () => {
       return;
     }
 
-    const facultyId = "6842ad78c4d2971c14fd13c1"; // 之后Replace with actual faculty ID if dynamic
+    const facultyId = "684eec5249bf1d5f27619af8"; // Replace with dynamic ID if needed
     const blockId = currentRoom.blockId;
     const roomId = currentRoom.roomId;
 
     try {
-      await editRoom(facultyId, blockId, roomId, {
+      const res = await editRoom(facultyId, blockId, roomId, {
         newBlockName: currentRoom.building,
         newRoomName: currentRoom.roomName,
       });
 
-      await fetchAndSetRooms();
-      setIsEditModalOpen(false);
-      showNotification("Room updated successfully");
+      if (res && (res.status === 200 || res.status === 201)) {
+        await fetchAndSetRooms();
+        setIsEditModalOpen(false);
+        showNotification("Room updated successfully");
+      } else {
+        throw new Error("Unexpected response from server");
+      }
     } catch (err) {
-      setError("Failed to update room. Please try again.");
+      console.error("Edit Room Error:", err);
+      setError(
+        err.response?.data?.msg ||
+          err.message ||
+          "Failed to update room. Please try again."
+      );
     } finally {
       setIsLoading(false);
     }
@@ -261,7 +298,7 @@ const RoomManagement = () => {
     if (!roomToDelete) return;
     setIsLoading(true);
     try {
-      const facultyId = "6842ad78c4d2971c14fd13c1"; // 之后Replace with actual faculty ID 
+      const facultyId = "684eec5249bf1d5f27619af8"; // 之后Replace with actual faculty ID
 
       if (Array.isArray(roomToDelete)) {
         await bulkDeleteRooms(
@@ -296,40 +333,55 @@ const RoomManagement = () => {
     fetchAndSetRooms();
   }, []);
 
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm]);
+
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
       {isLoading && <LoadingOverlay />}
-      <div className="flex flex-1">
-        {/* Sidebar */}
-        <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} />
+      <div>
         {/* Main Content */}
         <main className="flex-1 overflow-y-auto bg-gray-50 p-6">
           <div className="max-w-7xl mx-auto">
             {/* Page Header */}
-            <div className="mb-6 flex flex-col md:flex-row md:items-center md:justify-between">
-              <div>
-                <h1 className="text-2xl font-bold text-gray-900">
-                  Room Management
-                </h1>
-                <p className="mt-1 text-sm text-gray-500">
-                  Manage and track all rooms in the university -{" "}
-                  {new Date().toLocaleDateString("en-US", {
-                    weekday: "long",
-                    year: "numeric",
-                    month: "long",
-                    day: "numeric",
-                  })}
-                </p>
+            <div className="mb-6 ">
+              <div className="room-header">
+                <div>
+                  <div className="flex items-center">
+                    <h1 className="text-2xl font-bold text-gray-900">
+                      Room Management
+                    </h1>
+                  </div>
+                  <div className="mt-1 flex items-center text-sm text-gray-500">
+                    <a href="#" className="hover:text-blue-600">
+                      Dashboard
+                    </a>
+                    <span className="mx-2">/</span>
+                    <span>Room</span>
+                  </div>
+                </div>
+
+                <div className="mt-4 md:mt-0">
+                  <button
+                    onClick={handleAddRoom}
+                    className="whitespace-nowrap inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none cursor-pointer"
+                  >
+                    <FontAwesomeIcon icon={faPlus} className="mr-2" />
+                    Add New Room
+                  </button>
+                </div>
               </div>
-              <div className="mt-4 md:mt-0">
-                <button
-                  onClick={handleAddRoom}
-                  className="whitespace-nowrap inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none cursor-pointer"
-                >
-                  <FontAwesomeIcon icon={faPlus} className="mr-2" />
-                  Add New Room
-                </button>
-              </div>
+
+              <p className="mt-1 text-sm text-gray-500">
+                Manage and track all rooms in the university -{" "}
+                {new Date().toLocaleDateString("en-US", {
+                  weekday: "long",
+                  year: "numeric",
+                  month: "long",
+                  day: "numeric",
+                })}
+              </p>
             </div>
 
             {/* Search and Filter */}

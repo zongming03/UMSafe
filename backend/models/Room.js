@@ -9,7 +9,6 @@ const facultyBlockRoomSchema = new Schema(
       required: true,
       trim: true,
     },
-    code: { type: String, required: true, unique: true },
   },
   {
     timestamps: true,
@@ -47,13 +46,7 @@ const facultySchema = new Schema(
     faculty_blocks: {
       type: [facultyBlockSchema],
       default: [],
-    },
-    code: {
-      type: String,
-      required: true,
-      unique: true,
-    },
-  },
+    },  },
   {
     timestamps: true,
     versionKey: "__v",

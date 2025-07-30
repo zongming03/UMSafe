@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+import mongoose from 'mongoose';
 
 const categorySchema = new mongoose.Schema({
   name: {
@@ -14,10 +14,17 @@ const categorySchema = new mongoose.Schema({
     type: Number,
     default: 0,
   },
+  priority: {
+    type: String,
+    enum: ['low', 'medium', 'high'],
+    default: 'low',
+    required: true,
+  },
   createdAt: {
     type: Date,
     default: Date.now,
   },
 });
 
-module.exports = mongoose.model('Category', categorySchema);
+const CategoryModel = mongoose.model("Category", categorySchema);
+export default CategoryModel;

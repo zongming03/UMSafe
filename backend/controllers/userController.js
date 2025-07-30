@@ -1,35 +1,80 @@
-const User = require('../models/User');
-const bcrypt = require('bcryptjs');
+import User from "../models/User.js";
+import bcrypt from "bcryptjs";
 
 // POST /api/users
-exports.addOfficer = async (req, res) => {
-  const { name, email, password, role } = req.body;
+export const addOfficer = async (req, res) => {
+  // const facultyid = req.user.facultyid;
+  const facultyid = "6842ad78c4d2971c14fd13c1";
+  const { name, staffid, email, role, phone } = req.body;
+  console.log("[addOfficer] Input:", req.body);
   try {
+    const password = "loveum";
     const hashed = await bcrypt.hash(password, 10);
-    const newUser = new User({ name, email, hashed_password: hashed, role });
+    console.log("[addOfficer] InputHash:", hashed);
+
+    const newUser = new User({
+      facultyid,
+      name,
+      staffid,
+      email,
+      role,
+      hashedpassword: hashed,
+      phone,
+    });
     await newUser.save();
     res.status(201).json(newUser);
   } catch (err) {
-    res.status(500).json({ msg: 'Error adding officer' });
+    console.error("[addOfficer] Error:", err);
+    res.status(500).json({ message: "Server error", error: err.message });
   }
 };
 
 // GET /api/users
-exports.getAllOfficers = async (req, res) => {
+export const getAllOfficers = async (req, res) => {
+  const facultyid = "6842ad78c4d2971c14fd13c1";// Temporary hardcoded facultyid for testing
   try {
-    const users = await User.find({ role: 'officer' });
-    res.json(users);
+    const users = await User.find({ facultyid });
+    res.status(200).json(users);
   } catch (err) {
-    res.status(500).json({ msg: 'Error fetching officers' });
+    res.status(500).json({ msg: "Error fetching officers" });
+  }
+};
+
+// PATCH /api/users/:id
+export const updateOfficer = async (req, res) => {
+  const { name, staffid, email, role, phone } = req.body;
+  try {
+    const updatedUser = await User.findByIdAndUpdate(
+      req.params.id,
+      { name, staffid, email, role, phone },
+      { new: true }
+    );
+    res.status(201).json(updatedUser);
+  } catch (err) {
+    res.status(500).json({ msg: "Error updating officer" });
   }
 };
 
 // DELETE /api/users/:id
-exports.deleteOfficer = async (req, res) => {
+export const deleteOfficer = async (req, res) => {
   try {
     await User.findByIdAndDelete(req.params.id);
-    res.json({ msg: 'Officer deleted' });
+    res.status(200).json({ msg: "Officer deleted" });
   } catch (err) {
-    res.status(500).json({ msg: 'Failed to delete officer' });
+    res.status(500).json({ msg: "Failed to delete officer" });
+  }
+};
+
+export const bulkDeleteOfficer = async (req, res) => {
+  try {
+    const {} = req.body;
+    if (!Array.isArray(categories) || categories.length === 0) {
+      return res.status(400).json({ msg: "Invalid users array" });
+    }
+
+    await Category.deleteMany({ _id: { $in: categories } });
+    res.status(200).json({ msg: "Users deleted successfully" });
+  } catch (err) {
+    res.status(500).json({ msg: "Failed to delete users" });
   }
 };

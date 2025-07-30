@@ -12,12 +12,13 @@ import UserManagement from './pages/UserManagement';
 import ComplaintCategory from './pages/ComplaintCategory';
 import RoomManagement from './pages/RoomManagement';
 import LoadingOverlay from "./components/LoadingOverlay";
-
+import NotFoundPages from './components/NotFoundPages';
 
 //Configure App.js with routes (e.g., login, dashboard, complaints).
 function App() {
     const [isLoggedIn, setIsLoggedIn] = useState(true);
     const [isLoading, setIsLoading] = useState(false);
+    const [userRole, setUserRole] = useState("admin"); 
 
     // Simulate auth check (replace with real API call)
     useEffect(() => {
@@ -31,15 +32,16 @@ function App() {
     const router = createBrowserRouter([
         {
             path: "/",
-            element: isLoggedIn ? <Layout /> : <LoginPage setIsLoggedIn={setIsLoggedIn}/>,
+            element: isLoggedIn ? <Layout userRole={userRole}/> : <LoginPage setIsLoggedIn={setIsLoggedIn} />, 
+            errorElement: <NotFoundPages />, 
             children: [
                 { path: "dashboard", element: <Dashboard /> },
                 { path: "complaints", element: <ComplaintManagement /> },
                 { path: "complaints/:id", element: <ComplaintDetails /> },
                 { path: "complaints/:id/chat", element: <ComplaintChat /> },
                 { path: "users", element: <UserManagement /> },
-                { path: "/categories", element: <ComplaintCategory /> },
-                { path: "/rooms", element: <RoomManagement /> },
+                { path: "categories", element: <ComplaintCategory /> },
+                { path: "rooms", element: <RoomManagement /> },
             ],
         },
     ]);
@@ -52,3 +54,6 @@ function App() {
 }
 
 export default App;
+
+
+

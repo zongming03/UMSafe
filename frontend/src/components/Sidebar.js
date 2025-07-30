@@ -6,14 +6,13 @@ import {
   faUsers,
   faDoorOpen,
   faCog,
-  faThLarge
+  faThLarge,
 } from "@fortawesome/free-solid-svg-icons";
 import { useNavigate } from "react-router-dom";
 
-import "../styles/Sidebar.css"; 
+import "../styles/Sidebar.css";
 
-
-const Sidebar = ({ activeTab, setActiveTab,userRole }) => {
+const Sidebar = ({ activeTab, setActiveTab, userRole }) => {
   const navigate = useNavigate();
   return (
     <aside className="side-bar-container">
@@ -56,6 +55,25 @@ const Sidebar = ({ activeTab, setActiveTab,userRole }) => {
             Complaints
           </button>
           <button
+            onClick={() => setActiveTab("analytics")}
+            className={`!rounded-button whitespace-nowrap group w-full flex items-center px-2 py-2 text-sm font-medium rounded-md cursor-pointer ${
+              activeTab === "analytics"
+                ? "bg-blue-100 text-blue-800"
+                : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+            }`}
+          >
+            <FontAwesomeIcon
+              icon={faChartBar}
+              className={`mr-3 text-lg ${
+                activeTab === "analytics"
+                  ? "text-blue-600"
+                  : "text-gray-400 group-hover:text-gray-500"
+              }`}
+            />
+            Analytics
+          </button>
+          
+          <button
             onClick={() => {
               setActiveTab("categories");
               navigate("/categories");
@@ -76,27 +94,10 @@ const Sidebar = ({ activeTab, setActiveTab,userRole }) => {
             />
             Categories
           </button>
-          <button
-            onClick={() => setActiveTab("analytics")}
-            className={`!rounded-button whitespace-nowrap group w-full flex items-center px-2 py-2 text-sm font-medium rounded-md cursor-pointer ${
-              activeTab === "analytics"
-                ? "bg-blue-100 text-blue-800"
-                : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
-            }`}
-          >
-            <FontAwesomeIcon
-              icon={faChartBar}
-              className={`mr-3 text-lg ${
-                activeTab === "analytics"
-                  ? "text-blue-600"
-                  : "text-gray-400 group-hover:text-gray-500"
-              }`}
-            />
-            Analytics
-          </button>
-          {userRole === "Admin" && (
+
+          {userRole === "admin" && (
             <button
-              onClick={() => setActiveTab("users")}
+              onClick={() => setActiveTab("users") || navigate("/users")}
               className={`sidebar-btn ${
                 activeTab === "users"
                   ? "bg-blue-100 text-blue-800"
@@ -111,7 +112,7 @@ const Sidebar = ({ activeTab, setActiveTab,userRole }) => {
                     : "text-gray-400 group-hover:text-gray-500"
                 }`}
               />
-              Users
+              User Management
             </button>
           )}
           <button

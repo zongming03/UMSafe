@@ -9,7 +9,7 @@ const EditCategoryModal = ({
 }) => {
   if (!isOpen || !currentCategory) return null;
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto">
+    <div className="fixed inset-0 z-40 overflow-y-auto">
       <div className="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
         <div className="fixed inset-0 transition-opacity" aria-hidden="true">
           <div
@@ -43,6 +43,7 @@ const EditCategoryModal = ({
                   className="category-addC-text-box"
                 />
               </div>
+
               <div>
                 <label
                   htmlFor="edit-category-description"
@@ -66,6 +67,31 @@ const EditCategoryModal = ({
                   {currentCategory.description.length}/200 characters
                 </p>
               </div>
+
+              <div>
+                <label
+                  htmlFor="category-priority"
+                  className="block text-sm font-medium text-gray-700 mb-1"
+                  >
+                    Priority<span className="text-red-500"> *</span>
+                  </label>
+                <select
+                  id="category-priority"
+                  value={currentCategory.priority}
+                  onChange={(e) =>
+                    setCurrentCategory({
+                      ...currentCategory,
+                      priority: e.target.value,
+                    })
+                  }
+                  className="category-addC-text-box"
+                >
+                  <option value='low'>Low</option>
+                  <option value='medium'>Medium</option>
+                  <option value='high'>High</option>
+                </select>
+              </div>
+
             </div>
           </div>
           <div className="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse gap-2">

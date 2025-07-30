@@ -1,0 +1,36 @@
+.notFoundPagesContainer{
+    height: 80vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+
+.notFoundPagesContainer>h1{
+    color: #3c95a9;
+    margin-bottom: 0;
+}
+
+.notFoundPagesContainer>p{
+    color: rgb(145, 145, 145);
+    margin-top: 1rem;
+    margin-bottom: 1rem;
+}
+
+.notFoundPagesContainer>button{
+    border: none;
+    background-color: #3c95a9;
+    color: white;
+    height: fit-content;
+    width: fit-content;
+    border-radius: 12px;
+    padding: 1vh 2vw;
+    box-shadow: 0 4px 12px 0 rgba(16, 185, 255, 0.15);
+    font-size: 1rem;
+    cursor: pointer;
+}
+
+.notFoundPagesContainer>button:hover{
+    
+    background-color: #f3b801;
+} 

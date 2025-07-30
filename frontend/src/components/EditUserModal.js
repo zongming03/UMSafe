@@ -47,6 +47,23 @@ const EditUserModal = ({
                       />
                     </div>
                     <div>
+                      <label
+                        htmlFor="staffid"
+                        className="block text-sm font-medium text-gray-700"
+                      >
+                        Staff ID
+                      </label>
+                      <input
+                        type="text"
+                        name="staffid"
+                        id="staffid"
+                        className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                        value={userForm.staffid}
+                        onChange={onFormChange}
+                        required
+                      />
+                    </div>
+                    <div>
                       <label htmlFor="edit-email" className="block text-sm font-medium text-gray-700">
                         Email Address
                       </label>
@@ -71,8 +88,8 @@ const EditUserModal = ({
                         value={userForm.role}
                         onChange={onFormChange}
                       >
-                        <option value="Admin">Admin</option>
-                        <option value="Officer">Officer</option>
+                        <option value="admin">Admin</option>
+                        <option value="officer">Officer</option>
                       </select>
                     </div>
                     <div>

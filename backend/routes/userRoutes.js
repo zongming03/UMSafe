@@ -1,11 +1,17 @@
-const express = require('express');
+import express from 'express';
 const router = express.Router();
-const userController = require('../controllers/userController');
+import { addOfficer,
+    getAllOfficers,
+    updateOfficer,
+    deleteOfficer,
+    bulkDeleteOfficer 
+ } from '../controllers/userController.js';
 
-// Admin-only user management
-// router.get('/', userController.getAllUsers);       
-// router.post('/', userController.createUser);       
-// router.patch('/:id', userController.updateUser);   
-// router.delete('/:id', userController.deleteUser);  
 
-module.exports = router;
+router.post('/',addOfficer);       
+router.get('/', getAllOfficers);       
+router.patch('/:id', updateOfficer);
+router.delete('/:id', deleteOfficer);  
+router.post('/bulk-delete', bulkDeleteOfficer);
+
+export default router;

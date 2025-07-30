@@ -5,8 +5,8 @@ import connectDBAndStartServer from './config/db.js';
 // import complaintRoutes from './routes/complaintRoutes.js';
 // import analyticsRoutes from './routes/analyticsRoutes.js';  
 import roomRoutes from './routes/roomRoutes.js';
-// import userRoutes from './routes/userRoutes.js';
-// import categoryRoutes from './routes/categoryRoutes.js';
+import userRoutes from './routes/userRoutes.js';
+import categoryRoutes from './routes/categoryRoutes.js';
 
 
 dotenv.config();
@@ -41,5 +41,5 @@ app.listen(PORT, () => {
 // app.use('/api/complaints', complaintRoutes);
 // app.use('/api/analytics', analyticsRoutes);
 app.use('/api/rooms', roomRoutes);
-// app.use('/api/users', userRoutes);
-// app.use('/api/categories', categoryRoutes);
+app.use('/api/users', userRoutes);
+app.use('/api/categories', categoryRoutes);

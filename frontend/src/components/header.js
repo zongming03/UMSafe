@@ -16,7 +16,7 @@ const Header = () => {
     <header className="bg-white shadow-sm z-10">
       <div className="max-w-7xl mx-auto px-2 sm:px-3 lg:px-4">
         <div className="flex justify-between h-16">
-          {/* Logo and Title */}
+          
           <div className="flex items-center">
             <img src={UMSafeLogo} alt="UMSafe Logo" className="h-14 w-auto" />
             <h1 className="ml-3 text-M font-semibold text-gray-800">UMSafe</h1>
