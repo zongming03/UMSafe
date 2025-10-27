@@ -1,13 +1,18 @@
-import React from "react";
+import React, { useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
-faChevronCircleDown,
-faDownload,
-faSpinner,
-faComments
+  faChevronDown,
+  faComments,
+  faUserPlus,
+  faExchangeAlt,
+  faTimes,
+  faSpinner,
+  faFilePdf,
+  faCheckCircle,
 } from "@fortawesome/free-solid-svg-icons";
 
 const QuickActionsCard = ({
+  complaint,
   statusRef,
   assignRef,
   isStatusDropdownOpen,
@@ -22,209 +27,208 @@ const QuickActionsCard = ({
   handleAssignChange,
   isReportModalOpen,
   setIsReportModalOpen,
-  reportFormat,
-  setReportFormat,
-  reportContent,
-  setReportContent,
   isGenerating,
   handleGenerateReport,
   isAnonymous,
-}) => (
-  <div className="bg-white rounded-lg shadow-md overflow-hidden">
-    <div className="px-6 py-4 border-b border-gray-200">
-      <h2 className="text-lg font-medium text-gray-900">Quick Actions</h2>
-    </div>
-    <div className="p-4">
-      <div className="space-y-3">
+  handleOpenChatroom
+}) => {
+  const [showToast, setShowToast] = useState(false);
 
-        {/* Update Status */}
+  // Show toast after download
+  const handleGenerateWithToast = async () => {
+    await handleGenerateReport(complaint);
+    setShowToast(true);
+    setIsReportModalOpen(false);
+
+    // Hide toast after 3 seconds
+    setTimeout(() => setShowToast(false), 3000);
+  };
+
+  return (
+    <div className="bg-white shadow-lg rounded-2xl overflow-hidden border border-gray-100">
+      <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+        <h2 className="text-lg font-semibold text-gray-800">Quick Actions</h2>
+      </div>
+
+      <div className="p-5 space-y-4">
+        {/* === Update Status === */}
         <div className="relative" ref={statusRef}>
           <button
             onClick={() => setIsStatusDropdownOpen(!isStatusDropdownOpen)}
-            className="!rounded-button whitespace-nowrap w-full flex justify-between items-center px-4 py-2 bg-white border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50 cursor-pointer"
+            className="flex w-full items-center justify-between px-4 py-2 bg-gray-50 hover:bg-blue-50 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 transition-all"
           >
-            <span>Update Status</span>
+            <span className="flex items-center space-x-2">
+              <FontAwesomeIcon icon={faExchangeAlt} className="text-blue-600" />
+              <span>Update Status</span>
+            </span>
             <FontAwesomeIcon
-              icon={faChevronCircleDown}
+              icon={faChevronDown}
               className={`text-gray-500 transition-transform ${
                 isStatusDropdownOpen ? "rotate-180" : ""
               }`}
             />
           </button>
+
           {isStatusDropdownOpen && (
-            <div className="absolute z-10 mt-1 w-full bg-white shadow-lg rounded-md ring-1 ring-black ring-opacity-5 focus:outline-none">
-              <div className="py-1">
-                {statusOptions.map((status) => (
-                  <button
-                    key={status}
-                    onClick={() => handleStatusChange(status)}
-                    className={`w-full text-left block px-4 py-2 text-sm ${
-                      currentStatus === status
-                        ? "bg-blue-50 text-blue-700"
-                        : "text-gray-700 hover:bg-gray-50"
-                    }`}
-                  >
-                    {status}
-                  </button>
-                ))}
-              </div>
+            <div className="absolute z-20 mt-2 w-full bg-white rounded-lg shadow-md border border-gray-100">
+              {statusOptions.map((status) => (
+                <button
+                  key={status}
+                  onClick={() => handleStatusChange(status)}
+                  className={`w-full text-left px-4 py-2 text-sm rounded-md ${
+                    currentStatus === status
+                      ? "bg-blue-100 text-blue-700 font-medium"
+                      : "text-gray-700 hover:bg-gray-50"
+                  }`}
+                >
+                  {status}
+                </button>
+              ))}
             </div>
           )}
         </div>
 
-        {/* Assign To */}
+        {/* === Reassign Complaint === */}
         <div className="relative" ref={assignRef}>
           <button
             onClick={() => setIsAssignDropdownOpen(!isAssignDropdownOpen)}
-            className="!rounded-button whitespace-nowrap w-full flex justify-between items-center px-4 py-2 bg-white border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50 cursor-pointer"
+            className="flex w-full items-center justify-between px-4 py-2 bg-gray-50 hover:bg-blue-50 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 transition-all"
           >
-            <span>Reassign Complaint</span>
+            <span className="flex items-center space-x-2">
+              <FontAwesomeIcon icon={faUserPlus} className="text-blue-600" />
+              <span>Reassign Complaint</span>
+            </span>
             <FontAwesomeIcon
-              icon={faChevronCircleDown}
+              icon={faChevronDown}
               className={`text-gray-500 transition-transform ${
                 isAssignDropdownOpen ? "rotate-180" : ""
               }`}
             />
           </button>
+
           {isAssignDropdownOpen && (
-            <div className="absolute z-10 mt-1 w-full bg-white shadow-lg rounded-md ring-1 ring-black ring-opacity-5 focus:outline-none">
-              <div className="py-1">
-                {staffMembers.map((staff) => (
-                  <button
-                    key={staff}
-                    onClick={() => handleAssignChange(staff)}
-                    className={`w-full text-left block px-4 py-2 text-sm ${
-                      assignedTo === staff
-                        ? "bg-blue-50 text-blue-700"
-                        : "text-gray-700 hover:bg-gray-50"
-                    }`}
-                  >
-                    {staff}
-                  </button>
-                ))}
-              </div>
+            <div className="absolute z-20 mt-2 w-full bg-white rounded-lg shadow-md border border-gray-100">
+              {staffMembers.map((staff) => (
+                <button
+                  key={staff.adminId}
+                  onClick={() => handleAssignChange(staff)}
+                  className={`w-full text-left px-4 py-2 text-sm rounded-md ${
+                    assignedTo === staff.name
+                      ? "bg-blue-100 text-blue-700 font-medium"
+                      : "text-gray-700 hover:bg-gray-50"
+                  }`}
+                >
+                  {staff.name}
+                </button>
+              ))}
             </div>
           )}
         </div>
 
-        {/* Download Report */}
+        {/* === Download Report === */}
         <button
-          id="downloadReportBtn"
           onClick={() => setIsReportModalOpen(true)}
-          className="!rounded-button whitespace-nowrap w-full flex justify-between items-center px-4 py-2 bg-white border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50 cursor-pointer"
+          className="flex w-full items-center justify-between px-4 py-2 bg-gray-50 hover:bg-blue-50 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 transition-all"
         >
-          <span>Download Report</span>
-          <FontAwesomeIcon icon={faDownload} className="text-gray-500" />
+          <span className="flex items-center space-x-2">
+            <FontAwesomeIcon icon={faFilePdf} className="text-blue-600" />
+            <span>Download Report</span>
+          </span>
         </button>
 
-        {/* Report Modal */}
-        {isReportModalOpen && (
-          <div className="fixed inset-0 bg-gray-500 bg-opacity-75 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4">
-              <div className="px-6 py-4 border-b border-gray-200">
-                <h3 className="text-lg font-medium text-gray-900">
-                  Download Report
-                </h3>
-              </div>
-              <div className="px-6 py-4">
-                <div className="mb-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Report Format
-                  </label>
-                  <div className="grid grid-cols-3 gap-3">
-                    {["PDF", "Excel", "CSV"].map((format) => (
-                      <button
-                        key={format}
-                        onClick={() => setReportFormat(format)}
-                        className={`!rounded-button whitespace-nowrap px-3 py-2 text-sm font-medium rounded-md ${
-                          reportFormat === format
-                            ? "bg-blue-100 text-blue-700 border-blue-200"
-                            : "bg-white border border-gray-300 text-gray-700 hover:bg-gray-50"
-                        }`}
-                      >
-                        {format}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="mb-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Include in Report
-                  </label>
-
-                  <div className="space-y-2">
-                    {Object.entries({
-                      basicDetails: "Basic Details",
-                      fullHistory: "Full History",
-                      attachments: "Attachments",
-                    }).map(([key, label]) => (
-                      <label key={key} className="flex items-center">
-                        <input
-                          type="checkbox"
-                          checked={reportContent[key]}
-                          onChange={(e) =>
-                            setReportContent((prev) => ({
-                              ...prev,
-                              [key]: e.target.checked,
-                            }))
-                          }
-                          className="h-4 w-4 text-blue-600 rounded border-gray-300"
-                        />
-                        <span className="ml-2 text-sm text-gray-700">
-                          {label}
-                        </span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex justify-end space-x-3">
-                <button
-                  onClick={() => setIsReportModalOpen(false)}
-                  className="!rounded-button whitespace-nowrap px-4 py-2 bg-white border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50"
-                >
-                  Cancel
-                </button>
-
-                <button
-                  id="generateReportBtn"
-                  onClick={handleGenerateReport}
-                  disabled={isGenerating}
-                  className={`!rounded-button whitespace-nowrap px-4 py-2 ${
-                    isGenerating
-                      ? "bg-blue-400 cursor-not-allowed"
-                      : "bg-blue-600 hover:bg-blue-700"
-                  } text-white rounded-md shadow-sm text-sm font-medium flex items-center justify-center min-w-[120px]`}
-                >
-                  {isGenerating ? (
-                    <>
-                      <FontAwesomeIcon icon={faSpinner} spin className="mr-2" />
-                      Generating...
-                    </>
-                  ) : (
-                    "Generate Report"
-                  )}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Chat with Student */}
+        {/* === Chat with Student === */}
         {!isAnonymous && (
-          <a
-            href="#"
-            className="!rounded-button whitespace-nowrap w-full flex justify-between items-center px-4 py-2 bg-blue-600 text-white rounded-md shadow-sm text-sm font-medium hover:bg-blue-700 cursor-pointer"
+          <button
+            onClick={handleOpenChatroom}
+            className="flex w-full items-center justify-between px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-all shadow-sm"
           >
-            <span>Chat with Student</span>
-            <FontAwesomeIcon icon={faComments} className="text-white" />
-          </a>
+            <span className="flex items-center space-x-2">
+              <FontAwesomeIcon icon={faComments} />
+              <span>Chat with Student</span>
+            </span>
+          </button>
         )}
       </div>
+
+      {/* === Report Modal === */}
+      {isReportModalOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white w-full max-w-md rounded-lg shadow-xl overflow-hidden">
+            <div className="flex justify-between items-center px-6 py-3 border-b border-gray-200">
+              <h3 className="text-lg font-semibold text-gray-800">
+                Download Complaint Report
+              </h3>
+              <button onClick={() => setIsReportModalOpen(false)}>
+                <FontAwesomeIcon icon={faTimes} className="text-gray-400" />
+              </button>
+            </div>
+
+            {/* Complaint Preview */}
+            <div className="px-6 py-4 border-b border-gray-100">
+              <h4 className="text-sm font-semibold text-gray-700 mb-1">
+                Complaint Preview
+              </h4>
+              <div className="text-sm text-gray-600 space-y-1">
+                <p>
+                  <strong>Title:</strong> {complaint?.title || "N/A"}
+                </p>
+                <p>
+                  <strong>Status:</strong> {complaint?.status || "N/A"}
+                </p>
+                <p>
+                  <strong>Location:</strong>{" "}
+                  {complaint?.facultyLocation
+                    ? `${complaint.facultyLocation.faculty || ""}, ${
+                        complaint.facultyLocation.facultyBlock || ""
+                      }, ${complaint.facultyLocation.facultyBlockRoom || ""}`
+                    : "N/A"}
+                </p>
+                <p>
+                  <strong>Category:</strong>{" "}
+                  {complaint?.category?.name || "N/A"}
+                </p>
+              </div>
+            </div>
+
+            {/* Confirm + Generate */}
+            <div className="p-6 text-right bg-gray-50 flex justify-end space-x-3">
+              <button
+                onClick={() => setIsReportModalOpen(false)}
+                className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-100"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleGenerateWithToast}
+                disabled={isGenerating}
+                className={`px-4 py-2 rounded-lg text-sm font-medium text-white ${
+                  isGenerating
+                    ? "bg-blue-400 cursor-not-allowed"
+                    : "bg-blue-600 hover:bg-blue-700"
+                }`}
+              >
+                {isGenerating ? (
+                  <FontAwesomeIcon icon={faSpinner} spin />
+                ) : (
+                  "Generate PDF"
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* === Toast Notification === */}
+      {showToast && (
+        <div className="fixed bottom-6 right-6 bg-green-600 text-white px-4 py-3 rounded-lg shadow-lg flex items-center space-x-2 animate-fade-in">
+          <FontAwesomeIcon icon={faCheckCircle} className="text-white" />
+          <span className="text-sm font-medium">
+            Report downloaded successfully!
+          </span>
+        </div>
+      )}
     </div>
-  </div>
-);
+  );
+};
 
 export default QuickActionsCard;

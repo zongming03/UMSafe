@@ -19,6 +19,7 @@ import {
 } from "@fortawesome/free-solid-svg-icons";
 import Pagination from "../components/Pagination";
 import showNotification from "../utils/showNotification";
+import LoadingOverlay from "../components/LoadingOverlay";
 import {
   addOfficer,
   getAllOfficers,
@@ -50,7 +51,7 @@ const UserManagement = () => {
   const [error, setError] = useState(null);
   const [userToDelete, setUserToDelete] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
-  const currentLoggedInUserId = "loggedInUserIdFromAuth"; // replace with real auth ID later
+  const currentLoggedInUserId = localStorage.getItem("userId"); 
 
   // Filtered users based on search and filters
   const filteredUsers = users.filter((user) => {
@@ -91,6 +92,7 @@ const UserManagement = () => {
     });
     setIsAddUserModalOpen(true);
   };
+
   const handleEditUser = (user) => {
     setCurrentUser(user);
     console.log(currentUser);
@@ -103,6 +105,7 @@ const UserManagement = () => {
     });
     setIsEditUserModalOpen(true);
   };
+
   const handleDeleteUser = (user) => {
     setUserToDelete(user);
     setIsDeleteModalOpen(true);
@@ -126,6 +129,9 @@ const UserManagement = () => {
       setError("Please fill in all fields");
       return;
     }
+
+    setIsLoading(true);
+
     try {
       const res = await addOfficer(userForm);
       if (res && (res.status === 200 || res.status === 201)) {
@@ -144,6 +150,8 @@ const UserManagement = () => {
       console.error("Error adding user:", error);
       setError("Failed to add user. Please check the details .");
       return;
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -290,6 +298,10 @@ const UserManagement = () => {
   useEffect(() => {
     fetchAndSetUsers();
   }, []);
+
+  if (isLoading) {
+    return <LoadingOverlay />;
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">

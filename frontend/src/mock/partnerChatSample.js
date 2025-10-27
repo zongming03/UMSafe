@@ -1,0 +1,105 @@
+const partnerChatSample = {
+  // an array of chat messages as your partner might return
+  chats: [
+    {
+      id: "0199f2b5-01a4-7487-a473-e3852f5346c2",
+      senderId: "0199d751-fbb6-742e-b052-e4a05b2d57bc", // student
+      receiverId: "68af04187c2e6f499854e2da",
+      message: "Hi, I have submitted the report.",
+      createdAt: "2025-10-17T15:06:12.771Z",
+      updatedAt: "2025-10-17T15:06:12.771Z",
+      version: 0,
+    },
+    {
+      id: "0199f2b6-11a4-7487-a473-e3852f5346c3",
+      senderId: "68af04187c2e6f499854e2da",
+      receiverId: "0199d751-fbb6-742e-b052-e4a05b2d57bc",
+      message: "Thanks — we're looking into it.",
+      createdAt: "2025-10-17T15:08:02.000Z",
+      updatedAt: "2025-10-17T15:08:02.000Z",
+      version: 0,
+    },
+    {
+      id: "0199f2b7-21a4-7487-a473-e3852f5346c4",
+      senderId: "0199d751-fbb6-742e-b052-e4a05b2d57bc",
+      receiverId: "68af04187c2e6f499854e2da",
+      message: "Any ETA for a fix?",
+      createdAt: "2025-10-17T15:15:30.000Z",
+      updatedAt: "2025-10-17T15:15:30.000Z",
+      version: 0,
+    },
+    {
+      id: "0199f2b8-31a4-7487-a473-e3852f5346c5",
+      senderId: "0199d751-fbb6-742e-b052-e4a05b2d57bc",
+      receiverId: "68af04187c2e6f499854e2da",
+      message: "Technician scheduled tomorrow morning.",
+      createdAt: "2025-10-17T16:02:10.000Z",
+      updatedAt: "2025-10-17T16:02:10.000Z",
+      version: 0,
+    },
+
+    {
+      id: "0199f2ba-51a4-7487-a473-e3852f5346c7",
+      senderId: "0199d751-fbb6-742e-b052-e4a05b2d57bc",
+      receiverId: "68af04187c2e6f499854e2da",
+      message: "Here's a photo of the issue.",
+      attachments: [
+        {
+          name: "evidence.jpg",
+          url: "https://res.cloudinary.com/example/image/upload/v1760274923/reports/evidence.jpg",
+          type: "image/jpeg",
+        },
+      ],
+      createdAt: "2025-10-17T16:05:40.000Z",
+      updatedAt: "2025-10-17T16:05:40.000Z",
+      version: 0,
+    },
+    {
+      id: "0199f2bb-61a4-7487-a473-e3852f5346c8",
+      senderId: "68af04187c2e6f499854e2da",
+      receiverId: "0199d751-fbb6-742e-b052-e4a05b2d57bc",
+      message: "Thanks, we've received the image and forwarded it.",
+      createdAt: "2025-10-17T16:10:00.000Z",
+      updatedAt: "2025-10-17T16:10:00.000Z",
+      version: 0,
+    },
+  ],
+  chatroom: {
+    id: "0199de07-70b5-72a8-b62c-27bceb8d0289",
+    reportId: "0199d89b-63e3-730d-ad6b-e99eaf68dcec",
+    createdAt: "2025-10-13T14:44:13.617Z",
+    updatedAt: "2025-10-13T14:44:13.617Z",
+    version: 0,
+  },
+  report: {
+    id: "CMP-1093",
+    userId: "0199d751-fbb6-742e-b052-e4a05b2d57bc",
+    userName: "Testing1.",
+    adminId: "68af04187c2e6f499854e2da",
+    status: "opened",
+    title: "Testing Title",
+    description: "Ooaa",
+    category: {
+      name: "Noise Violation",
+      priority: "Low",
+    },
+    media: [
+      "https://res.cloudinary.com/dcv38gpis/video/upload/v1761235173/reports/019a11cb-f3b4-73ea-a2d2-12fdd76f687f.mp4",
+    ],
+    latitude: 3.1271261,
+    longitude: 101.6349792,
+    facultyLocation: {
+      faculty: "Faculty of Computer Science and Engineering",
+      facultyBlock: "Block A",
+      facultyBlockRoom: "Room 101",
+    },
+    isAnonymous: false,
+    isFeedbackProvided: false,
+    chatroomId: "0199f26c-fdf7-7028-96e6-fbdf774cf73b",
+    createdAt: "2025-10-12T13:15:23.683Z",
+    updatedAt: "2025-10-17T13:47:33.329Z",
+    version: 2,
+  },
+};
+
+export default partnerChatSample;

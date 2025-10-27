@@ -1,31 +1,97 @@
-import axios from 'axios';  
+import axios from "axios";
 
 const api = axios.create({
-  baseURL: 'http://localhost:5000/api', 
-  withCredentials: true, 
+  baseURL: "http://localhost:5000/admin",
+  withCredentials: true,
 });
 
-// Room Management API
-export const fetchRooms = () => api.get('/rooms');
-export const addRoom = (data) => api.post('/rooms', data);
-export const editRoom = (facultyId, blockId, roomId, data) => api.patch(`/rooms/${facultyId}/${blockId}/${roomId}`, data);
-export const deleteRoom = (facultyId, blockId, roomId) => api.delete(`/rooms/${facultyId}/${blockId}/${roomId}`);
-export const bulkDeleteRooms = (facultyId,rooms)=>api.post(`/rooms/bulk-delete`, { facultyId, rooms });
+api.interceptors.request.use((config) => {
+  const token =
+    localStorage.getItem("token") || sessionStorage.getItem("token");
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
 
+// ==================== Auth APIs ====================
+// Login & Logout
+export const login = (credentials) => api.post("/auth/login", credentials);
+export const logout = () => api.post("/auth/logout");
 
-// Category Management API
-export const fetchCategories = () => api.get('/categories');
-export const addCategory = (data) => api.post('/categories', data); 
-export const updateCategory = (categoryId, data) => api.patch(`/categories/${categoryId}`, data);
-export const deleteCategory = (categoryId) => api.delete(`/categories/${categoryId}`);
-export const bulkDeleteCategories = (categories) => api.post('/categories/bulk-delete', { categories });
+// Forgot Password
+export const forgotPassword = (email) =>
+  api.post("/auth/forgot-password", { email });
 
-// User Management API
-export const addOfficer = (date) => api.post('/users',date);
-export const getAllOfficers = () => api.get('/users');
+// Reset Password
+export const resetPassword = (token, newPassword) =>
+  api.post(`/auth/reset-password/${token}`, { password: newPassword });
+
+// ==================== Room Management APIs ====================
+export const fetchRooms = () => api.get("/rooms");
+export const addRoom = (data) => api.post("/rooms", data);
+export const editRoom = (facultyId, blockId, roomId, data) =>
+  api.patch(`/rooms/${facultyId}/${blockId}/${roomId}`, data);
+export const deleteRoom = (facultyId, blockId, roomId) =>
+  api.delete(`/rooms/${facultyId}/${blockId}/${roomId}`);
+export const bulkDeleteRooms = (facultyId, rooms) =>
+  api.post(`/rooms/bulk-delete`, { facultyId, rooms });
+
+// ==================== Category Management APIs ====================
+export const fetchCategories = () => api.get("/categories");
+export const addCategory = (data) => api.post("/categories", data);
+export const updateCategory = (categoryId, data) =>
+  api.patch(`/categories/${categoryId}`, data);
+export const deleteCategory = (categoryId) =>
+  api.delete(`/categories/${categoryId}`);
+export const bulkDeleteCategories = (categories) =>
+  api.post("/categories/bulk-delete", { categories });
+
+// ==================== User Management APIs ====================
+export const addOfficer = (data) => api.post("/users", data);
+export const getAllOfficers = () => api.get("/users");
 export const updateOfficer = (id, data) => api.patch(`/users/${id}`, data);
 export const deleteOfficer = (id) => api.delete(`/users/${id}`);
-export const bulkDeleteOfficers = (officers) => api.post('/users/bulk-delete', { officers });
+export const bulkDeleteOfficers = (officers) =>
+  api.post("/users/bulk-delete", { officers });
 
+// ==================== Profile Management APIs ====================
+export const getProfile = () => api.get("/profile");
+export const updateProfile = (data) =>
+  api.patch("/profile", data, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+export const changePassword = (data) =>
+  api.post("/profile/change-password", data);
+
+// ==================== Chatroom Management APIs ====================
+
+export const fetchChatrooms = () => api.get("/chatrooms");
+
+export const initiateChatroom = async (reportId) => {
+  // baseURL already includes '/admin', so call the reports path without duplicating '/admin'
+  const response = await api.post(`/reports/${reportId}/chatrooms/initiate`);
+  return response.data;
+};
+
+export const getChatMessages = (reportId, chatroomId) =>
+  api.get(`/reports/${reportId}/chatrooms/${chatroomId}/chats`)
+     .then((res) => res.data);
+
+export const sendMessage = (reportId, chatroomId, messageData) => {
+  // If caller passed a FormData (file uploads), let axios send multipart/form-data
+  if (messageData instanceof FormData) {
+    return api
+      .post(`/reports/${reportId}/chatrooms/${chatroomId}/chats`, messageData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      })
+      .then((res) => res.data);
+  }
+
+  // Default: JSON body
+  return api
+    .post(`/reports/${reportId}/chatrooms/${chatroomId}/chats`, messageData)
+    .then((res) => res.data);
+};
 
 export default api;

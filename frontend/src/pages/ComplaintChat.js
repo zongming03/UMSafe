@@ -1,10 +1,9 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useContext } from "react";
 import "../styles/ComplaintChat.css";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
   faInfoCircle,
   faFile,
-  faCheckDouble,
   faFilePdf,
   faImage,
   faTimes,
@@ -15,95 +14,182 @@ import {
 import profile from "../assets/profile.png";
 import man from "../assets/man.png";
 import ComplaintChatHeader from "../components/ComplaintChatHeader";
+import { useParams, useLocation, useNavigate } from "react-router-dom";
+import { getChatMessages, sendMessage, initiateChatroom } from "../services/api.js";
+import { AuthContext } from "../context/AuthContext";
+import LoadingOverlay from "../components/LoadingOverlay";
+import partnerSample from "../mock/partnerChatSample";
 
 const ComplaintChat = () => {
+  const { reportId, chatroomId } = useParams();
+
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState([
     {
-      id: 1,
-      sender: "system",
-      content: "Conversation started regarding complaint #CMP-1084",
-      timestamp: "2025-05-24 09:30",
-      attachments: [],
+      id: "sys-001",
+      senderId: "system",
+      message: "Conversation started regarding complaint #CMP-1084",
+      createdAt: "2025-05-24T09:30:00",
+      system: true,
     },
     {
-      id: 2,
-      sender: "student",
-      name: "Michael Chen",
-      content:
-        "Hello, I wanted to follow up on my complaint about the heating in my room. It's been 3 days now and the temperature is still below 60°F at night. It's really difficult to study or sleep.",
-      timestamp: "2025-05-24 09:32",
+      id: "student-001",
+      senderId: "0199d751-fbb6-742e-b052-e4a05b2d57bc",
+      senderName: "Michael Chen",
       avatar: profile,
-      read: true,
-      attachments: [],
-    },
-    {
-      id: 3,
-      sender: "staff",
-      name: "John Smith",
-      content:
-        "Hi Michael, I'm sorry to hear about the continued issues with your heating. I've escalated this to our maintenance team and they've scheduled a visit to your room tomorrow morning between 9-11 AM. Will you be available during that time?",
-      timestamp: "2025-05-24 10:15",
-      avatar: man,
-      read: true,
-      attachments: [],
-    },
-    {
-      id: 4,
-      sender: "student",
-      name: "Michael Chen",
-      content:
-        "Yes, I'll be in class from 8-9:30 AM but I can be back in my room by 9:45 AM. Thank you for the quick response!",
-      timestamp: "2025-05-24 10:22",
-      avatar: profile,
-      read: true,
-      attachments: [],
-    },
-    {
-      id: 5,
-      sender: "staff",
-      name: "John Smith",
-      content:
-        "Perfect, I'll let the maintenance team know. They'll aim to arrive around 10 AM. I've also arranged for a portable heater to be delivered to your room this evening as a temporary solution. Please let me know if you don't receive it by 6 PM.",
-      timestamp: "2025-05-24 10:30",
-      avatar: man,
-      read: true,
-      attachments: [],
-    },
-    {
-      id: 6,
-      sender: "student",
-      name: "Michael Chen",
-      content: "I received the portable heater, thank you! It's helping a lot.",
-      timestamp: "2025-05-24 18:45",
-      avatar: profile,
-      read: true,
-      attachments: [],
-    },
-    {
-      id: 7,
-      sender: "staff",
-      name: "John Smith",
-      content:
-        "Great! The maintenance team will see you tomorrow at 10 AM. Have a good night.",
-      timestamp: "2025-05-24 19:05",
-      avatar: man,
-      read: true,
-      attachments: [],
+      message: "Hello, I wanted to follow up…",
+      createdAt: "2025-05-24T09:32:00",
     },
   ]);
+
+  const [loading, setLoading] = useState(true);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [attachments, setAttachments] = useState([]);
+  const [isSending, setIsSending] = useState(false);
+  const [adminIds, setAdminIds] = useState(new Set());
+  const location = useLocation();
+  const navigate = useNavigate();
+  const complaint = location.state;
+  const { user: currentUser } = useContext(AuthContext);
+
+  console.log("ComplaintChat - complaint:", complaint);
+
+  const formatDateYYYYMMDD = (input) => {
+    if (!input) return "";
+    const d = new Date(input);
+    if (isNaN(d)) return "";
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const dd = String(d.getDate()).padStart(2, "0");
+    return `${yyyy}-${mm}-${dd}`;
+  };
+
+  // Format date/time as 'YYYY-MM-DD HH:MM:SS'
+  const formatDateTimeYYYYMMDD_HHMMSS = (input) => {
+    if (!input) return "";
+    const d = new Date(input);
+    if (isNaN(d)) return "";
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const dd = String(d.getDate()).padStart(2, "0");
+    const hh = String(d.getHours()).padStart(2, "0");
+    const min = String(d.getMinutes()).padStart(2, "0");
+    const ss = String(d.getSeconds()).padStart(2, "0");
+    return `${yyyy}-${mm}-${dd} ${hh}:${min}:${ss}`;
+  };
+
+
   const fileInputRef = useRef(null);
   const messagesEndRef = useRef(null);
   const chatContainerRef = useRef(null);
   const emojiPickerRef = useRef(null);
   const emojiButtonRef = useRef(null);
-  // Scroll to bottom of messages
+  const localObjectUrlsRef = useRef([]);
+
+  // fetch admin ids so we can classify senders as admin vs student
+  useEffect(() => {
+    const loadAdmins = async () => {
+      try {
+        const res = await fetch("http://localhost:5000/admin/usersMobile/users", {
+          credentials: "include",
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        const admins = data.data || [];
+        const ids = new Set(admins.map((a) => a._id || a.id));
+        setAdminIds(ids);
+      } catch (err) {
+        console.warn("Could not load admin list:", err);
+      }
+    };
+    loadAdmins();
+  }, []);
+
+  useEffect(() => {
+    const fetchMessages = async () => {
+      try {
+        // Development mode: no ids at all -> show full partner sample for UI review
+        if (!reportId && !chatroomId) {
+          const mapped = partnerSample.chats.map((c) => ({
+            ...c,
+            timestamp: c.createdAt,
+            content: c.message,
+            isAdmin: adminIds.has(c.senderId),
+            avatar: adminIds.has(c.senderId) ? man : profile,
+          }));
+          setMessages(mapped);
+          setLoading(false);
+          return;
+        }
+
+        // If we have a reportId but no chatroomId the chat hasn't started yet.
+        // Show the initial system starter message so the UI indicates the conversation context.
+        if (!chatroomId) {
+          const systemMsg =
+            partnerSample.chats.find((c) => c.system) || partnerSample.chats[0];
+          const mapped = [
+            {
+              ...systemMsg,
+              timestamp: systemMsg?.createdAt,
+              content: systemMsg?.message,
+              isAdmin: adminIds.has(systemMsg?.senderId),
+              avatar: adminIds.has(systemMsg?.senderId) ? man : profile,
+            },
+          ];
+          setMessages(mapped);
+          setLoading(false);
+          return;
+        }
+
+        const response = await getChatMessages(reportId, chatroomId);
+        const chats =
+          response?.chats ||
+          (response?.chat ? (Array.isArray(response.chat) ? response.chat : [response.chat]) : []);
+        const mapped = chats.map((c) => ({
+          ...c,
+          timestamp: c.createdAt || c.updatedAt,
+          content: c.message || c.content,
+          isAdmin: adminIds.has(c.senderId),
+          avatar: adminIds.has(c.senderId) ? man : profile,
+        }));
+        setMessages(mapped);
+      } catch (error) {
+        console.error("Failed to load messages:", error);
+        // fallback to sample so UI remains useful
+        const mapped = partnerSample.chats.map((c) => ({
+          ...c,
+          timestamp: c.createdAt,
+          content: c.message,
+          isAdmin: adminIds.has(c.senderId),
+          avatar: adminIds.has(c.senderId) ? man : profile,
+        }));
+        setMessages(mapped);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchMessages();
+  }, [reportId, chatroomId, adminIds]);
+
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
-  // Handle click outside emoji picker and menu
+
+  // cleanup local object URLs when component unmounts or attachments change
+  useEffect(() => {
+    return () => {
+      if (localObjectUrlsRef.current && localObjectUrlsRef.current.length) {
+        localObjectUrlsRef.current.forEach((u) => {
+          try {
+            URL.revokeObjectURL(u);
+          } catch (e) {}
+        });
+        localObjectUrlsRef.current = [];
+      }
+    };
+  }, []);
+
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (
@@ -121,38 +207,90 @@ const ComplaintChat = () => {
       document.removeEventListener("mousedown", handleClickOutside);
     };
   }, [showEmojiPicker]);
-  const handleSendMessage = ({
-    sender = "staff",
-    name = "John Smith",
-    avatar = man,
-  } = {}) => {
-    if (message.trim() || attachments.length > 0) {
-      const newMessage = {
-        id: messages.length + 1,
-        sender,
-        name,
-        content: message,
-        timestamp: new Date()
-          .toLocaleString("en-US", {
-            year: "numeric",
-            month: "2-digit",
-            day: "2-digit",
-            hour: "2-digit",
-            minute: "2-digit",
-            hour12: false,
-          })
-          .replace(",", ""),
-        avatar,
-        attachments: attachments.map((file) => ({
+
+  const handleSendMessage = async () => {
+    if (!message.trim() && attachments.length === 0) return;
+
+    const currentUserId =
+      currentUser?.id || currentUser?._id || currentUser?.userId || "admin-staff-001";
+
+    // Build optimistic attachments: include local object URL so admin can open before upload
+    const optimisticAttachments = attachments.map((file) => {
+      try {
+        const url = URL.createObjectURL(file);
+        localObjectUrlsRef.current.push(url);
+        return {
           name: file.name,
           size: file.size,
           type: file.type,
-        })),
-        read: false,
-      };
-      setMessages([...messages, newMessage]);
-      setMessage("");
-      setAttachments([]);
+          url,
+          _local: true,
+        };
+      } catch (err) {
+        return {
+          name: file.name,
+          size: file.size,
+          type: file.type,
+        };
+      }
+    });
+
+    const newMessage = {
+      id: crypto.randomUUID(),
+      senderId: currentUserId,
+      isAdmin: true,
+      // receiverId could be determined by chatroom participants; keep undefined for backend to resolve
+      message: message,
+      createdAt: new Date().toISOString(),
+      attachments: optimisticAttachments,
+    };
+
+  // Optimistically append message so UI feels responsive
+  setMessages((prev) => [...prev, newMessage]);
+  setMessage("");
+  // Keep a copy of attachments to send to backend (we'll clear UI attachments right away)
+  const attachmentsToSend = attachments.slice();
+  setAttachments([]);
+
+    // Persist: if chatroomId missing, create it first
+    setIsSending(true);
+    try {
+      let roomId = chatroomId;
+      if (!roomId) {
+        const res = await initiateChatroom(reportId);
+        roomId = res?.chatroom?.id;
+        if (roomId) {
+          // update URL so route param contains the new chatroomId and location.state carries updated complaint
+          const updatedComplaint = { ...(complaint || {}), chatroomId: roomId };
+          navigate(`/complaints/${reportId}/${roomId}`, { state: updatedComplaint });
+        }
+      }
+
+        if (roomId) {
+        // send message to backend; if attachmentsToSend contains File objects, send as FormData
+        const hasFiles = attachmentsToSend && attachmentsToSend.length > 0 && attachmentsToSend[0] instanceof File;
+        if (hasFiles) {
+          const form = new FormData();
+          form.append("message", newMessage.message);
+          // append files with key 'files' (backend should read from req.files.files or similar)
+          attachmentsToSend.forEach((file) => form.append("files", file));
+          await sendMessage(reportId, roomId, form);
+        } else {
+          // Attachments are metadata only (no file objects)
+          const payload = {
+            message: newMessage.message,
+            attachments: newMessage.attachments,
+          };
+          await sendMessage(reportId, roomId, payload);
+        }
+      } else {
+        console.warn("No chatroomId available after initiation; message not persisted.");
+      }
+    } catch (err) {
+      console.error("Failed to send message:", err);
+      // Optionally mark the message as failed in UI (not implemented)
+    } finally {
+      setIsSending(false);
     }
   };
 
@@ -162,50 +300,38 @@ const ComplaintChat = () => {
       handleSendMessage();
     }
   };
+
   const handleFileChange = (e) => {
     if (e.target.files) {
       const newFiles = Array.from(e.target.files);
       setAttachments([...attachments, ...newFiles]);
     }
   };
+
   const removeAttachment = (index) => {
     setAttachments(attachments.filter((_, i) => i !== index));
   };
+
   const handleEmojiClick = (emoji) => {
     setMessage(message + emoji);
     setShowEmojiPicker(false);
   };
+
   const emojis = [
-    "😊",
-    "👍",
-    "🙏",
-    "👋",
-    "🔥",
-    "❤️",
-    "👀",
-    "🎉",
-    "👏",
-    "🤔",
-    "😂",
-    "😢",
-    "😡",
-    "🤝",
-    "⏰",
+    "�","😁","😂","🤣","😃","😄","😅","😆","😉","�😊","😇","🙂","🙃","😍","😘","😗","😙","😚","😋","😜","😝","😛","🤑","🤗","🤭","🤫","🤔","🤐","🤨","😐","😑","😶","�","�","�","�","�🔥","😌","😔","😪","🤤","😴","😷","🤒","🤕","🤢","🤮","🤧","🥵","🥶","🥴","😵","🤯","🤠","🥳","😎","🤓","🧐","😕","😟","🙁","☹️","�","😯","�","😳","�","😦","😧","😨","😰","�","😢","😭","😱","😖","😣","😞","😓","😩","😫","😤","😡","😠","🤬","💀","☠️","💩","🤡","👹","👺","👻","👽","🤖","💋","💌","💘","💝","💖","💗","💓","💕","💞","💐","🌸","🌹","🌺","🌻","🌼","🌷","🌱","🌿","🍀","🌵","🎄","🌴","🌲","🌳","🌾","🍁","🍂","🍃","☀️","🌤️","⛅","🌥️","🌦️","🌧️","⛈️","🌩️","🌨️","❄️","⚡","🔥","💧","🌊","⭐","🌟","✨","⚽","🏀","🏈","⚾","🎾","🏐","🎱","🏓","🏸","🥅","🏒","🏑","🏏","🎯","🎲","🎮","🎧","🎤","🎵","🎶","🎷","🎸","🎹","�","📷","🎬","🎨","✈️","🚗","🚕","🚙","🚌","🚎","🏎️","🚓","🚑","🚒","🚲","🚂","🚀","🛸","🛰️"
   ];
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
-     
-
       {/* Chat Header */}
       <ComplaintChatHeader
-        complaintId="#CMP-1084"
-        studentName="Michael Chen"
-        complaintTitle="Dormitory Heating Problem"
-        lastActive="Last active: 10 minutes ago"
-        onBack={() => {
-          /* handle back navigation */
-        }}
+        complaintId={complaint?.id || partnerSample.report?.id || "#CMP-1084"}
+        studentName={
+          complaint?.username || "Unknown"
+        }
+        complaintTitle={complaint?.title || "Complaint Title"}
+        /* lastActive removed per request */
+        onBack={() => navigate(-1)}
       />
 
       {/* Main Chat Area */}
@@ -213,92 +339,108 @@ const ComplaintChat = () => {
         ref={chatContainerRef}
         className="flex-1 overflow-y-auto p-4 bg-gray-50"
       >
+        {loading && <LoadingOverlay />}
         <div className="max-w-3xl mx-auto space-y-4">
-          {messages.map((msg) => (
-            <div
-              key={msg.id}
-              className={`flex ${
-                msg.sender === "system"
-                  ? "justify-center"
-                  : msg.sender === "staff"
-                  ? "justify-end"
-                  : "justify-start"
-              } mb-6`}
-            >
-              {msg.sender === "system" ? (
-                <div className="bg-[#F3F4F6] px-4 py-3 rounded-2xl text-sm text-gray-600 max-w-md backdrop-blur-sm bg-opacity-80">
-                  <div className="flex items-center justify-center">
-                    <FontAwesomeIcon icon={faInfoCircle} className="mr-2" />
-                    <span>{msg.content}</span>
+          {messages.map((msg) => {
+            const isSystem = !!msg.system;
+            const isAdminSender = !!msg.isAdmin;
+            // show admin messages on the right, student messages on the left
+            const isOutgoing = isAdminSender;
+
+            return (
+              <div
+                key={msg.id}
+                className={`flex ${
+                  isSystem ? "justify-center" : isOutgoing ? "justify-end" : "justify-start"
+                } mb-6`}
+              >
+                {isSystem ? (
+                  <div className="bg-[#F3F4F6] px-4 py-3 rounded-2xl text-sm text-gray-600 max-w-md backdrop-blur-sm bg-opacity-80">
+                    <div className="flex items-center justify-center">
+                      <FontAwesomeIcon icon={faInfoCircle} className="mr-2" />
+                      <span>{msg.message}</span>
+                    </div>
+                    <div className="text-xs text-gray-500 text-center mt-1">
+                      {formatDateTimeYYYYMMDD_HHMMSS(msg.timestamp || msg.createdAt)}
+                    </div>
                   </div>
-                  <div className="text-xs text-gray-500 text-center mt-1">
-                    {msg.timestamp}
-                  </div>
-                </div>
-              ) : (
-                <div
-                  className={`flex ${
-                    msg.sender === "staff" ? "flex-row-reverse" : "flex-row"
-                  } max-w-md`}
-                >
-                  <div className="flex-shrink-0">
-                    <img
-                      src={msg.avatar}
-                      alt={msg.name}
-                      className="h-10 w-10 rounded-full object-cover"
-                    />
-                  </div>
+                ) : (
                   <div
-                    className={`mx-2 ${
-                      msg.sender === "staff" ? "text-right" : "text-left"
-                    }`}
+                    className={`flex ${isOutgoing ? "flex-row-reverse" : "flex-row"} max-w-md`}
                   >
-                    <div
-                      className={`px-6 py-4 rounded-2xl inline-block shadow-sm ${
-                        msg.sender === "staff"
-                          ? "bg-gradient-to-r from-blue-600 to-blue-500 text-white"
-                          : "bg-white text-gray-800"
-                      }`}
-                    >
-                      <p className="text-sm">{msg.content}</p>
-                      {msg.attachments && msg.attachments.length > 0 && (
-                        <div className="mt-2 space-y-1">
-                          {msg.attachments.map((attachment, index) => (
-                            <div
-                              key={index}
-                              className={`flex items-center p-2 rounded ${
-                                msg.sender === "staff"
-                                  ? "bg-blue-700"
-                                  : "bg-gray-100"
-                              }`}
-                            >
-                              <FontAwesomeIcon icon={faFile} className="mr-2" />
-                              <span className="text-xs truncate">
-                                {attachment.name}
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
+                    <div className="flex-shrink-0">
+                      <img
+                        src={isOutgoing ? man : msg.avatar || profile}
+                        alt={msg.senderName || msg.senderId}
+                        className="h-10 w-10 rounded-full object-cover"
+                      />
                     </div>
-                    <div className="flex items-center mt-1 text-xs text-gray-500">
-                      <span>{msg.timestamp}</span>
-                      {msg.sender === "staff" && (
-                        <span className="ml-2 flex items-center">
-                          <FontAwesomeIcon
-                            icon={faCheckDouble}
-                            className={
-                              msg.read ? "text-blue-500" : "text-gray-400"
-                            }
-                          />
-                        </span>
-                      )}
+                    <div className={`mx-2 ${isOutgoing ? "text-right" : "text-left"}`}>
+                      <div
+                        className={`px-6 py-4 rounded-2xl inline-block shadow-sm ${
+                          isOutgoing ? "bg-gradient-to-r from-blue-600 to-blue-500 text-white" : "bg-white text-gray-800"
+                        }`}
+                      >
+                        <p className="text-sm">{msg.content || msg.message}</p>
+                        {msg.attachments && msg.attachments.length > 0 && (
+                          <div className="mt-2 space-y-2">
+                            {msg.attachments.map((attachment, index) => {
+                              const fileBoxClass = isOutgoing
+                                ? "flex items-center p-2 rounded bg-blue-700 text-white cursor-pointer"
+                                : "flex items-center p-2 rounded bg-gray-100 text-gray-800";
+                              const linkClass = isOutgoing
+                                ? "text-xs text-white hover:underline cursor-pointer"
+                                : "text-xs text-blue-600 hover:underline";
+
+                              return (
+                                <div key={index} className="flex items-center gap-2">
+                                  {attachment.url ? (
+                                    // If attachment has a URL, allow viewing/downloading
+                                    attachment.type && attachment.type.startsWith("image") ? (
+                                      <a href={attachment.url} target="_blank" rel="noopener noreferrer" className={isOutgoing ? "rounded-md overflow-hidden ring-2 ring-white cursor-pointer" : "rounded-md overflow-hidden"}>
+                                        <img src={attachment.url} alt={attachment.name} className="h-28 rounded-md object-cover" />
+                                      </a>
+                                    ) : (
+                                      // If this is a local file (optimistic) show a blue box for admin so it's readable on blue bubble
+                                      attachment._local ? (
+                                        <div
+                                          className={fileBoxClass}
+                                          onClick={() => {
+                                            if (attachment.url) window.open(attachment.url, "_blank", "noopener noreferrer");
+                                          }}
+                                        >
+                                          <FontAwesomeIcon icon={faFile} className="mr-2" />
+                                          <span className="text-xs truncate">{attachment.name}</span>
+                                        </div>
+                                      ) : (
+                                        <a href={attachment.url} target="_blank" rel="noopener noreferrer" className={linkClass} download>
+                                          {attachment.name || attachment.url}
+                                        </a>
+                                      )
+                                    )
+                                  ) : (
+                                    // No URL & not a local preview - show filename placeholder
+                                    <div className={fileBoxClass}>
+                                      <FontAwesomeIcon icon={faFile} className="mr-2" />
+                                      <span className="text-xs truncate">{attachment.name}</span>
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex items-center mt-1 text-xs text-gray-500">
+                        <span>{formatDateTimeYYYYMMDD_HHMMSS(msg.timestamp || msg.createdAt)}</span>
+                        {/* read receipts not available in current DB - omitted */}
+                      </div>
                     </div>
                   </div>
-                </div>
-              )}
-            </div>
-          ))}
+                )}
+              </div>
+            );
+          })}
           <div ref={messagesEndRef} />
         </div>
       </div>
@@ -342,7 +484,7 @@ const ComplaintChat = () => {
               ))}
             </div>
           )}
-          <div className="flex items-end rounded-2xl bg-[#F8FAFC] overflow-hidden shadow-sm border-0">
+          <div className="flex items-end rounded-2xl bg-[#F8FAFC] overflow-visible shadow-sm border-0">
             <div className="relative">
               <button
                 ref={emojiButtonRef}
@@ -354,9 +496,9 @@ const ComplaintChat = () => {
               {showEmojiPicker && (
                 <div
                   ref={emojiPickerRef}
-                  className="absolute bottom-12 left-0 bg-white rounded-lg shadow-lg border border-gray-200 p-2 z-10"
+                  className="absolute bottom-12 left-0 bg-white rounded-lg shadow-lg border border-gray-200 p-2 z-10 max-h-56 overflow-y-auto w-64"
                 >
-                  <div className="grid grid-cols-5 gap-1">
+                  <div className="grid grid-cols-8 gap-1">
                     {emojis.map((emoji, index) => (
                       <button
                         key={index}

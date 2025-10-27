@@ -8,20 +8,24 @@ import {
   faCog,
   faThLarge,
 } from "@fortawesome/free-solid-svg-icons";
-import { useNavigate } from "react-router-dom";
-
+import { useNavigate, useLocation } from "react-router-dom";
 import "../styles/Sidebar.css";
 
-const Sidebar = ({ activeTab, setActiveTab, userRole }) => {
+const Sidebar = ({ userRole }) => {
   const navigate = useNavigate();
+  const location = useLocation();
+
+  
+  const currentPath = location.pathname;
+
   return (
     <aside className="side-bar-container">
       <nav className="mt-5 px-2">
         <div className="space-y-1">
           <button
-            onClick={() => setActiveTab("dashboard")}
+            onClick={() => navigate("/dashboard")}
             className={`sidebar-btn ${
-              activeTab === "dashboard"
+              currentPath === "/dashboard"
                 ? "bg-blue-100 text-blue-800"
                 : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
             }`}
@@ -29,17 +33,18 @@ const Sidebar = ({ activeTab, setActiveTab, userRole }) => {
             <FontAwesomeIcon
               icon={faTachometerAlt}
               className={`mr-3 text-lg ${
-                activeTab === "dashboard"
+                currentPath === "/dashboard"
                   ? "text-blue-600"
                   : "text-gray-400 group-hover:text-gray-500"
               }`}
             />
             Dashboard
           </button>
+
           <button
-            onClick={() => setActiveTab("complaints")}
+            onClick={() => navigate("/complaints")}
             className={`sidebar-btn ${
-              activeTab === "complaints"
+              currentPath === "/complaints"
                 ? "bg-blue-100 text-blue-800"
                 : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
             }`}
@@ -47,17 +52,18 @@ const Sidebar = ({ activeTab, setActiveTab, userRole }) => {
             <FontAwesomeIcon
               icon={faClipboardList}
               className={`mr-3 text-lg ${
-                activeTab === "complaints"
+                currentPath === "/complaints"
                   ? "text-blue-600"
                   : "text-gray-400 group-hover:text-gray-500"
               }`}
             />
             Complaints
           </button>
+
           <button
-            onClick={() => setActiveTab("analytics")}
-            className={`!rounded-button whitespace-nowrap group w-full flex items-center px-2 py-2 text-sm font-medium rounded-md cursor-pointer ${
-              activeTab === "analytics"
+            onClick={() => navigate("/analytics")}
+            className={`sidebar-btn ${
+              currentPath === "/analytics"
                 ? "bg-blue-100 text-blue-800"
                 : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
             }`}
@@ -65,21 +71,18 @@ const Sidebar = ({ activeTab, setActiveTab, userRole }) => {
             <FontAwesomeIcon
               icon={faChartBar}
               className={`mr-3 text-lg ${
-                activeTab === "analytics"
+                currentPath === "/analytics"
                   ? "text-blue-600"
                   : "text-gray-400 group-hover:text-gray-500"
               }`}
             />
             Analytics
           </button>
-          
+
           <button
-            onClick={() => {
-              setActiveTab("categories");
-              navigate("/categories");
-            }}
+            onClick={() => navigate("/categories")}
             className={`sidebar-btn ${
-              activeTab === "categories"
+              currentPath === "/categories"
                 ? "bg-blue-100 text-blue-800"
                 : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
             }`}
@@ -87,7 +90,7 @@ const Sidebar = ({ activeTab, setActiveTab, userRole }) => {
             <FontAwesomeIcon
               icon={faThLarge}
               className={`mr-3 text-lg ${
-                activeTab === "categories"
+                currentPath === "/categories"
                   ? "text-blue-600"
                   : "text-gray-400 group-hover:text-gray-500"
               }`}
@@ -97,9 +100,9 @@ const Sidebar = ({ activeTab, setActiveTab, userRole }) => {
 
           {userRole === "admin" && (
             <button
-              onClick={() => setActiveTab("users") || navigate("/users")}
+              onClick={() => navigate("/users")}
               className={`sidebar-btn ${
-                activeTab === "users"
+                currentPath === "/users"
                   ? "bg-blue-100 text-blue-800"
                   : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
               }`}
@@ -107,21 +110,19 @@ const Sidebar = ({ activeTab, setActiveTab, userRole }) => {
               <FontAwesomeIcon
                 icon={faUsers}
                 className={`mr-3 text-lg ${
-                  activeTab === "users"
+                  currentPath === "/users"
                     ? "text-blue-600"
                     : "text-gray-400 group-hover:text-gray-500"
-                }`}
-              />
-              User Management
-            </button>
+              }`}
+            />
+            User Management
+          </button>
           )}
+
           <button
-            onClick={() => {
-              setActiveTab("rooms");
-              navigate("/rooms");
-            }}
+            onClick={() => navigate("/rooms")}
             className={`sidebar-btn ${
-              activeTab === "rooms"
+              currentPath === "/rooms"
                 ? "bg-blue-100 text-blue-800"
                 : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
             }`}
@@ -129,31 +130,14 @@ const Sidebar = ({ activeTab, setActiveTab, userRole }) => {
             <FontAwesomeIcon
               icon={faDoorOpen}
               className={`mr-3 text-lg ${
-                activeTab === "rooms"
+                currentPath === "/rooms"
                   ? "text-blue-600"
                   : "text-gray-400 group-hover:text-gray-500"
               }`}
             />
             Room Management
           </button>
-          <button
-            onClick={() => setActiveTab("settings")}
-            className={`sidebar-btn ${
-              activeTab === "settings"
-                ? "bg-blue-100 text-blue-800"
-                : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
-            }`}
-          >
-            <FontAwesomeIcon
-              icon={faCog}
-              className={`mr-3 text-lg ${
-                activeTab === "settings"
-                  ? "text-blue-600"
-                  : "text-gray-400 group-hover:text-gray-500"
-              }`}
-            />
-            Settings
-          </button>
+
         </div>
       </nav>
     </aside>

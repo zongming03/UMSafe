@@ -1,5 +1,7 @@
 // controllers/complaintController.js
-const Report = require('../models/Complaint');
+import Report from '../models/Complaint.js';
+import User from '../models/User.js';
+import sendEmail from '../utils/sendEmail.js';
 
 const getAllComplaints = async (req, res) => {
   try {
@@ -30,6 +32,17 @@ const updateComplaintStatus = async (req, res) => {
       { status: req.body.status, updated_at: Date.now() },
       { new: true }
     );
+    // Send email notification to assigned user if enabled
+    if (complaint && complaint.admin_id) {
+      const user = await User.findById(complaint.admin_id);
+      if (user && user.notifications && user.notifications.emailNotifications) {
+        await sendEmail({
+          to: user.email,
+          subject: 'Complaint Status Updated',
+          text: `The status of complaint #${complaint._id} has been updated to ${complaint.status}.`,
+        });
+      }
+    }
     res.json(complaint);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -43,13 +56,24 @@ const assignComplaint = async (req, res) => {
       { admin_id: req.body.admin_id },
       { new: true }
     );
+    // Send email notification to assigned user if enabled
+    if (complaint && complaint.admin_id) {
+      const user = await User.findById(complaint.admin_id);
+      if (user && user.notifications && user.notifications.emailNotifications) {
+        await sendEmail({
+          to: user.email,
+          subject: 'New Complaint Assigned',
+          text: `You have been assigned a new complaint (ID: ${complaint._id}).`,
+        });
+      }
+    }
     res.json(complaint);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 };
 
-module.exports = {
+export default {
   getAllComplaints,
   getComplaintById,
   updateComplaintStatus,

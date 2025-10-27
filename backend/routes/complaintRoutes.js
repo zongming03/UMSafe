@@ -1,11 +1,11 @@
-const express = require('express');
-const router = express.Router();
-const complaintController = require('../controllers/complaintController');
+import express from "express";
 
-router.get('/', complaintController.getAllComplaints); // Admin/Officer view all
+import complaintController from '../controllers/complaintController.js';
+const router = express.Router();
+
+router.get('/', complaintController.getAllComplaints);
 router.get('/:id', complaintController.getComplaintById);
 router.patch('/:id/status', complaintController.updateComplaintStatus);
 router.patch('/:id/assign', complaintController.assignComplaint);
-// router.get('/filter', complaintController.filterComplaints); // query params: status, urgency, etc.
 
-module.exports = router;
+export default router;

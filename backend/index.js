@@ -2,11 +2,15 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import connectDBAndStartServer from './config/db.js';
-// import complaintRoutes from './routes/complaintRoutes.js';
+import complaintRoutes from './routes/complaintRoutes.js';
 // import analyticsRoutes from './routes/analyticsRoutes.js';  
+import authRoutes from './routes/authRoutes.js';
 import roomRoutes from './routes/roomRoutes.js';
 import userRoutes from './routes/userRoutes.js';
+import profileRoutes from './routes/profileRoutes.js';
 import categoryRoutes from './routes/categoryRoutes.js';
+import mobileRoutes from './routes/mobileRoutes.js';
+
 
 
 dotenv.config();
@@ -38,8 +42,14 @@ app.listen(PORT, () => {
   console.log(`🚀 Server is running on port ${PORT}`);
 });
 
-// app.use('/api/complaints', complaintRoutes);
+app.use("/uploads", express.static("uploads"));
+
+
+app.use('/admin/auth', authRoutes);
+app.use('/admin/complaints', complaintRoutes);
 // app.use('/api/analytics', analyticsRoutes);
-app.use('/api/rooms', roomRoutes);
-app.use('/api/users', userRoutes);
-app.use('/api/categories', categoryRoutes);
+app.use('/admin/rooms', roomRoutes);
+app.use('/admin/users', userRoutes);
+app.use('/admin/profile', profileRoutes);
+app.use('/admin/categories', categoryRoutes);
+app.use('/admin/usersMobile', mobileRoutes);

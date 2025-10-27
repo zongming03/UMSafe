@@ -1,7 +1,7 @@
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faExclamationCircle } from "@fortawesome/free-solid-svg-icons";
 
-const StatusBanner = ({ currentStatus, statusColors, priorityColor }) => (
+const StatusBanner = ({ currentStatus, statusColors, priorityColor, priority }) => (
   <div className={`mb-6 p-4 rounded-lg border ${statusColors[currentStatus]}`}>
     <div className="flex justify-between items-center">
       <div className="flex items-center">
@@ -21,9 +21,11 @@ const StatusBanner = ({ currentStatus, statusColors, priorityColor }) => (
       </div>
       <div className="flex items-center">
         <span
-          className={`px-3 py-1 rounded-full text-sm font-medium ${priorityColor["High"]}`}
+          className={`px-3 py-1 rounded-full text-sm font-medium ${
+            priorityColor[priority] || ""
+          }`}
         >
-          High Priority
+          {priority} Priority
         </span>
       </div>
     </div>

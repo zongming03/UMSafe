@@ -17,7 +17,6 @@ const AssignedStaffCard = ({ name, role, email }) => (
         </div>
         <div>
           <p className="font-medium text-gray-900">{name}</p>
-          <p className="text-sm text-gray-500">{role}</p>
           <div className="flex items-center mt-1">
             <FontAwesomeIcon icon={faEnvelope} className="text-gray-400 mr-1 text-sm" />
             <span className="text-xs text-gray-500">{email}</span>

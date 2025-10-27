@@ -7,7 +7,7 @@ const NotFoundPages = () => {
     const navigate = useNavigate();
 
     const handleOnRedirectButtonClick = ()=>{
-        navigate("/authentication/login",{replace:true})
+        navigate("/login",{replace:true})
     }
 
   return (

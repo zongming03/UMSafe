@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import { useContext, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
   faEye,
@@ -13,10 +13,11 @@ import UMSafeLogo from "../assets/UMSafeLogo.png";
 import umcampus from "../assets/um-campus5.jpg";
 import "../styles/Login.css";
 import Footer from "../components/footer";
+import { Link,useNavigate } from "react-router-dom";
+import { login as apiLogin } from "../services/api";
+import { AuthContext } from "../context/AuthContext";
 
-import { useNavigate } from "react-router-dom";
-
-const LoginPage = ({ setIsLoggedIn }) => {
+const LoginPage = () => {
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -25,8 +26,11 @@ const LoginPage = ({ setIsLoggedIn }) => {
   const [loginError, setLoginError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
-  const handleLogin = async (e) => {
+  const { login } = useContext(AuthContext);
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
+
     if (!email || !password) {
       setLoginError("Please enter both email and password.");
       return;
@@ -35,16 +39,25 @@ const LoginPage = ({ setIsLoggedIn }) => {
     setIsLoading(true);
     setLoginError("");
 
-    // Simulate API login
-    setTimeout(() => {
-      setIsLoading(false);
-      if (email === "admin@example.com" && password === "password123") {
-        setIsLoggedIn(true);
-        navigate("/room");
-      } else {
-        setLoginError("Invalid email or password.");
+    try {
+      const res = await apiLogin({ email, password });
+      if (!res || !res.data || !res.data.token || !res.data.user) {
+        throw new Error("Invalid response from server");
       }
-    }, 1000);
+
+      const { token, user } = res.data;
+
+      await login(user, token, rememberMe);
+
+      console.log("✅ Login finished, navigating now");
+      navigate("/users");
+    } catch (err) {
+      setLoginError(
+        err.response?.data?.msg || "Login failed. Please try again."
+      );
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -74,7 +87,7 @@ const LoginPage = ({ setIsLoggedIn }) => {
                 {loginError}
               </div>
             )}
-            <form onSubmit={handleLogin} className="space-y-4">
+            <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label
                   htmlFor="email"
@@ -143,36 +156,28 @@ const LoginPage = ({ setIsLoggedIn }) => {
                       onChange={() => setRememberMe(!rememberMe)}
                       className="remember-me-box"
                     />
-                    <label
-                      htmlFor="remember-me"
-                      className="remember-label"
-                      onClick={() => setRememberMe(!rememberMe)}
-                    >
+                    <label htmlFor="remember-me" className="remember-label">
                       Remember me
                     </label>
                   </div>
                 </div>
                 <div className="text-sm">
-                  <button
-                    onClick={() => {
-                      setLoginError(
-                        "Password reset link has been sent to your email"
-                      );
-                      setTimeout(() => setLoginError(""), 3000);
-                    }}
+                  <Link
+                    to="/forgot-password"
                     className="flex items-center gap-2 font-medium text-blue-600 hover:text-blue-500 focus:outline-none"
                   >
                     Forgot your password?
-                  </button>
+                  </Link>
                 </div>
               </div>
               <div>
                 <button
                   type="submit"
+                  disable={isLoading}
                   className="signin-button"
                 >
                   <span className="signin-button-span"></span>
-                  Sign in
+                  {isLoading ? "Signing in..." : "Sign In"}
                 </button>
               </div>
             </form>

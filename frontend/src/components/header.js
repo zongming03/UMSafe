@@ -1,4 +1,5 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useContext } from "react";
+import { useNavigate } from "react-router-dom";
 import UMSafeLogo from "../assets/UMSafeLogo.png";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
@@ -7,16 +8,18 @@ import {
   faCog,
   faSignOutAlt,
 } from "@fortawesome/free-solid-svg-icons";
+import { AuthContext } from "../context/AuthContext";
 
 const Header = () => {
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const profileRef = useRef(null);
+  const navigate = useNavigate();
+  const { user, logout } = useContext(AuthContext);
 
   return (
     <header className="bg-white shadow-sm z-10">
       <div className="max-w-7xl mx-auto px-2 sm:px-3 lg:px-4">
         <div className="flex justify-between h-16">
-          
           <div className="flex items-center">
             <img src={UMSafeLogo} alt="UMSafe Logo" className="h-14 w-auto" />
             <h1 className="ml-3 text-M font-semibold text-gray-800">UMSafe</h1>
@@ -33,7 +36,7 @@ const Header = () => {
                   <FontAwesomeIcon icon={faUserCircle} />
                 </div>
                 <span className="text-sm font-medium text-gray-700">
-                  Admin User
+                  {user ? user.name : "Guest"}
                 </span>
                 <FontAwesomeIcon
                   icon={faChevronDown}
@@ -46,29 +49,27 @@ const Header = () => {
               {isProfileOpen && (
                 <div className="origin-top-right absolute right-0 mt-2 w-48 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 focus:outline-none">
                   <div className="py-1">
-                    <a
-                      href="#"
-                      className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                    >
-                      <FontAwesomeIcon icon={faUserCircle} className="mr-2" />
-                      Your Profile
-                    </a>
-
-                    <a
-                      href="#"
-                      className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                    <button
+                      onClick={() => {
+                        navigate("/settings");
+                        setIsProfileOpen(false);
+                      }}
+                      className="w-full text-left block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
                     >
                       <FontAwesomeIcon icon={faCog} className="mr-2" />
                       Settings
-                    </a>
+                    </button>
 
-                    <a
-                      href="#"
-                      className="block px-4 py-2 text-sm text-red-600 hover:bg-gray-100"
+                    <button
+                      onClick={() => {
+                        logout();
+                        navigate("/login");
+                      }}
+                      className="w-full text-left block px-4 py-2 text-sm text-red-600 hover:bg-gray-100"
                     >
                       <FontAwesomeIcon icon={faSignOutAlt} className="mr-2" />
                       Sign out
-                    </a>
+                    </button>
                   </div>
                 </div>
               )}

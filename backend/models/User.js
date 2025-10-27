@@ -31,6 +31,19 @@ const userSchema = new mongoose.Schema({
     type: String,
     required: true,
   },
+
+  profileImage: {
+    type: String,
+    default: "/images/UMlogo.png",
+  },
+
+  notifications: {
+    emailNotifications: { type: Boolean, default: true },
+  },
+
+  resetPasswordToken: { type: String, default: null },
+  resetPasswordExpiry: { type: Date, default: null },
+
   createdAt: {
     type: Date,
     default: Date.now,
