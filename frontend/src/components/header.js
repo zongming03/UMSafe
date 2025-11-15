@@ -63,7 +63,7 @@ const Header = () => {
                     <button
                       onClick={() => {
                         logout();
-                        navigate("/login");
+                        window.location.href = "/login";
                       }}
                       className="w-full text-left block px-4 py-2 text-sm text-red-600 hover:bg-gray-100"
                     >

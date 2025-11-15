@@ -13,12 +13,11 @@ import UMSafeLogo from "../assets/UMSafeLogo.png";
 import umcampus from "../assets/um-campus5.jpg";
 import "../styles/Login.css";
 import Footer from "../components/footer";
-import { Link,useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { login as apiLogin } from "../services/api";
 import { AuthContext } from "../context/AuthContext";
 
 const LoginPage = () => {
-  const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [rememberMe, setRememberMe] = useState(false);
@@ -47,10 +46,12 @@ const LoginPage = () => {
 
       const { token, user } = res.data;
 
+      console.log("🔄 Starting login process...");
       await login(user, token, rememberMe);
-
-      console.log("✅ Login finished, navigating now");
-      navigate("/users");
+      console.log("✅ Login complete, user state updated");
+      
+      // Force a full page reload to ensure router sees the updated user state
+      window.location.href = "/dashboard";
     } catch (err) {
       setLoginError(
         err.response?.data?.msg || "Login failed. Please try again."

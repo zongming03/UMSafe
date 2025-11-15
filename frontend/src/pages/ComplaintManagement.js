@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import "../styles/ComplaintManagement.css";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import { fetchReports } from "../services/api";
 import {
   faFileExport,
   faFileCsv,
@@ -41,9 +42,86 @@ const ComplaintManagement = () => {
   const [sortConfig, setSortConfig] = useState(null);
   const profileRef = useRef(null);
   const [admins, setAdmins] = useState([]);
+  const [complaints, setComplaints] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [usingMock, setUsingMock] = useState(false);
   const navigate = useNavigate();
 
-  const complaints = [
+  // Fetch complaints from ngrok API
+  useEffect(() => {
+    const loadComplaints = async () => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const response = await fetchReports();
+        console.log("📋 Reports API Response:", response.data);
+        
+        // Extract reports array from response
+        const reportsData = response.data?.reports || response.data?.data || response.data || [];
+        
+        // Map API response to match component's expected format
+        const mappedComplaints = reportsData.map(report => ({
+          id: report.displayId || report.id, 
+          userId: report.userId,
+          username: report.username,
+          adminId: report.adminId || "Unassigned",
+          adminName: report.adminName || "Unassigned",
+          status: capitalizeStatus(report.status), 
+          title: report.title,
+          description: report.description,
+          category: {
+            name: report.category?.name || "Unknown",
+            priority: report.category?.priority || "Low"
+          },
+          media: report.media || [],
+          latitude: report.latitude,
+          longitude: report.longitude,
+          facultyLocation: report.facultyLocation || {},
+          isAnonymous: report.isAnonymous,
+          isFeedbackProvided: report.isFeedbackProvided,
+          chatroomId: report.chatroomId || "",
+          createdAt: report.createdAt,
+          updatedAt: report.updatedAt,
+          version: report.version,
+          comments: report.comments || []
+        }));
+        
+        console.log("✅ Mapped complaints:", mappedComplaints);
+        setComplaints(mappedComplaints);
+        setUsingMock(false);
+      } catch (err) {
+        console.error("❌ Error fetching complaints:", err);
+        // Fallback to mock data when API is unreachable
+        setUsingMock(true);
+        setError(null);
+        setComplaints(MOCK_COMPLAINTS);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadComplaints();
+  }, []);
+  
+  // Helper function to capitalize status
+  const capitalizeStatus = (status) => {
+    if (!status) return "Opened";
+    
+    // Map backend status to frontend status
+    const statusMap = {
+      'opened': 'Opened',
+      'inprogress': 'InProgress',
+      'in progress': 'InProgress',
+      'resolved': 'Resolved',
+      'closed': 'Closed'
+    };
+    
+    return statusMap[status.toLowerCase()] || status.charAt(0).toUpperCase() + status.slice(1);
+  };
+
+  // MOCK DATA (kept as fallback for reference - will be removed after testing)
+  const MOCK_COMPLAINTS = [
     {
       id: "CMP-1093",
       userId: "0199d751-fbb6-742e-b052-e4a05b2d57bc",
@@ -227,7 +305,7 @@ const ComplaintManagement = () => {
     },
   ];
 
-  const [filteredComplaints, setFilteredComplaints] = useState(complaints);
+  const [filteredComplaints, setFilteredComplaints] = useState([]);
 
   const getStatusColor = (status) => {
     switch (status) {
@@ -445,6 +523,7 @@ const ComplaintManagement = () => {
   useEffect(() => {
     applyFilters();
   }, [
+    complaints, 
     searchTerm,
     activeFilter,
     selectedCategory,
@@ -453,18 +532,18 @@ const ComplaintManagement = () => {
     customStartDate,
     customEndDate,
   ]);
-  {
-    // Pagination logic */}
-    const itemsPerPage = 10;
-    const totalPages = Math.max(
-      1,
-      Math.ceil(filteredComplaints.length / itemsPerPage)
-    );
-    const paginatedComplaints = filteredComplaints.slice(
-      (currentPage - 1) * itemsPerPage,
-      currentPage * itemsPerPage
-    );
-    const getSortIcon = (key) => {
+
+  // Pagination logic
+  const itemsPerPage = 10;
+  const totalPages = Math.max(
+    1,
+    Math.ceil(filteredComplaints.length / itemsPerPage)
+  );
+  const paginatedComplaints = filteredComplaints.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
+  const getSortIcon = (key) => {
       if (!sortConfig || sortConfig.key !== key) {
         return <FontAwesomeIcon icon={faSort} className="text-gray-300 ml-1" />;
       }
@@ -475,11 +554,11 @@ const ComplaintManagement = () => {
       );
     };
 
-    const handleComplaintClick = (complaint) => {
-      navigate(`/complaints/${complaint.id}`, { state: complaint });
-    };
+  const handleComplaintClick = (complaint) => {
+    navigate(`/complaints/${complaint.id}`, { state: complaint });
+  };
 
-    return (
+  return (
       <div className="min-h-screen bg-gray-50 flex flex-col">
         <div className="flex flex-1">
           {/* Main Content */}
@@ -502,7 +581,17 @@ const ComplaintManagement = () => {
                   </p>
                 </div>
 
-                <div className="mt-4 md:mt-0 relative">
+                <div className="mt-4 md:mt-0 relative flex items-center gap-3">
+                  <button
+                    onClick={() => {
+                      // Navigate to Analytics and pass current filtered complaints as state
+                      navigate("/analytics", { state: { complaints: filteredComplaints } });
+                    }}
+                    className="complaint-export-button"
+                    title="Open Analytics Dashboard"
+                  >
+                    Go to Analytics
+                  </button>
                   <button
                     id="exportButton"
                     onClick={() => {
@@ -629,6 +718,17 @@ const ComplaintManagement = () => {
               </div>
 
               {/* Search and Filter Section */}
+              {usingMock && (
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
+                  <div className="flex items-center">
+                    <FontAwesomeIcon icon={faExclamationTriangle} className="text-yellow-600 mr-3" />
+                    <span className="text-yellow-800">
+                      Using mock complaints due to API unavailability. Data is not live.
+                    </span>
+                  </div>
+                </div>
+              )}
+
               <div className="search-filter-section">
                 <div className="search-filter-button-container">
                   <div className="search-filter-bar">
@@ -834,7 +934,25 @@ const ComplaintManagement = () => {
                 </div>
               </div>
 
+              {/* Loading and Error States */}
+              {isLoading && (
+                <div className="flex justify-center items-center py-12">
+                  <FontAwesomeIcon icon={faSpinner} spin className="text-blue-600 text-3xl mr-3" />
+                  <span className="text-gray-600">Loading complaints from database...</span>
+                </div>
+              )}
+
+              {error && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
+                  <div className="flex items-center">
+                    <FontAwesomeIcon icon={faExclamationTriangle} className="text-red-600 mr-3" />
+                    <span className="text-red-800">{error}</span>
+                  </div>
+                </div>
+              )}
+
               {/* Complaints Table */}
+              {!isLoading && !error && (
               <div className="complaint-table-container">
                 <div className="overflow-x-auto">
                   <table className="complaint-table-header">
@@ -1173,11 +1291,11 @@ const ComplaintManagement = () => {
                   />
                 )}
               </div>
+              )}
             </div>
           </main>
         </div>
       </div>
     );
-  }
 };
 export default ComplaintManagement;

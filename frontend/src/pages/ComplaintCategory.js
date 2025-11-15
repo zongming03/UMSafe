@@ -23,6 +23,7 @@ import {
   updateCategory,
   deleteCategory,
   bulkDeleteCategories,
+  fetchReports,
 } from "../services/api";
 import LoadingOverlay from "../components/LoadingOverlay";
 
@@ -119,10 +120,38 @@ const ComplaintCategory = () => {
   const fetchAndSetCategories = async () => {
     setIsLoading(true);
     try {
-      const res = await fetchCategories();
-      const categories = res.data;
-      setCategories(categories);
-    } catch {
+      // Fetch categories and reports in parallel
+      const [categoriesRes, reportsRes] = await Promise.all([
+        fetchCategories(),
+        fetchReports()
+      ]);
+      
+      const categoriesData = categoriesRes.data;
+      const reportsData = reportsRes.data?.reports || reportsRes.data?.data || reportsRes.data || [];
+      
+      console.log("📂 Categories fetched:", categoriesData);
+      console.log("📋 Reports fetched:", reportsData);
+      
+      // Count complaints for each category
+      const categoryComplaintsCount = {};
+      reportsData.forEach(report => {
+        const categoryName = report.category?.name;
+        if (categoryName) {
+          categoryComplaintsCount[categoryName] = (categoryComplaintsCount[categoryName] || 0) + 1;
+        }
+      });
+      
+      console.log("📊 Complaint counts by category:", categoryComplaintsCount);
+      
+      // Add complaintsCount to each category
+      const categoriesWithCount = categoriesData.map(category => ({
+        ...category,
+        complaintsCount: categoryComplaintsCount[category.name] || 0
+      }));
+      
+      setCategories(categoriesWithCount);
+    } catch (error) {
+      console.error("❌ Error fetching categories:", error);
       setError("Failed to fetch categories. Please try again.");
     } finally {
       setIsLoading(false);

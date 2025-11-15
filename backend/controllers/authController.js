@@ -18,7 +18,7 @@ export const handlelogin = async (req, res) => {
     console.log("User found:", user);
 
     const isMatch = await bcrypt.compare(password, user.hashedpassword);
-    if (!isMatch) return res.status(401).json({ msg: "Invalid credentials" });
+    if (!isMatch) return res.status(401).json({ msg: "WRONG USER NAME OR PASSWORD" });
 
     const token = jwt.sign(
       { id: user._id, email: user.email, role: user.role },

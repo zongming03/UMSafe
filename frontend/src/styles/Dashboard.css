@@ -10,7 +10,6 @@
     background-color: #f9fafb;
     display: flex;
     flex-direction: column;
-    height: 100vh;
 }
 
 .time-range-button{
@@ -45,7 +44,8 @@
     background-color: #fff;
     box-shadow: 0 4px 6px rgba(0,0,0,0.1);
     border-radius: 0.5rem;
-    overflow: hidden;
+    /* Allow dropdowns inside header to overflow outside the container */
+    overflow: visible;
 }
 
 .search-complaint-input{
@@ -250,4 +250,14 @@
     display: inline-flex;
     border-radius: 0.375rem;
     box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+}
+
+/* small animated transition for switching between Table and Kanban views */
+.view-panel{
+    animation: viewFadeIn 220ms ease both;
+}
+
+@keyframes viewFadeIn{
+    from{ opacity: 0; transform: translateY(6px); }
+    to{ opacity: 1; transform: translateY(0); }
 }

@@ -1,8 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useContext } from "react";
 import LoadingOverlay from "../components/LoadingOverlay";
 import Pagination from "../components/Pagination";
 import "../styles/RoomManagement.css";
 import ErrorModal from "../components/ErrorModal";
+import { AuthContext } from "../context/AuthContext";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
   faPlus,
@@ -26,6 +27,7 @@ import EditRoomModal from "../components/EditRoomModal";
 import DeleteRoomModal from "../components/DeleteRoomModal";
 import showNotification from "../utils/showNotification";
 const RoomManagement = () => {
+  const { user } = useContext(AuthContext);
   const [isLoading, setIsLoading] = useState(false);
   const [selectedRooms, setSelectedRooms] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
@@ -42,8 +44,8 @@ const RoomManagement = () => {
     building: "",
     roomName: "",
   });
-  const userFacultyName =
-    "Faculty of Computer Science and Information Technology"; // Replace with real user faculty
+  const [userFacultyName, setUserFacultyName] = useState("");
+  const [userFacultyId, setUserFacultyId] = useState("");
 
   const sortedRooms = [...rooms].sort((a, b) => {
     if (!sortConfig) return 0;
@@ -174,37 +176,73 @@ const RoomManagement = () => {
     try {
       const res = await fetchRooms(); // This fetches ALL faculty data
       const faculties = res.data;
-      const userFaculty = faculties.find((fac) => fac.name === userFacultyName);
+      
+      console.log("📚 All faculties:", faculties);
+      console.log("🔍 Looking for faculty with ID:", userFacultyId);
+      
+      // Find user faculty by facultyid from authenticated user
+      // Handle both string and ObjectId comparisons
+      const userFaculty = faculties.find((fac) => {
+        const facultyId = fac._id?.toString() || fac._id;
+        const userId = userFacultyId?.toString() || userFacultyId;
+        return facultyId === userId;
+      });
 
       if (!userFaculty) {
+        console.warn("⚠️ User faculty not found with ID:", userFacultyId);
+        console.warn("Available faculty IDs:", faculties.map(f => f._id));
         setRooms([]);
         setIsLoading(false);
         return;
       }
+      
+      console.log("✅ Found user faculty:", userFaculty.name);
+      
+      // Store the faculty name for display purposes
+      setUserFacultyName(userFaculty.name);
 
       const allRooms = [];
       const facultyAbbreviation = getFacultyAbbreviation(userFaculty.name);
 
       let displayCounter = 1;
-      userFaculty.faculty_blocks.forEach((block) => {
-        (block.faculty_block_rooms || []).forEach((room) => {
+      
+      // Check if faculty_blocks exists
+      if (!userFaculty.faculty_blocks || userFaculty.faculty_blocks.length === 0) {
+        console.warn("⚠️ No blocks found for this faculty");
+        setRooms([]);
+        setIsLoading(false);
+        return;
+      }
+
+      userFaculty.faculty_blocks.forEach((block, blockIndex) => {
+        const blockIdentifier = block._id || block.name;
+        console.log("📦 Processing block:", block.name, "Block ID:", blockIdentifier);
+        
+        const rooms = block.faculty_block_rooms || [];
+        console.log(`  📍 Found ${rooms.length} rooms in ${block.name}`);
+        
+        rooms.forEach((room) => {
           allRooms.push({
             roomId: room._id,
-            blockId: block._id,
+            blockId: blockIdentifier, // Will use _id if exists, otherwise block.name
             building: block.name,
             roomName: room.name,
             id: `${facultyAbbreviation}-${String(displayCounter).padStart(
               3,
               "0"
             )}`,
+            latitude: room.latitude,
+            longitude: room.longitude,
           });
           displayCounter++;
         });
       });
+      
+      console.log(`✅ Total rooms loaded: ${allRooms.length}`);
       setRooms(allRooms);
     } catch (err) {
       setError("Failed to fetch rooms. Please try again.");
-      console.error("Fetch Rooms Error:", err);
+      console.error("❌ Fetch Rooms Error:", err);
     } finally {
       setIsLoading(false);
     }
@@ -215,7 +253,7 @@ const RoomManagement = () => {
     setIsLoading(true);
 
     try {
-      const facultyId = "684eec5249bf1d5f27619af8"; // Replace with actual dynamic ID if needed
+      const facultyId = userFacultyId; 
       const blockName = newRoom.building;
       const roomName = newRoom.roomName;
 
@@ -260,7 +298,7 @@ const RoomManagement = () => {
       return;
     }
 
-    const facultyId = "684eec5249bf1d5f27619af8"; // Replace with dynamic ID if needed
+    const facultyId = userFacultyId; // Use dynamic faculty ID from authenticated user
     const blockId = currentRoom.blockId;
     const roomId = currentRoom.roomId;
 
@@ -298,7 +336,7 @@ const RoomManagement = () => {
     if (!roomToDelete) return;
     setIsLoading(true);
     try {
-      const facultyId = "684eec5249bf1d5f27619af8"; // 之后Replace with actual faculty ID
+      const facultyId = userFacultyId; // Use dynamic faculty ID from authenticated user
 
       if (Array.isArray(roomToDelete)) {
         await bulkDeleteRooms(
@@ -329,9 +367,22 @@ const RoomManagement = () => {
     setIsDeleteModalOpen(true);
   };
 
+  // Extract facultyId from authenticated user
   useEffect(() => {
-    fetchAndSetRooms();
-  }, []);
+    if (user && user.facultyid) {
+      console.log("🏫 User faculty ID:", user.facultyid);
+      setUserFacultyId(user.facultyid);
+    } else {
+      console.warn("⚠️ User or facultyid not found in user object:", user);
+    }
+  }, [user]);
+
+  // Fetch rooms when userFacultyId is set
+  useEffect(() => {
+    if (userFacultyId) {
+      fetchAndSetRooms();
+    }
+  }, [userFacultyId]);
 
   useEffect(() => {
     setCurrentPage(1);

@@ -87,9 +87,14 @@ export const AuthProvider = ({ children }) => {
       throw err;
     }
 
+    // Wait for React state update to complete before resolving
     return new Promise((resolve) => {
       setUser(userData);
-      resolve(true);
+      // Use setTimeout to ensure state update has been batched and processed
+      setTimeout(() => {
+        console.log("✅ User state updated, ready to navigate");
+        resolve(true);
+      }, 0);
     });
   };
 

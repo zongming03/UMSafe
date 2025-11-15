@@ -1,6 +1,6 @@
 import "./App.css";
-import { useState, useContext } from "react";
-import { createBrowserRouter, RouterProvider } from "react-router-dom";
+import { useContext } from "react";
+import { createBrowserRouter, RouterProvider, Navigate } from "react-router-dom";
 import Layout from "./Layout/Layout";
 import LoginPage from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
@@ -10,6 +10,7 @@ import ComplaintChat from "./pages/ComplaintChat";
 import UserManagement from "./pages/UserManagement";
 import ComplaintCategory from "./pages/ComplaintCategory";
 import RoomManagement from "./pages/RoomManagement";
+import AnalyticDashboard from "./pages/AnalyticDashboard";
 import LoadingOverlay from "./components/LoadingOverlay";
 import NotFoundPages from "./components/NotFoundPages";
 import ForgotPasswordPage from "./components/ForgotPasswordPage";
@@ -18,10 +19,10 @@ import SettingsPage from "./pages/SettingsPage";
 import { AuthContext } from "./context/AuthContext";
 
 function App() {
-  const { user, loading } = useContext(AuthContext);
+const { user, loading } = useContext(AuthContext);
 
   if (loading) {
-    return <LoadingOverlay />;
+  return <LoadingOverlay />; 
   }
 
   const router = createBrowserRouter([
@@ -31,8 +32,10 @@ function App() {
       errorElement: <NotFoundPages />,
       children: user
         ? [
+            { index: true, element: <Dashboard /> },
             { path: "dashboard", element: <Dashboard /> },
             { path: "users", element: <UserManagement /> },
+            { path: "analytics", element: <AnalyticDashboard /> },
             { path: "categories", element: <ComplaintCategory /> },
             { path: "rooms", element: <RoomManagement /> },
             { path: "forgot-password", element: <ForgotPasswordPage /> },
@@ -46,14 +49,16 @@ function App() {
     },
     {
       path: "/login",
-      element: <LoginPage />,
-    },{
+      element: user ? <Navigate to="/dashboard" replace /> : <LoginPage />,
+    },
+    {
       path: "/forgot-password",
       element: <ForgotPasswordPage />,
-    },{
+    },
+    {
       path: "/reset-password/:token",
       element: <ResetPasswordPage />,
-    }
+    },
   ]);
 
   return <RouterProvider router={router} />;

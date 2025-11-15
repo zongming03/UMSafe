@@ -7,8 +7,7 @@ import ComplaintDetailsCard from "../components/ComplaintDetailsCard";
 import ActivityHistory from "../components/ActivityHistory";
 import AssignedStaffCard from "../components/AssignedStaffCard";
 import QuickActionsCard from "../components/QuickActionCard";
-import { useLocation } from "react-router-dom";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useParams, useNavigate } from "react-router-dom";
 import jsPDF from "jspdf";
 import UMSafeLogo from "../assets/UMSafeLogo.png";
 import { initiateChatroom } from "../services/api";
@@ -26,9 +25,32 @@ const ComplaintDetails = () => {
   const [isAssignDropdownOpen, setIsAssignDropdownOpen] = useState(false);
 
   const location = useLocation();
-  const complaint = location.state;
+  const params = useParams();
   const navigate = useNavigate();
+
+  // complaint may be passed in via navigation state during client-only flows.
+  // If not provided (direct URL), fetch the complaint by :id from the server.
+  const [complaint, setComplaint] = useState(location.state || null);
   const isAnonymous = complaint?.isAnonymous || false;
+
+  useEffect(() => {
+    if (!location.state && params?.id) {
+      const load = async () => {
+        try {
+          const res = await fetch(`http://localhost:5000/admin/complaints/${params.id}`, { credentials: "include" });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const data = await res.json();
+          setComplaint(data);
+        } catch (err) {
+          console.error("Failed to fetch complaint:", err);
+          try { toast.error("Failed to load complaint."); } catch (e) {}
+          // navigate back to list if fetch fails
+          navigate("/complaints");
+        }
+      };
+      load();
+    }
+  }, [location.state, params?.id, navigate]);
 
   const statusOptions = ["Open", "In Progress", "Resolved", "Closed"];
 
@@ -197,7 +219,7 @@ const ComplaintDetails = () => {
       const res = await fetch(
         `http://localhost:5000/admin/complaints/${complaintId}/status`,
         {
-          method: "PUT",
+          method: "PATCH",
           headers: { "Content-Type": "application/json" },
           credentials: "include",
           body: JSON.stringify({ status: newStatus }),
@@ -206,8 +228,10 @@ const ComplaintDetails = () => {
       if (!res.ok) throw new Error(`HTTP Error: ${res.status}`);
       const data = await res.json();
       console.log("✅ Complaint status updated:", data);
+      try { toast.success("Complaint status updated"); } catch (e) {}
     } catch (err) {
       console.error("❌ Failed to update complaint status:", err);
+      try { toast.error("Failed to update complaint status"); } catch (e) {}
     }
   };
 
@@ -272,8 +296,8 @@ const ComplaintDetails = () => {
       };
 
       // ====== Header Background (Modern Gradient Effect) ======
-      const gradientStart = [0, 51, 102]; // dark UM blue
-      const gradientEnd = [0, 102, 204]; // lighter blue
+      const gradientStart = [0, 51, 102]; 
+      const gradientEnd = [0, 102, 204]; 
       for (let i = 0; i < 30; i++) {
         const r =
           gradientStart[0] + ((gradientEnd[0] - gradientStart[0]) * i) / 30;

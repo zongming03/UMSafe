@@ -9,6 +9,14 @@ const facultyBlockRoomSchema = new Schema(
       required: true,
       trim: true,
     },
+    latitude: {
+      type: Number,
+      required: true,
+    },
+    longitude: {
+      type: Number,
+      required: true,
+    },
   },
   {
     timestamps: true,
@@ -46,7 +54,8 @@ const facultySchema = new Schema(
     faculty_blocks: {
       type: [facultyBlockSchema],
       default: [],
-    },  },
+    },
+  },
   {
     timestamps: true,
     versionKey: "__v",

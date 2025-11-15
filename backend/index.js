@@ -10,6 +10,7 @@ import userRoutes from './routes/userRoutes.js';
 import profileRoutes from './routes/profileRoutes.js';
 import categoryRoutes from './routes/categoryRoutes.js';
 import mobileRoutes from './routes/mobileRoutes.js';
+import analyticsRoutes from './routes/analyticsRoutes.js';
 
 
 
@@ -47,7 +48,7 @@ app.use("/uploads", express.static("uploads"));
 
 app.use('/admin/auth', authRoutes);
 app.use('/admin/complaints', complaintRoutes);
-// app.use('/api/analytics', analyticsRoutes);
+app.use('/api/analytics', analyticsRoutes);
 app.use('/admin/rooms', roomRoutes);
 app.use('/admin/users', userRoutes);
 app.use('/admin/profile', profileRoutes);
