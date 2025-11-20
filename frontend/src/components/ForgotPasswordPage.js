@@ -25,7 +25,8 @@ export default function ForgotPasswordPage() {
         navigate("/login");
       }, 15000);
     } catch (err) {
-      setMessage("❌ Error sending reset link. Try again.");
+      const errorMsg = err.response?.data?.msg || "Error sending reset link. Try again.";
+      setMessage(`❌ ${errorMsg}`);
     } finally {
       setLoading(false);
     }
@@ -94,6 +95,14 @@ export default function ForgotPasswordPage() {
                 }`}
               >
                 {loading ? "Sending..." : "Send Reset Link"}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => navigate("/login")}
+                className="w-full py-2 rounded-lg font-medium transition bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-300"
+              >
+                Back to Login
               </button>
             </form>
           </div>

@@ -1,17 +1,12 @@
 import express from "express";
 import multer from "multer";
-import path from "path";
+import { storage } from "../config/cloudinary.js";
 import { getProfile, updateProfile, changePassword } from "../controllers/profileController.js";
 import { authMiddleware } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
 
-const storage = multer.diskStorage({
-  destination: "uploads/",
-  filename: (req, file, cb) => {
-    cb(null, Date.now() + path.extname(file.originalname));
-  },
-});
+// Use Cloudinary storage instead of local disk storage
 const upload = multer({ storage });
 
 router.get("/", authMiddleware, getProfile);

@@ -43,7 +43,7 @@ const { user, loading } = useContext(AuthContext);
             { path: "settings", element: <SettingsPage /> },
             { path: "complaints", element: <ComplaintManagement /> },
             { path: "complaints/:id", element: <ComplaintDetails /> },
-            { path: "complaints/:id/:chatId", element: <ComplaintChat /> },
+            { path: "complaints/:reportId/:chatroomId", element: <ComplaintChat /> },
           ]
         : [],
     },
@@ -57,6 +57,11 @@ const { user, loading } = useContext(AuthContext);
     },
     {
       path: "/reset-password/:token",
+      element: <ResetPasswordPage />,
+    },
+    {
+      // Fallback for older emails that used /admin/reset-password/:token
+      path: "/admin/reset-password/:token",
       element: <ResetPasswordPage />,
     },
   ]);

@@ -408,7 +408,7 @@ const UserManagement = () => {
                     <input
                       type="text"
                       className="border-gray-300 pl-10 pr-4 py-2 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500  w-full sm:text-sm"
-                      placeholder="Search users by name, email, or department..."
+                      placeholder="Search users by name or email"
                       value={searchTerm}
                       onChange={handleSearchChange}
                     />

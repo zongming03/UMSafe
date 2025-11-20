@@ -1,11 +1,11 @@
 import express from "express";
-
+import { authMiddleware } from '../middleware/authMiddleware.js';
 import complaintController from '../controllers/complaintController.js';
 const router = express.Router();
 
-router.get('/', complaintController.getAllComplaints);
-router.get('/:id', complaintController.getComplaintById);
-router.patch('/:id/status', complaintController.updateComplaintStatus);
-router.patch('/:id/assign', complaintController.assignComplaint);
+router.get('/', authMiddleware, complaintController.getAllComplaints);
+router.get('/:id', authMiddleware, complaintController.getComplaintById);
+router.patch('/:id/status', authMiddleware, complaintController.updateComplaintStatus);
+router.patch('/:id/assign', authMiddleware, complaintController.assignComplaint);
 
 export default router;

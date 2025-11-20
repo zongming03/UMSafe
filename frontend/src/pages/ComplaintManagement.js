@@ -127,14 +127,31 @@ const ComplaintManagement = () => {
       userId: "0199d751-fbb6-742e-b052-e4a05b2d57bc",
       username: "Testing1.",
       adminId: "68af04187c2e6f499854e2da",
-      adminName: "Unassigned",
+      adminName: "Teoh Zong Ming",
+      facultyid: "6915cd5e4297c05ff2598c55",
       status: "Opened",
-      title: "Testing username",
-      description: "New name",
+      title: "Dirty Classroom Floor",
+      description: "The classroom floor has not been cleaned for days. There are food wrappers and dust everywhere.",
       category: { name: "Cleanliness", priority: "Low" },
       media: [
-        "https://res.cloudinary.com/dcv38gpis/video/upload/v1761235173/reports/019a11cb-f3b4-73ea-a2d2-12fdd76f687f.mp4",
-        "https://res.cloudinary.com/dcv38gpis/video/upload/v1761235173/reports/019a11cb-f40c-71aa-bc70-6fd25718bfe0.mp4",
+        "https://images.unsplash.com/photo-1581578731548-c64695cc6952?w=800&q=80",
+        "https://images.unsplash.com/photo-1584622650111-993a426fbf0a?w=800&q=80",
+      ],
+      timelineHistory: [
+        {
+          id: "CMP-1093-evt-1",
+          actionTitle: "Report Submitted",
+          actionDetails: "Complaint submitted by user Testing1.",
+          initiator: "Testing1.",
+          createdAt: "2025-10-23T15:59:35.599Z",
+        },
+        {
+          id: "CMP-1093-evt-2",
+          actionTitle: "Status Updated",
+          actionDetails: "Status set to Opened.",
+          initiator: "System",
+          createdAt: "2025-10-23T15:59:36.000Z",
+        },
       ],
       latitude: 3.1271268,
       longitude: 101.6349605,
@@ -153,13 +170,38 @@ const ComplaintManagement = () => {
     {
       id: "CMP-1094",
       userId: "0199d751-fbb6-742e-b052-e4a05b2d57bc",
-      adminId: "oiiae",
+      adminId: "null",
+      adminName: "Unassigned",
+      facultyid: "6915cd5e4297c05ff2598c55",
       status: "InProgress",
-      title: "Kk",
-      description: "Ok",
+      title: "Student Harassment Incident",
+      description: "Witnessed bullying behavior in the cafeteria during lunch hour. Multiple students involved.",
       category: { name: "Bullying", priority: "High" },
       media: [
-        "https://res.cloudinary.com/dcv38gpis/video/upload/v1761149227/reports/019a0cac-840a-73e1-b12d-3ab2393a4abf.mp4",
+        "https://images.unsplash.com/photo-1523050854058-8df90110c9f1?w=800&q=80",
+      ],
+      timelineHistory: [
+        {
+          id: "CMP-1094-evt-1",
+          actionTitle: "Report Submitted",
+          actionDetails: "Complaint submitted regarding bullying in cafeteria.",
+          initiator: "User",
+          createdAt: "2025-10-22T16:07:10.441Z",
+        },
+        {
+          id: "CMP-1094-evt-2",
+          actionTitle: "Admin Assigned",
+          actionDetails: "Admin oiiae assigned to complaint.",
+          initiator: "System",
+          createdAt: "2025-10-22T17:00:10.441Z",
+        },
+        {
+          id: "CMP-1094-evt-3",
+          actionTitle: "Status Updated",
+          actionDetails: "Status changed to InProgress.",
+          initiator: "oiiae",
+          createdAt: "2025-10-23T14:57:36.534Z",
+        },
       ],
       latitude: 3.12719,
       longitude: 101.634895,
@@ -170,7 +212,7 @@ const ComplaintManagement = () => {
       },
       isAnonymous: false,
       isFeedbackProvided: false,
-      chatroomId: "",
+      chatroomId: "FAKE-ROOM-1094",
       createdAt: "2025-10-22T16:07:10.441Z",
       updatedAt: "2025-10-23T14:57:36.534Z",
       version: 2,
@@ -178,14 +220,32 @@ const ComplaintManagement = () => {
     {
       id: "CMP-1095",
       userId: "0199d751-fbb6-742e-b052-e4a05b2d57bc",
-      adminId: "Unassigned",
+      adminId: "null",
+      adminName: "Unassigned",
+      facultyid: "6915cd5e4297c05ff2598c55",
       status: "Opened",
-      title: "Testing video ",
-      description: "Video testing",
+      title: "Overflowing Trash Bins",
+      description: "Trash bins near the library entrance are overflowing. Bad smell and attracting flies.",
       category: { name: "Cleanliness", priority: "Low" },
       media: [
-        "https://res.cloudinary.com/dcv38gpis/image/upload/v1761148942/reports/019a0ca8-27ab-757d-a4f4-5f2dd76ec559.jpg",
-        "https://res.cloudinary.com/dcv38gpis/video/upload/v1761148947/reports/019a0ca8-4442-739e-937f-e6539a96135a.mp4",
+        "https://images.unsplash.com/photo-1532996122724-e3c354a0b15b?w=800&q=80",
+        "https://images.unsplash.com/photo-1604187351574-c75ca79f5807?w=800&q=80",
+      ],
+      timelineHistory: [
+        {
+          id: "CMP-1095-evt-1",
+          actionTitle: "Report Submitted",
+          actionDetails: "Overflowing trash bins reported near library entrance.",
+          initiator: "User",
+          createdAt: "2025-10-22T16:02:30.647Z",
+        },
+        {
+          id: "CMP-1095-evt-2",
+          actionTitle: "Status Updated",
+          actionDetails: "Status set to Opened.",
+          initiator: "System",
+          createdAt: "2025-10-22T16:02:31.000Z",
+        },
       ],
       latitude: 3.12719,
       longitude: 101.634895,
@@ -204,14 +264,31 @@ const ComplaintManagement = () => {
     {
       id: "CMP-1096",
       userId: "testing",
-      adminId: "Unassigned",
+      adminId: "null",
+      adminName: "Unassigned",
+      facultyid: "6915cd5e4297c05ff2598c55",
       status: "Opened",
       title: "Graffiti on Wall",
-      description:
-        "Graffiti spotted near the main entrance of the lecture hall.",
+      description: "Graffiti spotted near the main entrance of the lecture hall. Contains inappropriate content.",
       category: { name: "Vandalism", priority: "Medium" },
       media: [
-        "https://res.cloudinary.com/example/image/upload/v1750655596/reports/graffiti.jpg",
+        "https://images.unsplash.com/photo-1604509988450-70f2e6827eb6?w=800&q=80",
+      ],
+      timelineHistory: [
+        {
+          id: "CMP-1096-evt-1",
+          actionTitle: "Report Submitted",
+          actionDetails: "Graffiti reported at lecture hall entrance.",
+          initiator: "testing",
+          createdAt: "2025-06-14T12:15:00.000Z",
+        },
+        {
+          id: "CMP-1096-evt-2",
+          actionTitle: "Status Updated",
+          actionDetails: "Status set to Opened.",
+          initiator: "System",
+          createdAt: "2025-06-14T12:15:05.000Z",
+        },
       ],
       latitude: 0,
       longitude: 0,
@@ -229,14 +306,38 @@ const ComplaintManagement = () => {
     {
       id: "CMP-1097",
       userId: "0199d751-fbb6-742e-b052-e4a05b2d57bc",
-      adminId: "oiiae",
+      adminId: "68af04187c2e6f499854e2da",
+      adminName: "Teoh Zong Ming",
+      facultyid: "6915cd5e4297c05ff2598c55",
       status: "Resolved",
-      title:
-        "Testing to make this a really long title to see how will my UI render",
-      description: "Cooked",
+      title: "Broken Window in Lecture Hall",
+      description: "Window on the third floor is cracked and poses safety risk. Needs immediate attention.",
       category: { name: "Cleanliness", priority: "Low" },
       media: [
-        "https://res.cloudinary.com/dcv38gpis/image/upload/v1760972343/reports/019a0221-7750-70d1-8c53-19ede5b8d3f7.jpg",
+        "https://images.unsplash.com/photo-1497366754035-f200968a6e72?w=800&q=80",
+      ],
+      timelineHistory: [
+        {
+          id: "CMP-1097-evt-1",
+          actionTitle: "Report Submitted",
+          actionDetails: "Broken window reported in lecture hall.",
+          initiator: "User",
+          createdAt: "2025-10-20T14:59:08.106Z",
+        },
+        {
+          id: "CMP-1097-evt-2",
+          actionTitle: "Admin Assigned",
+          actionDetails: "Admin oiiae assigned to complaint.",
+          initiator: "System",
+          createdAt: "2025-10-20T15:10:08.106Z",
+        },
+        {
+          id: "CMP-1097-evt-3",
+          actionTitle: "Status Updated",
+          actionDetails: "Status changed to Resolved.",
+          initiator: "oiiae",
+          createdAt: "2025-10-20T15:50:33.823Z",
+        },
       ],
       latitude: 3.1271286,
       longitude: 101.6349525,
@@ -255,13 +356,31 @@ const ComplaintManagement = () => {
     {
       id: "CMP-1098",
       userId: "0199d751-fbb6-742e-b052-e4a05b2d57bc",
-      adminId: "Unassigned",
+     adminId: "68af04187c2e6f499854e2da",
+      adminName: "Teoh Zong Ming",
+      facultyid: "6915cd5e4297c05ff2598c55",
       status: "Opened",
-      title: "Yoasobi",
-      description: "Yoasobi supremacy",
+      title: "Stained Carpet in Study Area",
+      description: "Large stain on carpet in the main study area. Looks like coffee spill that was never cleaned properly.",
       category: { name: "Cleanliness", priority: "Low" },
       media: [
-        "https://res.cloudinary.com/dcv38gpis/image/upload/v1760795567/reports/0199f798-1949-730f-b730-628436f6e0cc.jpg",
+        "https://images.unsplash.com/photo-1497366811353-6870744d04b2?w=800&q=80",
+      ],
+      timelineHistory: [
+        {
+          id: "CMP-1098-evt-1",
+          actionTitle: "Report Submitted",
+          actionDetails: "Carpet stain reported in study area.",
+          initiator: "User",
+          createdAt: "2025-10-18T13:52:48.107Z",
+        },
+        {
+          id: "CMP-1098-evt-2",
+          actionTitle: "Status Updated",
+          actionDetails: "Status set to Opened.",
+          initiator: "System",
+          createdAt: "2025-10-18T13:52:49.000Z",
+        },
       ],
       latitude: 3.1271274,
       longitude: 101.6349593,
@@ -280,14 +399,46 @@ const ComplaintManagement = () => {
     {
       id: "CMP-1099",
       userId: "0199d751-fbb6-742e-b052-e4a05b2d57bc",
-      adminId: "qwe1",
+      adminId: "68af04187c2e6f499854e2da",
+      adminName: "Teoh Zong Ming",
+      facultyid: "6915cd5e4297c05ff2598c55",
       status: "Resolved",
-      title: "Kk",
-      description: "Ok",
+      title: "Cheating During Exam",
+      description: "Witnessed student using unauthorized materials during final examination. Multiple instances observed.",
       category: { name: "Academic Misconduct", priority: "High" },
       media: [
-        "https://res.cloudinary.com/dcv38gpis/image/upload/v1760275685/reports/0199d89b-536e-73af-98a7-ec83159b6b58.jpg",
-        "https://res.cloudinary.com/dcv38gpis/image/upload/v1760275685/reports/0199d89b-5371-723c-a73f-294a2db34940.jpg",
+        "https://images.unsplash.com/photo-1434030216411-0b793f4b4173?w=800&q=80",
+        "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?w=800&q=80",
+      ],
+      timelineHistory: [
+        {
+          id: "CMP-1099-evt-1",
+          actionTitle: "Report Submitted",
+          actionDetails: "Academic misconduct reported during exam.",
+          initiator: "User",
+          createdAt: "2025-10-12T13:28:06.371Z",
+        },
+        {
+          id: "CMP-1099-evt-2",
+          actionTitle: "Admin Assigned",
+          actionDetails: "Admin qwe1 assigned to complaint.",
+          initiator: "System",
+          createdAt: "2025-10-12T14:00:06.371Z",
+        },
+        {
+          id: "CMP-1099-evt-3",
+          actionTitle: "Status Updated",
+          actionDetails: "Status changed to Resolved.",
+          initiator: "qwe1",
+          createdAt: "2025-10-13T16:59:48.850Z",
+        },
+        {
+          id: "CMP-1099-evt-4",
+          actionTitle: "Feedback Provided",
+          actionDetails: "User submitted feedback after resolution.",
+          initiator: "User",
+          createdAt: "2025-10-13T17:10:00.000Z",
+        },
       ],
       latitude: 3.1271261,
       longitude: 101.6349792,
@@ -358,17 +509,47 @@ const ComplaintManagement = () => {
   }, []);
 
   useEffect(() => {
-    fetch("http://localhost:5000/admin/usersMobile/users", {
-      credentials: "include",
-    })
-      .then((res) => {
-        if (!res.ok) throw new Error(`HTTP Error: ${res.status}`);
-        return res.json();
+    // Get current user's faculty ID to fetch only admins from same faculty
+    const userDataStr = localStorage.getItem("user") || sessionStorage.getItem("user");
+    const currentUser = userDataStr ? JSON.parse(userDataStr) : null;
+    const currentUserFacultyId = currentUser?.facultyid;
+
+    if (currentUserFacultyId) {
+      // Fetch admins filtered by faculty ID
+      fetch(`http://localhost:5000/admin/usersMobile/users/faculty/${currentUserFacultyId}`, {
+        credentials: "include",
       })
-      .then((data) => {
-        setAdmins(data.data);
+        .then((res) => {
+          if (!res.ok) throw new Error(`HTTP Error: ${res.status}`);
+          return res.json();
+        })
+        .then((data) => {
+          setAdmins(data.data || []);
+        })
+        .catch((err) => {
+          console.error("Error fetching faculty admins:", err);
+          // Fallback to all users if endpoint fails
+          fetch("http://localhost:5000/admin/usersMobile/users", {
+            credentials: "include",
+          })
+            .then((res) => res.json())
+            .then((data) => setAdmins(data.data || []))
+            .catch((err) => console.error(err));
+        });
+    } else {
+      // Fallback to fetch all users if no faculty ID
+      fetch("http://localhost:5000/admin/usersMobile/users", {
+        credentials: "include",
       })
-      .catch((err) => console.error(err));
+        .then((res) => {
+          if (!res.ok) throw new Error(`HTTP Error: ${res.status}`);
+          return res.json();
+        })
+        .then((data) => {
+          setAdmins(data.data || []);
+        })
+        .catch((err) => console.error(err));
+    }
   }, []);
 
   const getAdminName = (adminId) => {
@@ -555,7 +736,13 @@ const ComplaintManagement = () => {
     };
 
   const handleComplaintClick = (complaint) => {
-    navigate(`/complaints/${complaint.id}`, { state: complaint });
+    // Pass all complaints for sidebar navigation
+    navigate(`/complaints/${complaint.id}`, { 
+      state: { 
+        complaint, 
+        allComplaints: filteredComplaints 
+      } 
+    });
   };
 
   return (
@@ -581,62 +768,73 @@ const ComplaintManagement = () => {
                   </p>
                 </div>
 
-                <div className="mt-4 md:mt-0 relative flex items-center gap-3">
-                  <button
-                    onClick={() => {
-                      // Navigate to Analytics and pass current filtered complaints as state
-                      navigate("/analytics", { state: { complaints: filteredComplaints } });
-                    }}
-                    className="complaint-export-button"
-                    title="Open Analytics Dashboard"
-                  >
-                    Go to Analytics
-                  </button>
-                  <button
-                    id="exportButton"
-                    onClick={() => {
-                      const dropdown =
-                        document.getElementById("exportDropdown");
-                      if (dropdown) {
-                        dropdown.classList.toggle("hidden");
-                      }
-                    }}
-                    className="complaint-export-button"
-                  >
-                    <FontAwesomeIcon
-                      icon={faFileExport}
-                      className="mr-2"
-                    ></FontAwesomeIcon>
-                    Export
-                    <FontAwesomeIcon
-                      icon={faChevronDown}
-                      className="ml-2 text-xs"
-                    ></FontAwesomeIcon>
-                  </button>
-                  <div
-                    id="exportDropdown"
-                    className="hidden absolute right-0 mt-2 w-56 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 z-50"
-                  >
+                <div className="mt-4 md:mt-0 flex items-center gap-3">
+                  <div className="relative">
+                    <button
+                      id="exportButton"
+                      onClick={() => {
+                        const count = selectedComplaints.length;
+                        if (count === 0) {
+                          const n = document.createElement("div");
+                          n.className = "export-notification";
+                          n.innerHTML = `<span>Please select complaints to export (max 10).</span>`;
+                          document.body.appendChild(n);
+                          setTimeout(() => n.remove(), 3000);
+                          return;
+                        }
+                        if (count > 10) {
+                          const n = document.createElement("div");
+                          n.className = "export-notification";
+                          n.innerHTML = `<span>You can export up to 10 complaints per request. You selected ${count}.</span>`;
+                          document.body.appendChild(n);
+                          setTimeout(() => n.remove(), 3500);
+                          return;
+                        }
+                        const dropdown = document.getElementById("exportDropdown");
+                        if (dropdown) {
+                          dropdown.classList.toggle("hidden");
+                        }
+                      }}
+                      className={`complaint-export-button ${
+                        selectedComplaints.length === 0 || selectedComplaints.length > 10
+                          ? "opacity-50 cursor-not-allowed"
+                          : ""
+                      }`}
+                      aria-disabled={selectedComplaints.length === 0 || selectedComplaints.length > 10}
+                    >
+                      <FontAwesomeIcon
+                        icon={faFileExport}
+                        className="mr-2"
+                      ></FontAwesomeIcon>
+                      Export
+                      <FontAwesomeIcon
+                        icon={faChevronDown}
+                        className="ml-2 text-xs"
+                      ></FontAwesomeIcon>
+                    </button>
+                    <div
+                      id="exportDropdown"
+                      className="hidden absolute left-0 top-full mt-2 w-56 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 z-50"
+                    >
                     <div className="py-1">
                       <div className="px-4 py-2 text-sm text-gray-700 border-b border-gray-200">
                         <p className="font-medium">Export Options</p>
                         <p className="text-xs text-gray-500 mt-1">
-                          Choose format
+                          Choose format (selected: {selectedComplaints.length})
                         </p>
                       </div>
                       <div className="py-1">
                         <button
                           id="exportCSV"
                           onClick={() => {
-                            const notification = document.createElement("div");
-                            notification.className = "export-notification";
-                            notification.innerHTML = `
-                          <span>Exporting data as CSV...</span>`;
-                            document.body.appendChild(notification);
-                            setTimeout(() => notification.remove(), 3000);
-                            document
-                              .getElementById("exportDropdown")
-                              ?.classList.add("hidden");
+                            const count = selectedComplaints.length;
+                            if (count === 0 || count > 10) return;
+                            const n = document.createElement("div");
+                            n.className = "export-notification";
+                            n.innerHTML = `<span>Exporting ${count} selected as CSV...</span>`;
+                            document.body.appendChild(n);
+                            setTimeout(() => n.remove(), 3000);
+                            document.getElementById("exportDropdown")?.classList.add("hidden");
                           }}
                           className="complaint-export-button-selection"
                         >
@@ -650,15 +848,14 @@ const ComplaintManagement = () => {
                         <button
                           id="exportExcel"
                           onClick={() => {
-                            const notification = document.createElement("div");
-                            notification.className = "export-notification";
-                            notification.innerHTML = `
-                          <span>Exporting data as Excel...</span>`;
-                            document.body.appendChild(notification);
-                            setTimeout(() => notification.remove(), 3000);
-                            document
-                              .getElementById("exportDropdown")
-                              ?.classList.add("hidden");
+                            const count = selectedComplaints.length;
+                            if (count === 0 || count > 10) return;
+                            const n = document.createElement("div");
+                            n.className = "export-notification";
+                            n.innerHTML = `<span>Exporting ${count} selected as Excel...</span>`;
+                            document.body.appendChild(n);
+                            setTimeout(() => n.remove(), 3000);
+                            document.getElementById("exportDropdown")?.classList.add("hidden");
                           }}
                           className="complaint-export-button-selection"
                         >
@@ -671,15 +868,14 @@ const ComplaintManagement = () => {
                         <button
                           id="exportPDF"
                           onClick={() => {
-                            const notification = document.createElement("div");
-                            notification.className = "export-notification";
-                            notification.innerHTML = `
-                          <span>Exporting data as PDF...</span>`;
-                            document.body.appendChild(notification);
-                            setTimeout(() => notification.remove(), 3000);
-                            document
-                              .getElementById("exportDropdown")
-                              ?.classList.add("hidden");
+                            const count = selectedComplaints.length;
+                            if (count === 0 || count > 10) return;
+                            const n = document.createElement("div");
+                            n.className = "export-notification";
+                            n.innerHTML = `<span>Exporting ${count} selected as PDF...</span>`;
+                            document.body.appendChild(n);
+                            setTimeout(() => n.remove(), 3000);
+                            document.getElementById("exportDropdown")?.classList.add("hidden");
                           }}
                           className="complaint-export-button-selection"
                         >
@@ -690,28 +886,7 @@ const ComplaintManagement = () => {
                           Export as PDF
                         </button>
                       </div>
-                      <div className="py-1">
-                        <button
-                          id="exportSelected"
-                          onClick={() => {
-                            const notification = document.createElement("div");
-                            notification.className = "export-notification";
-                            notification.innerHTML = `<span>Exporting selected complaints...</span>`;
-                            document.body.appendChild(notification);
-                            setTimeout(() => notification.remove(), 3000);
-                            document
-                              .getElementById("exportDropdown")
-                              ?.classList.add("hidden");
-                          }}
-                          className="complaint-export-button-selection"
-                        >
-                          <FontAwesomeIcon
-                            icon={faCheckCircle}
-                            className="text-blue-600 mr-3"
-                          ></FontAwesomeIcon>
-                          Export Selected Only
-                        </button>
-                      </div>
+                    </div>
                     </div>
                   </div>
                 </div>

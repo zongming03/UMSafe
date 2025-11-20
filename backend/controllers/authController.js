@@ -18,7 +18,8 @@ export const handlelogin = async (req, res) => {
     console.log("User found:", user);
 
     const isMatch = await bcrypt.compare(password, user.hashedpassword);
-    if (!isMatch) return res.status(401).json({ msg: "WRONG USER NAME OR PASSWORD" });
+    if (!isMatch)
+      return res.status(401).json({ msg: "WRONG USER NAME OR PASSWORD" });
 
     const token = jwt.sign(
       { id: user._id, email: user.email, role: user.role },
@@ -62,7 +63,7 @@ export const requestPasswordReset = async (req, res) => {
   try {
     const { email } = req.body;
     const user = await User.findOne({ email });
-    if (!user) return res.status(404).json({ msg: "User not found" });
+    if (!user) return res.status(404).json({ msg: "User doesn't exist in database. Please contact your administrator." });
 
     // Generate random token
     const resetToken = crypto.randomBytes(32).toString("hex");
@@ -72,7 +73,8 @@ export const requestPasswordReset = async (req, res) => {
     user.resetPasswordExpiry = Date.now() + 1000 * 60 * 15;
     await user.save();
 
-  const resetLink = `${HOSTNAME}${ADMIN_PREFIX}/reset-password/${resetToken}`;
+    // Frontend route for reset password does NOT include ADMIN_PREFIX, so build link without it
+    const resetLink = `${HOSTNAME}/reset-password/${resetToken}`;
 
     // Setup mail transporter
     const transporter = nodemailer.createTransport({
@@ -136,6 +138,60 @@ export const resetPassword = async (req, res) => {
     res.json({ msg: "Password reset successful" });
   } catch (err) {
     console.error("Reset password error:", err.message, err.stack);
+    res.status(500).json({ msg: "Server error" });
+  }
+};
+
+// POST /api/auth/refresh
+// Issues a new JWT if the current one is still valid. This enables "Stay signed in" UX.
+export const refreshToken = async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({ msg: "Missing authorization header" });
+    }
+    const token = authHeader.split(" ")[1];
+    let payload;
+    try {
+      payload = jwt.verify(token, process.env.JWT_SECRET);
+    } catch (err) {
+      // Allow refresh if token expired within the last 5 minutes (grace period)
+      if (err.name === "TokenExpiredError") {
+        try {
+          payload = jwt.verify(token, process.env.JWT_SECRET, { ignoreExpiration: true });
+          const now = Math.floor(Date.now() / 1000);
+          const gracePeriod = 5 * 60; // 5 minutes
+          if (now - payload.exp > gracePeriod) {
+            return res.status(401).json({ msg: "Token expired beyond grace period" });
+          }
+          console.log(`⏰ Token expired ${now - payload.exp}s ago, within grace period, allowing refresh`);
+        } catch (decodeErr) {
+          return res.status(401).json({ msg: "Invalid token" });
+        }
+      } else {
+        return res.status(401).json({ msg: "Invalid token" });
+      }
+    }
+
+    // Optional: you could implement a max session length check here.
+    const user = await User.findById(payload.id);
+    if (!user) return res.status(404).json({ msg: "User not found" });
+
+    const newToken = jwt.sign(
+      { id: user._id, email: user.email, role: user.role },
+      process.env.JWT_SECRET,
+      { expiresIn: "1h" }
+    );
+
+    const decoded = jwt.decode(newToken);
+    res.status(200).json({
+      msg: "Token refreshed",
+      token: newToken,
+      expiresIn: 3600,
+      exp: decoded.exp,
+    });
+  } catch (err) {
+    console.error("Refresh token error:", err);
     res.status(500).json({ msg: "Server error" });
   }
 };

@@ -3,6 +3,7 @@ import Report from '../models/Complaint.js';
 import User from '../models/User.js';
 import sendEmail from '../utils/sendEmail.js';
 import { HOSTNAME } from '../config/urlConfig.js';
+import axios from 'axios';
 
 const getAllComplaints = async (req, res) => {
   try {
@@ -28,11 +29,119 @@ const getComplaintById = async (req, res) => {
 
 const updateComplaintStatus = async (req, res) => {
   try {
+    // Check if this is a partner API report (has display ID like CMP-XXXX)
+    const isPartnerReport = /^CMP-/.test(req.params.id);
+    
+    if (isPartnerReport) {
+      const newStatus = req.body.status?.toLowerCase();
+      const reportId = req.params.id;
+      
+      // Get the assigned admin before status change for notification
+      let assignedAdmin = null;
+      try {
+        const currentReport = await axios.get(`http://localhost:5000/admin/reports/${reportId}`, {
+          headers: { 'Authorization': req.headers.authorization || '' }
+        });
+        const adminId = currentReport.data.report?.adminId;
+        if (adminId) {
+          assignedAdmin = await User.findById(adminId);
+        }
+      } catch (err) {
+        console.warn('Could not fetch assigned admin:', err.message);
+      }
+      
+      // For "Resolved" or "Closed", use PATCH endpoints
+      if (newStatus === 'resolved' || newStatus === 'closed') {
+        try {
+          const axios = require('axios');
+          const endpoint = newStatus === 'resolved' 
+            ? `http://localhost:5000/admin/reports/${reportId}/resolve`
+            : `http://localhost:5000/admin/reports/${reportId}/close`;
+          
+          const response = await axios.patch(endpoint, {}, {
+            headers: {
+              'Authorization': req.headers.authorization || '',
+              'Content-Type': 'application/json'
+            }
+          });
+          
+          console.log(`✅ Partner API: ${newStatus} status updated for ${reportId}`);
+          
+          // Send email notification to assigned admin if they have notifications enabled
+          if (assignedAdmin && assignedAdmin.notifications?.emailNotifications) {
+            const complaintUrl = `${HOSTNAME}/complaints/${reportId}`;
+            const subject = `Complaint ${reportId} status changed to ${newStatus}`;
+            const text = `Hello ${assignedAdmin.name},\n\nThe status of complaint #${reportId} assigned to you has been updated to ${newStatus}.\n\nYou can view the complaint here: ${complaintUrl}\n\nRegards,\nUMSafe`;
+            const html = `<p>Hello ${assignedAdmin.name},</p><p>The status of complaint <strong>#${reportId}</strong> assigned to you has been updated to <strong>${newStatus}</strong>.</p><p><a href="${complaintUrl}">View complaint</a></p><p>Regards,<br/>UMSafe</p>`;
+            
+            try {
+              await sendEmail({ to: assignedAdmin.email, subject, text, html });
+              console.log(`📧 Status change email sent to ${assignedAdmin.email}`);
+            } catch (emailErr) {
+              console.warn('Failed to send status change email:', emailErr.message);
+            }
+          }
+          
+          return res.json({
+            id: reportId,
+            status: newStatus,
+            message: `Report ${newStatus} successfully`,
+            data: response.data
+          });
+        } catch (error) {
+          console.error(`❌ Failed to update partner report status:`, error.message);
+          return res.status(error.response?.status || 500).json({
+            message: `Failed to ${newStatus} partner report`,
+            error: error.response?.data || error.message
+          });
+        }
+      }
+      
+      // For "Open" or "In Progress", just fetch current status from partner API
+      if (newStatus === 'open' || newStatus === 'in progress' || newStatus === 'inprogress') {
+        try {
+          const axios = require('axios');
+          const response = await axios.get(`http://localhost:5000/admin/reports/${reportId}`, {
+            headers: {
+              'Authorization': req.headers.authorization || ''
+            }
+          });
+          
+          console.log(`📥 Partner API: Fetched current status for ${reportId}`);
+          return res.json({
+            id: reportId,
+            status: response.data.report?.status || newStatus,
+            message: 'Status fetched from partner API',
+            data: response.data
+          });
+        } catch (error) {
+          console.error(`❌ Failed to fetch partner report:`, error.message);
+          return res.status(error.response?.status || 500).json({
+            message: 'Failed to fetch partner report status',
+            error: error.response?.data || error.message
+          });
+        }
+      }
+      
+      // Fallback for any other status
+      console.log(`⚠️ Unsupported status update for partner report: ${newStatus}`);
+      return res.json({ 
+        id: reportId, 
+        status: newStatus,
+        message: 'Status update not supported for this state' 
+      });
+    }
+
+    // Original MongoDB-based logic for local complaints
     const complaint = await Report.findByIdAndUpdate(
       req.params.id,
       { status: req.body.status, updated_at: Date.now() },
       { new: true }
     );
+    
+    if (!complaint) {
+      return res.status(404).json({ message: 'Complaint not found' });
+    }
     
     const notifyUser = async (userRef, roleLabel) => {
       if (!userRef) return;
@@ -66,12 +175,132 @@ const updateComplaintStatus = async (req, res) => {
     await notifyUser(complaint.user_id || complaint.submittedBy || complaint.submitted_by || complaint.user || complaint.reporter, 'reporter');
     res.json(complaint);
   } catch (error) {
+    console.error('Error in updateComplaintStatus:', error);
     res.status(500).json({ message: error.message });
   }
 };
 
 const assignComplaint = async (req, res) => {
   try {
+    const reportId = req.params.id;
+    const adminId = req.body.admin_id;
+    const isPartnerReport = /^CMP-/.test(reportId);
+    
+    if (isPartnerReport) {
+      // Check if this is revoking admin (unassigning)
+      const isRevoking = !adminId || adminId === 'Unassigned' || adminId === '';
+      
+      if (isRevoking) {
+        try {
+          // Get the current admin before revoking
+          let previousAdmin = null;
+          try {
+            const currentReport = await axios.get(`http://localhost:5000/admin/reports/${reportId}`, {
+              headers: { 'Authorization': req.headers.authorization || '' }
+            });
+            const previousAdminId = currentReport.data.report?.adminId;
+            if (previousAdminId) {
+              previousAdmin = await User.findById(previousAdminId);
+            }
+          } catch (err) {
+            console.warn('Could not fetch previous admin:', err.message);
+          }
+
+          // Call revoke admin endpoint
+          await axios.patch(`http://localhost:5000/admin/reports/${reportId}/revoke-admin`, {}, {
+            headers: {
+              'Authorization': req.headers.authorization || '',
+              'Content-Type': 'application/json'
+            }
+          });
+          
+          console.log(`✅ Partner API: Admin revoked for ${reportId}`);
+          
+          // Send email notification to revoked admin if they have notifications enabled
+          if (previousAdmin && previousAdmin.notifications?.emailNotifications) {
+            const complaintUrl = `${HOSTNAME}/complaints/${reportId}`;
+            const subject = `You have been unassigned from complaint ${reportId}`;
+            const text = `Hello ${previousAdmin.name},\n\nYou have been unassigned from complaint #${reportId}.\n\nYou can view the complaint here: ${complaintUrl}\n\nRegards,\nUMSafe`;
+            const html = `<p>Hello ${previousAdmin.name},</p><p>You have been <strong>unassigned</strong> from complaint <strong>#${reportId}</strong>.</p><p><a href="${complaintUrl}">View complaint</a></p><p>Regards,<br/>UMSafe</p>`;
+            
+            try {
+              await sendEmail({ to: previousAdmin.email, subject, text, html });
+              console.log(`📧 Revocation email sent to ${previousAdmin.email}`);
+            } catch (emailErr) {
+              console.warn('Failed to send revocation email:', emailErr.message);
+            }
+          }
+          
+          // Fetch updated report to get new status (should be "Open")
+          const response = await axios.get(`http://localhost:5000/admin/reports/${reportId}`, {
+            headers: {
+              'Authorization': req.headers.authorization || ''
+            }
+          });
+          
+          console.log(`📥 Partner API: Fetched updated status after revoke for ${reportId}`);
+          return res.json({
+            id: reportId,
+            adminId: null,
+            status: response.data.report?.status || 'Open',
+            message: 'Admin revoked successfully',
+            data: response.data
+          });
+        } catch (error) {
+          console.error(`❌ Failed to revoke admin for partner report:`, error.message);
+          return res.status(error.response?.status || 500).json({
+            message: 'Failed to revoke admin from partner report',
+            error: error.response?.data || error.message
+          });
+        }
+      } else {
+        // Assigning admin - use assign-admin endpoint
+        try {
+          const response = await axios.patch(`http://localhost:5000/admin/reports/${reportId}/assign-admin`, 
+            { adminId },
+            {
+              headers: {
+                'Authorization': req.headers.authorization || '',
+                'Content-Type': 'application/json'
+              }
+            }
+          );
+          
+          console.log(`✅ Partner API: Admin assigned for ${reportId}`);
+          
+          // Send email notification to newly assigned admin if they have notifications enabled
+          const assignedUser = await User.findById(adminId);
+          if (assignedUser && assignedUser.notifications?.emailNotifications) {
+            const complaintUrl = `${HOSTNAME}/complaints/${reportId}`;
+            const subject = `New complaint assigned to you: ${reportId}`;
+            const text = `Hello ${assignedUser.name},\n\nYou have been assigned to complaint #${reportId}.\n\nYou can view the complaint here: ${complaintUrl}\n\nRegards,\nUMSafe`;
+            const html = `<p>Hello ${assignedUser.name},</p><p>You have been <strong>assigned</strong> to complaint <strong>#${reportId}</strong>.</p><p><a href="${complaintUrl}">View complaint</a></p><p>Regards,<br/>UMSafe</p>`;
+            
+            try {
+              await sendEmail({ to: assignedUser.email, subject, text, html });
+              console.log(`📧 Assignment email sent to ${assignedUser.email}`);
+            } catch (emailErr) {
+              console.warn('Failed to send assignment email:', emailErr.message);
+            }
+          }
+          
+          return res.json({
+            id: reportId,
+            adminId: adminId,
+            message: 'Admin assigned successfully',
+            data: response.data
+          });
+        } catch (error) {
+          console.error(`❌ Failed to assign admin to partner report:`, error.message);
+          return res.status(error.response?.status || 500).json({
+            message: 'Failed to assign admin to partner report',
+            error: error.response?.data || error.message
+          });
+        }
+      }
+    }
+    
+    // Original MongoDB-based logic for local complaints
     const complaint = await Report.findByIdAndUpdate(
       req.params.id,
       { admin_id: req.body.admin_id },
@@ -80,12 +309,18 @@ const assignComplaint = async (req, res) => {
     // Send email notification to assigned user if enabled
     if (complaint && complaint.admin_id) {
       const user = await User.findById(complaint.admin_id);
-      if (user && user.notifications && user.notifications.emailNotifications) {
-        await sendEmail({
-          to: user.email,
-          subject: 'New Complaint Assigned',
-          text: `You have been assigned a new complaint (ID: ${complaint._id}).`,
-        });
+      if (user && user.notifications?.emailNotifications) {
+        const complaintUrl = `${HOSTNAME}/complaints/${complaint._id}`;
+        const subject = `New complaint assigned to you: ${complaint._id}`;
+        const text = `Hello ${user.name},\n\nYou have been assigned to complaint #${complaint._id}.\n\nYou can view the complaint here: ${complaintUrl}\n\nRegards,\nUMSafe`;
+        const html = `<p>Hello ${user.name},</p><p>You have been <strong>assigned</strong> to complaint <strong>#${complaint._id}</strong>.</p><p><a href="${complaintUrl}">View complaint</a></p><p>Regards,<br/>UMSafe</p>`;
+        
+        try {
+          await sendEmail({ to: user.email, subject, text, html });
+          console.log(`📧 Assignment email sent to ${user.email}`);
+        } catch (emailErr) {
+          console.warn('Failed to send assignment email:', emailErr.message);
+        }
       }
     }
     res.json(complaint);

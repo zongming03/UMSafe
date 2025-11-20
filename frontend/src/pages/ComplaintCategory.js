@@ -120,35 +120,36 @@ const ComplaintCategory = () => {
   const fetchAndSetCategories = async () => {
     setIsLoading(true);
     try {
-      // Fetch categories and reports in parallel
-      const [categoriesRes, reportsRes] = await Promise.all([
-        fetchCategories(),
-        fetchReports()
-      ]);
-      
+      // Always fetch categories first
+      const categoriesRes = await fetchCategories();
       const categoriesData = categoriesRes.data;
-      const reportsData = reportsRes.data?.reports || reportsRes.data?.data || reportsRes.data || [];
-      
       console.log("📂 Categories fetched:", categoriesData);
-      console.log("📋 Reports fetched:", reportsData);
-      
-      // Count complaints for each category
+
+      // Try fetching reports; if it fails, default to null so counts = 0
+      let reportsData = null;
+      try {
+        const reportsRes = await fetchReports();
+        reportsData = reportsRes.data?.reports || reportsRes.data?.data || reportsRes.data || [];
+        console.log("📋 Reports fetched:", reportsData);
+      } catch (reportsError) {
+        console.warn("⚠️ Reports fetch failed, defaulting counts to 0", reportsError);
+        reportsData = null;
+      }
+
       const categoryComplaintsCount = {};
-      reportsData.forEach(report => {
+      (reportsData || []).forEach(report => {
         const categoryName = report.category?.name;
         if (categoryName) {
           categoryComplaintsCount[categoryName] = (categoryComplaintsCount[categoryName] || 0) + 1;
         }
       });
-      
       console.log("📊 Complaint counts by category:", categoryComplaintsCount);
-      
-      // Add complaintsCount to each category
+
       const categoriesWithCount = categoriesData.map(category => ({
         ...category,
         complaintsCount: categoryComplaintsCount[category.name] || 0
       }));
-      
+
       setCategories(categoriesWithCount);
     } catch (error) {
       console.error("❌ Error fetching categories:", error);

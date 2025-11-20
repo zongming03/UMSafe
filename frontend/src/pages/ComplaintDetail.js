@@ -1,16 +1,23 @@
 import React, { useState, useEffect, useRef } from "react";
 import "../styles/ComplaintDetail.css";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faArrowLeft } from "@fortawesome/free-solid-svg-icons";
+import { 
+  faArrowLeft, 
+  faBars, 
+
+} from "@fortawesome/free-solid-svg-icons";
 import StatusBanner from "../components/StatusBanner";
 import ComplaintDetailsCard from "../components/ComplaintDetailsCard";
 import ActivityHistory from "../components/ActivityHistory";
 import AssignedStaffCard from "../components/AssignedStaffCard";
 import QuickActionsCard from "../components/QuickActionCard";
+import ComplaintsSidebar from "../components/ComplaintsSidebar";
+import CollapsibleMainMenu from "../components/CollapsibleMainMenu";
+import CreateChatroomModal from "../components/CreateChatroomModal";
 import { useLocation, useParams, useNavigate } from "react-router-dom";
 import jsPDF from "jspdf";
 import UMSafeLogo from "../assets/UMSafeLogo.png";
-import { initiateChatroom } from "../services/api";
+import { initiateChatroom, assignAdmin, revokeReport, resolveReport, closeReport } from "../services/api";
 import { toast } from "react-hot-toast";
 
 const ComplaintDetails = () => {
@@ -23,6 +30,8 @@ const ComplaintDetails = () => {
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isStatusDropdownOpen, setIsStatusDropdownOpen] = useState(false);
   const [isAssignDropdownOpen, setIsAssignDropdownOpen] = useState(false);
+  const [isComplaintsSidebarOpen, setIsComplaintsSidebarOpen] = useState(false);
+  const [showChatroomModal, setShowChatroomModal] = useState(false);
 
   const location = useLocation();
   const params = useParams();
@@ -30,11 +39,26 @@ const ComplaintDetails = () => {
 
   // complaint may be passed in via navigation state during client-only flows.
   // If not provided (direct URL), fetch the complaint by :id from the server.
-  const [complaint, setComplaint] = useState(location.state || null);
+  const [complaint, setComplaint] = useState(location.state?.complaint || null);
+  const [allComplaints, setAllComplaints] = useState(location.state?.allComplaints || []);
   const isAnonymous = complaint?.isAnonymous || false;
 
+  // Scroll to top when component mounts or complaint changes
   useEffect(() => {
-    if (!location.state && params?.id) {
+    window.scrollTo(0, 0);
+  }, [params?.id]);
+
+  // Update complaint when navigating from sidebar or direct URL
+  useEffect(() => {
+    // If complaint is provided in navigation state, use it
+    if (location.state?.complaint) {
+      setComplaint(location.state.complaint);
+      if (location.state.allComplaints) {
+        setAllComplaints(location.state.allComplaints);
+      }
+    } 
+    // Otherwise fetch from server
+    else if (params?.id) {
       const load = async () => {
         try {
           const res = await fetch(`http://localhost:5000/admin/complaints/${params.id}`, { credentials: "include" });
@@ -50,33 +74,12 @@ const ComplaintDetails = () => {
       };
       load();
     }
-  }, [location.state, params?.id, navigate]);
+  }, [params?.id, location.state, navigate]);
 
   const statusOptions = ["Open", "In Progress", "Resolved", "Closed"];
 
   const [lastUpdated, setLastUpdated] = useState("");
-  const [complaintHistory, setComplaintHistory] = useState([
-    {
-      date: "2025-05-26 14:32",
-      action: 'Status changed to "In Progress"',
-      user: "Emma Davis",
-    },
-    {
-      date: "2025-05-25 10:15",
-      action: 'Comment added: "Looking into this issue now."',
-      user: "John Smith",
-    },
-    {
-      date: "2025-05-24 16:45",
-      action: "Assigned to John Smith",
-      user: "System",
-    },
-    {
-      date: "2025-05-24 09:20",
-      action: "Complaint created",
-      user: isAnonymous ? "Anonymous" : "Michael Chen (Student)",
-    },
-  ]);
+  const [complaintHistory, setComplaintHistory] = useState([]);
 
   const statusColors = {
     Open: "bg-yellow-100 text-yellow-800 border-yellow-200",
@@ -118,35 +121,61 @@ const ComplaintDetails = () => {
   const handleOpenChatroom = async () => {
     try {
       const reportId = complaint.id;
-      const fallbackChatroomId = "FAKE-ROOM-" + reportId; // 🔥 For testing only
 
-      // ✅ If chatroom already exists (DB value)
-      if (complaint.chatroomId) {
-        return navigate(`/complaints/${reportId}/${complaint.chatroomId}`,{ state: complaint });
+      // ✅ If chatroom already exists, navigate directly
+      if (complaint.chatroomId && complaint.chatroomId !== "null") {
+        console.log("📬 Navigating to existing chatroom:", complaint.chatroomId);
+        return navigate(`/complaints/${reportId}/${complaint.chatroomId}`, { state: complaint });
       }
 
-      // ✅ If database features are still disabled, skip API call
-      if (!initiateChatroom) {
-        console.warn("Chatroom API not connected. Using fallback ID.");
-        return navigate(`/complaints/${reportId}/${fallbackChatroomId}`,{ state: complaint });
-      }
+      // ❓ No chatroom exists - show modal
+      setShowChatroomModal(true);
+    } catch (err) {
+      console.error("❌ Failed to open chatroom:", err);
+      toast.error("Failed to open chatroom. Please try again.");
+    }
+  };
 
-      // ✅ Call backend to create chatroom (future real use)
+  const handleConfirmCreateChatroom = async () => {
+    setShowChatroomModal(false);
+    
+    try {
+      const reportId = complaint.id;
+      
+      // 🔄 Call backend to create chatroom
+      console.log("🆕 Creating new chatroom for report:", reportId);
       const result = await initiateChatroom(reportId);
 
-      const newChatroomId = result?.chatroom?.id || fallbackChatroomId;
+      console.log("✅ Chatroom created:", result);
 
-      toast.success("Chatroom initiated successfully!");
+      const newChatroomId = result?.chatroom?.id;
+      const updatedReport = result?.report;
 
-      navigate(`/complaints/${reportId}/${newChatroomId}`);
+      if (!newChatroomId) {
+        throw new Error("No chatroom ID returned from server");
+      }
+
+      toast.success("Chatroom created successfully!");
+
+      // Update complaint state with new chatroomId
+      const updatedComplaint = {
+        ...complaint,
+        chatroomId: newChatroomId,
+        ...(updatedReport && { ...updatedReport })
+      };
+
+      setComplaint(updatedComplaint);
+
+      // Navigate to the new chatroom
+      navigate(`/complaints/${reportId}/${newChatroomId}`, { state: updatedComplaint });
     } catch (err) {
-      console.error(err);
-      toast.error("Failed to open chatroom. Using fallback chatroom.");
-
-      // ✅ Backup navigation to allow UI testing
-      const fallbackChatroomId = "FAKE-ROOM-" + complaint.id;
-      navigate(`/complaints/${complaint.id}/${fallbackChatroomId}`);
+      console.error("❌ Failed to create chatroom:", err);
+      toast.error("Failed to create chatroom. Please try again.");
     }
+  };
+
+  const handleCancelCreateChatroom = () => {
+    setShowChatroomModal(false);
   };
 
   useEffect(() => {
@@ -157,81 +186,174 @@ const ComplaintDetails = () => {
   }, []);
 
   const complaintAdminId = complaint?.adminId || "";
+  // Determine current user (from storage) and role for permission logic
+  const storedUserStr = localStorage.getItem("user") || sessionStorage.getItem("user");
+  const storedUser = storedUserStr ? JSON.parse(storedUserStr) : null;
+  const currentUserRole = storedUser?.role || "";
+  const currentUserId = storedUser?.id || storedUser?._id || storedUser?.userId || "";
+  const isUserAssigned = complaintAdminId && currentUserId && complaintAdminId === currentUserId;
+  const isAdminUser = currentUserRole.toLowerCase() === "admin";
+  // Non-admin users: hide full quick actions if not assigned; if assigned but not admin hide reassignment only.
+  const shouldShowQuickActions = isAdminUser || isUserAssigned;
+  const shouldShowReassign = isAdminUser; // Only admin can reassign
 
   useEffect(() => {
-    fetch("http://localhost:5000/admin/usersMobile/users", {
-      credentials: "include",
-    })
-      .then((res) => {
+    const fetchStaffMembers = async () => {
+      try {
+        // Get current user's faculty
+        const userDataStr = localStorage.getItem("user") || sessionStorage.getItem("user");
+        const currentUser = userDataStr ? JSON.parse(userDataStr) : null;
+        const currentUserFacultyId = currentUser?.facultyid;
+
+        // Fetch all users
+        const res = await fetch("http://localhost:5000/admin/usersMobile/users", {
+          credentials: "include",
+        });
+        
         if (!res.ok) throw new Error(`HTTP Error: ${res.status}`);
-        return res.json();
-      })
-      .then((data) => {
-        const admins = data.data || [];
-        setStaffMembers(admins);
+        
+        const data = await res.json();
+        const allAdmins = data.data || [];
+        
+        console.log("📋 Fetched all admins from database:", allAdmins);
+        console.log("🔍 Looking for adminId:", complaintAdminId);
+        
+        // Filter admins to show only those from the same faculty
+        const sameFacultyAdmins = currentUserFacultyId 
+          ? allAdmins.filter(admin => admin.facultyid === currentUserFacultyId)
+          : allAdmins;
+
+        // Normalize to the shape expected by QuickActionsCard (adminId, name, email)
+        const normalized = sameFacultyAdmins.map((u) => ({
+          adminId: u._id,
+          name: u.name,
+          email: u.email,
+        }));
+        setStaffMembers(normalized);
 
         // Match adminId from complaint with fetched admins
         if (complaintAdminId) {
-          const matchedAdmin = admins.find(
+          const matchedAdmin = allAdmins.find(
             (admin) => admin._id === complaintAdminId
           );
           if (matchedAdmin) {
+            console.log("✅ Found matching admin:", matchedAdmin);
+            console.log("📧 Admin email:", matchedAdmin.email);
             setAssignedToName(matchedAdmin.name);
             setAssignedToEmail(matchedAdmin.email);
           } else {
-            setAssignedToName("Unknown");
-            setAssignedToEmail("Unknown");
+            console.log("❌ No matching admin found in database for ID:", complaintAdminId);
+            console.log("📝 Using fallback adminName from complaint:", complaint?.adminName);
+            // Use adminName from complaint object if admin not found in database (e.g., mock data)
+            setAssignedToName(complaint?.adminName || "Unknown");
+            setAssignedToEmail("N/A");
           }
         } else {
-          setAssignedToName("Unknown");
-          setAssignedToEmail("Unknown");
+          // No adminId, check if adminName exists directly in complaint
+          setAssignedToName(complaint?.adminName || "Not Assigned");
+          setAssignedToEmail("N/A");
         }
-      })
-      .catch((err) => {
+      } catch (err) {
         console.error("Error fetching admin users:", err);
-        setAssignedToName("Unknown");
-      });
+        setAssignedToName(complaint?.adminName || "Unknown");
+      }
+    };
+
+    fetchStaffMembers();
   }, [complaintAdminId]);
 
-  const updateAssignedStaff = async (complaintId, staffId) => {
+  // Map partner timelineHistory directly for ActivityHistory (preserve fields)
+  useEffect(() => {
+    if (complaint && Array.isArray(complaint.timelineHistory) && complaint.timelineHistory.length > 0) {
+      const mapped = complaint.timelineHistory
+        .slice()
+        .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt)) // chronological ascending
+        .map(entry => ({
+          id: entry.id,
+          actionTitle: entry.actionTitle,
+          actionDetails: entry.actionDetails || null,
+          initiatorName: typeof entry.initiator === 'string' ? entry.initiator : (entry.initiator && entry.initiator.name) || 'System',
+          createdAt: entry.createdAt,
+        }));
+      setComplaintHistory(mapped);
+    }
+  }, [complaint]);
+
+  const refreshComplaintFromPartner = async (id) => {
     try {
-      const res = await fetch(
-        `http://localhost:5000/admin/complaints/${complaintId}/assign-admin`,
-        {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          credentials: "include",
-          body: JSON.stringify({ assignedTo: staffId }),
-        }
-      );
+      const res = await fetch(`http://localhost:5000/admin/reports/${id}`, { credentials: 'include' });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
-      console.log("Updated assignment:", data);
+      // Normalize to same shape as initial mapping in list view (minimal fields used here)
+      const normalized = {
+        ...complaint,
+        ...data,
+        timelineHistory: data.timelineHistory || data.timeline_history || complaint.timelineHistory || [],
+      };
+      setComplaint(normalized);
     } catch (err) {
-      console.error("Failed to update assigned staff:", err);
+      console.warn('⚠️ Failed to refresh complaint after assign/revoke', err);
     }
   };
 
-  // Update complaint status
-  const updateComplaintStatus = async (complaintId, newStatus) => {
+  const updateAssignedStaff = async (complaintId, staffId) => {
     try {
-      const res = await fetch(
-        `http://localhost:5000/admin/complaints/${complaintId}/status`,
-        {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify({ status: newStatus }),
-        }
-      );
-      if (!res.ok) throw new Error(`HTTP Error: ${res.status}`);
-      const data = await res.json();
-      console.log("✅ Complaint status updated:", data);
-      try { toast.success("Complaint status updated"); } catch (e) {}
+      const response = await assignAdmin(complaintId, { adminId: staffId });
+      console.log("✅ Partner assign-admin response:", response?.data || response);
+      try { toast.success("Admin assigned. Status may auto-update."); } catch (e) {}
+      await refreshComplaintFromPartner(complaintId);
     } catch (err) {
-      console.error("❌ Failed to update complaint status:", err);
-      try { toast.error("Failed to update complaint status"); } catch (e) {}
+      console.error("Failed to update assigned staff via partner API:", err);
+      try { toast.error("Failed to reassign complaint"); } catch (e) {}
+    }
+  };
+
+  const revokeAssignedStaff = async (complaintId) => {
+    try {
+      const response = await revokeReport(complaintId);
+      console.log("✅ Partner revoke-admin response:", response?.data || response);
+      try { toast.success("Admin revoked successfully"); } catch (e) {}
+      await refreshComplaintFromPartner(complaintId);
+    } catch (err) {
+      console.error("Failed to revoke assigned staff via partner API:", err);
+      try { toast.error("Failed to revoke assignment"); } catch (e) {}
+    }
+  };
+
+  // Update complaint status (partner reports for CMP-* IDs, fallback to local for others)
+  const updateComplaintStatus = async (complaintId, newStatus) => {
+    const isPartnerReport = typeof complaintId === 'string' && complaintId.startsWith('CMP-');
+    try {
+      if (isPartnerReport) {
+        // Map statuses to partner endpoints
+        if (newStatus === 'Resolved') {
+          await resolveReport(complaintId, {});
+        } else if (newStatus === 'Closed') {
+          await closeReport(complaintId, {});
+        } else {
+          // No explicit endpoint for 'Open' or 'In Progress' in partner API (assumed)
+          console.log(`No partner endpoint for status '${newStatus}', skipping API call.`);
+        }
+        try { toast.success('Complaint status updated'); } catch (e) {}
+      } else {
+        // Local MongoDB complaint fallback
+        const res = await fetch(
+          `http://localhost:5000/admin/complaints/${complaintId}/status`,
+          {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ status: newStatus }),
+          }
+        );
+        if (!res.ok) throw new Error(`HTTP Error: ${res.status}`);
+        const data = await res.json();
+        console.log('✅ Local complaint status updated:', data);
+        try { toast.success('Complaint status updated'); } catch (e) {}
+      }
+    } catch (err) {
+      console.error('❌ Failed to update complaint status:', err);
+      try { toast.error('Failed to update complaint status'); } catch (e) {}
     }
   };
 
@@ -257,27 +379,11 @@ const ComplaintDetails = () => {
     setIsAssignDropdownOpen(false);
   };
 
-  const updateHistory = (action, user = "Admin User") => {
+  // Legacy function retained but now only updates lastUpdated (timeline comes from partner)
+  const updateHistory = (action) => {
     const now = new Date();
-    const dateStr =
-      now.toISOString().slice(0, 10) +
-      " " +
-      now.getHours().toString().padStart(2, "0") +
-      ":" +
-      now.getMinutes().toString().padStart(2, "0");
-    const formattedDate = `${now.toLocaleString("default", {
-      month: "short",
-    })} ${now.getDate()}, ${now.getFullYear()}, ${now
-      .getHours()
-      .toString()
-      .padStart(2, "0")}:${now.getMinutes().toString().padStart(2, "0")}`;
+    const formattedDate = `${now.toLocaleString('default', { month: 'short' })} ${now.getDate()}, ${now.getFullYear()}, ${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}`;
     setLastUpdated(formattedDate);
-    const newHistoryItem = {
-      date: dateStr,
-      action,
-      user,
-    };
-    setComplaintHistory([newHistoryItem, ...complaintHistory]);
   };
 
   const handleGenerateReport = (complaint) => {
@@ -439,36 +545,66 @@ const ComplaintDetails = () => {
     }
   };
   return (
-    <div className="flex flex-1">
-      {/* Main Content */}
-      <main className="complaint-detail-main-container">
-        <div className="complaint-detail-main-frame">
-          {/* Page Header */}
-          <div className="complaint-detail-page-header flex items-center justify-between">
-            {/* Left Section: Back Button */}
-            <div className="flex items-center">
+    <div className="flex h-screen overflow-hidden bg-gray-100">
+      {/* Complaints Sidebar (Only show when toggled and allComplaints is available) */}
+      {isComplaintsSidebarOpen && allComplaints && allComplaints.length > 0 && (
+        <ComplaintsSidebar
+          allComplaints={allComplaints}
+          currentComplaintId={complaint?.id}
+        />
+      )}
+
+      {/* Main Content Area */}
+      <div className="flex-1 flex flex-col overflow-hidden">
+        {/* Top Bar with Collapsible Menu */}
+        <div className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between shadow-sm">
+          <div className="flex items-center gap-3">
+            <CollapsibleMainMenu />
+            
+            {/* Toggle Complaints Sidebar Button */}
+            {allComplaints && allComplaints.length > 0 && (
               <button
-                onClick={() => navigate("/complaints")}
-                className="!rounded-button whitespace-nowrap mr-4 flex items-center text-gray-600 hover:text-gray-900 cursor-pointer"
+                onClick={() => setIsComplaintsSidebarOpen(!isComplaintsSidebarOpen)}
+                className="flex items-center gap-2 px-3 py-2 bg-white border border-gray-300 rounded-lg shadow-sm hover:bg-gray-50 hover:border-gray-400 transition-all duration-200"
+                title="Toggle Complaints List"
               >
-                <FontAwesomeIcon icon={faArrowLeft} className="mr-2" />
-                Back
+                <FontAwesomeIcon 
+                  icon={faBars} 
+                  className="text-gray-600 w-4 h-4" 
+                />
+                <span className="text-sm font-medium text-gray-700">
+                  {isComplaintsSidebarOpen ? "Hide" : "Show"} Complaints
+                </span>
               </button>
-            </div>
-
-            {/* Center Section: Complaint Title */}
-            <h1 className="text-2xl font-bold text-gray-900 text-center flex-1">
-              Complaint #{complaint?.id || "N/A"}
-            </h1>
-
-            {/* Right Section: Last Updated */}
-            <div className="text-sm text-gray-500 whitespace-nowrap">
-              Last updated:{" "}
-              {complaint.updatedAt
-                ? new Date(complaint.updatedAt).toISOString().split("T")[0]
-                : ""}
-            </div>
+            )}
           </div>
+          
+          <h1 className="text-2xl font-bold text-gray-900">
+            Complaint #{complaint?.id || "N/A"}
+          </h1>
+
+          <div className="text-sm text-gray-500">
+            Last updated:{" "}
+            {complaint?.updatedAt
+              ? new Date(complaint.updatedAt).toISOString().split("T")[0]
+              : "N/A"}
+          </div>
+        </div>
+
+        {/* Scrollable Content */}
+        <main className="flex-1 overflow-y-auto">
+          <div className="complaint-detail-main-container">
+            <div className="complaint-detail-main-frame">
+              {/* Back Button */}
+              <div className="mb-6">
+                <button
+                  onClick={() => navigate("/complaints")}
+                  className="flex items-center px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors shadow-sm"
+                >
+                  <FontAwesomeIcon icon={faArrowLeft} className="w-4 h-4 mr-2" />
+                  Back to Complaints
+                </button>
+              </div>
           <div className="flex flex-col lg:flex-row gap-6">
             {/* Main Content Column */}
             <div className="flex-1">
@@ -496,20 +632,7 @@ const ComplaintDetails = () => {
                 location={
                   complaint?.facultyLocation.facultyBlockRoom || "Unknown"
                 }
-                attachments={[
-                  {
-                    //   url: "",
-                    alt: "Heating Unit",
-                    name: "heating-unit-photo.jpg",
-                    size: "1.2 MB",
-                  },
-                  {
-                    //   url: "",
-                    alt: "Temperature Reading",
-                    name: "temperature-reading.jpg",
-                    size: "0.8 MB",
-                  },
-                ]}
+                attachments={complaint?.media || []}
               />
 
               {/* Activity History */}
@@ -519,31 +642,34 @@ const ComplaintDetails = () => {
             {/* Right Sidebar */}
             <div className="w-full lg:w-80 space-y-6">
               {/* Quick Actions Card */}
-              <QuickActionsCard
-                complaint={complaint}
-                statusRef={statusRef}
-                assignRef={assignRef}
-                isStatusDropdownOpen={isStatusDropdownOpen}
-                setIsStatusDropdownOpen={setIsStatusDropdownOpen}
-                isAssignDropdownOpen={isAssignDropdownOpen}
-                setIsAssignDropdownOpen={setIsAssignDropdownOpen}
-                statusOptions={statusOptions}
-                currentStatus={currentStatus}
-                handleStatusChange={handleStatusChange}
-                staffMembers={staffMembers}
-                assignedTo={assignedToName}
-                handleAssignChange={handleAssignChange}
-                isReportModalOpen={isReportModalOpen}
-                setIsReportModalOpen={setIsReportModalOpen}
-                reportFormat={reportFormat}
-                setReportFormat={setReportFormat}
-                reportContent={reportContent}
-                setReportContent={setReportContent}
-                isGenerating={isGenerating}
-                handleGenerateReport={handleGenerateReport}
-                isAnonymous={isAnonymous}
-                handleOpenChatroom={handleOpenChatroom}
-              />
+              {shouldShowQuickActions && (
+                <QuickActionsCard
+                  complaint={complaint}
+                  statusRef={statusRef}
+                  assignRef={assignRef}
+                  isStatusDropdownOpen={isStatusDropdownOpen}
+                  setIsStatusDropdownOpen={setIsStatusDropdownOpen}
+                  isAssignDropdownOpen={isAssignDropdownOpen}
+                  setIsAssignDropdownOpen={setIsAssignDropdownOpen}
+                  statusOptions={statusOptions}
+                  currentStatus={currentStatus}
+                  handleStatusChange={handleStatusChange}
+                  staffMembers={staffMembers}
+                  assignedTo={assignedToName}
+                  handleAssignChange={handleAssignChange}
+                  isReportModalOpen={isReportModalOpen}
+                  setIsReportModalOpen={setIsReportModalOpen}
+                  reportFormat={reportFormat}
+                  setReportFormat={setReportFormat}
+                  reportContent={reportContent}
+                  setReportContent={setReportContent}
+                  isGenerating={isGenerating}
+                  handleGenerateReport={handleGenerateReport}
+                  isAnonymous={isAnonymous}
+                  handleOpenChatroom={handleOpenChatroom}
+                  shouldShowReassign={shouldShowReassign}
+                />
+              )}
 
               {/* Assigned Staff Card */}
               <AssignedStaffCard
@@ -552,8 +678,18 @@ const ComplaintDetails = () => {
               />
             </div>
           </div>
-        </div>
-      </main>
+            </div>
+          </div>
+        </main>
+      </div>
+
+      {/* Chatroom Creation Modal */}
+      <CreateChatroomModal
+        isOpen={showChatroomModal}
+        onConfirm={handleConfirmCreateChatroom}
+        onCancel={handleCancelCreateChatroom}
+        complaintId={complaint?.reportId || complaint?.id}
+      />
     </div>
   );
 };

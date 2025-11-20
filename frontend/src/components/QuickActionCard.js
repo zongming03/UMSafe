@@ -30,7 +30,8 @@ const QuickActionsCard = ({
   isGenerating,
   handleGenerateReport,
   isAnonymous,
-  handleOpenChatroom
+  handleOpenChatroom,
+  shouldShowReassign = false
 }) => {
   const [showToast, setShowToast] = useState(false);
 
@@ -88,42 +89,44 @@ const QuickActionsCard = ({
           )}
         </div>
 
-        {/* === Reassign Complaint === */}
-        <div className="relative" ref={assignRef}>
-          <button
-            onClick={() => setIsAssignDropdownOpen(!isAssignDropdownOpen)}
-            className="flex w-full items-center justify-between px-4 py-2 bg-gray-50 hover:bg-blue-50 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 transition-all"
-          >
-            <span className="flex items-center space-x-2">
-              <FontAwesomeIcon icon={faUserPlus} className="text-blue-600" />
-              <span>Reassign Complaint</span>
-            </span>
-            <FontAwesomeIcon
-              icon={faChevronDown}
-              className={`text-gray-500 transition-transform ${
-                isAssignDropdownOpen ? "rotate-180" : ""
-              }`}
-            />
-          </button>
+        {/* === Reassign Complaint (Admins Only) === */}
+        {shouldShowReassign && (
+          <div className="relative" ref={assignRef}>
+            <button
+              onClick={() => setIsAssignDropdownOpen(!isAssignDropdownOpen)}
+              className="flex w-full items-center justify-between px-4 py-2 bg-gray-50 hover:bg-blue-50 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 transition-all"
+            >
+              <span className="flex items-center space-x-2">
+                <FontAwesomeIcon icon={faUserPlus} className="text-blue-600" />
+                <span>Reassign Complaint</span>
+              </span>
+              <FontAwesomeIcon
+                icon={faChevronDown}
+                className={`text-gray-500 transition-transform ${
+                  isAssignDropdownOpen ? "rotate-180" : ""
+                }`}
+              />
+            </button>
 
-          {isAssignDropdownOpen && (
-            <div className="absolute z-20 mt-2 w-full bg-white rounded-lg shadow-md border border-gray-100">
-              {staffMembers.map((staff) => (
-                <button
-                  key={staff.adminId}
-                  onClick={() => handleAssignChange(staff)}
-                  className={`w-full text-left px-4 py-2 text-sm rounded-md ${
-                    assignedTo === staff.name
-                      ? "bg-blue-100 text-blue-700 font-medium"
-                      : "text-gray-700 hover:bg-gray-50"
-                  }`}
-                >
-                  {staff.name}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
+            {isAssignDropdownOpen && (
+              <div className="absolute z-20 mt-2 w-full bg-white rounded-lg shadow-md border border-gray-100">
+                {staffMembers.map((staff) => (
+                  <button
+                    key={staff.adminId}
+                    onClick={() => handleAssignChange(staff)}
+                    className={`w-full text-left px-4 py-2 text-sm rounded-md ${
+                      assignedTo === staff.name
+                        ? "bg-blue-100 text-blue-700 font-medium"
+                        : "text-gray-700 hover:bg-gray-50"
+                    }`}
+                  >
+                    {staff.name}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* === Download Report === */}
         <button

@@ -1,9 +1,14 @@
-const express = require('express');
-const router = express.Router();
-const analyticsController = require('../controllers/analyticsController');
+import { Router } from 'express';
+const router = Router();
+import { getComplaintSummary, getComplaintTypeChart, getComplaintTrends } from '../controllers/analyticsController.js';
 
-// router.get('/complaint-types', analyticsController.getComplaintTypeChart);
-// router.get('/trend', analyticsController.getComplaintTrend);
-// router.get('/officer-performance', analyticsController.getOfficerPerformance);//added to contrller later
+// GET /api/analytics/summary
+router.get('/summary', getComplaintSummary);
 
-module.exports = router;
+// GET /api/analytics/categories
+router.get('/categories', getComplaintTypeChart);
+
+// GET /api/analytics/trend
+router.get('/trend', getComplaintTrends);
+
+export default router;

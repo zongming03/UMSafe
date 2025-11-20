@@ -2,6 +2,16 @@ const partnerChatSample = {
   // an array of chat messages as your partner might return
   chats: [
     {
+      id: "sys-sample-001",
+      senderId: "system",
+      receiverId: null,
+      message: "Conversation started regarding complaint #CMP-1093",
+      system: true,
+      createdAt: "2025-10-17T15:00:00.000Z",
+      updatedAt: "2025-10-17T15:00:00.000Z",
+      version: 0,
+    },
+    {
       id: "0199f2b5-01a4-7487-a473-e3852f5346c2",
       senderId: "0199d751-fbb6-742e-b052-e4a05b2d57bc", // student
       receiverId: "68af04187c2e6f499854e2da",

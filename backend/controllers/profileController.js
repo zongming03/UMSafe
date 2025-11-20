@@ -1,6 +1,7 @@
 import User from "../models/User.js";
 import bcrypt from "bcryptjs";
 import Faculty from "../models/Room.js";
+import { cloudinary } from "../config/cloudinary.js";
 
 // GET /api/profile
 export const getProfile = async (req, res) => {
@@ -27,13 +28,43 @@ export const getProfile = async (req, res) => {
 export const updateProfile = async (req, res) => {
   try {
     const userId = req.user.id;
+    
+    // Get current user to check for existing profile image
+    const currentUser = await User.findById(userId);
+    
     const updates = {
       name: req.body.name,
       notifications: JSON.parse(req.body.notifications),
     };
+    
     if (req.file) {
-      updates.profileImage = "/uploads/" + req.file.filename;
+      // Delete old Cloudinary image if it exists
+      if (currentUser.profileImage && currentUser.profileImage.includes('cloudinary.com')) {
+        try {
+          // Extract public_id from Cloudinary URL
+          // URL format: https://res.cloudinary.com/cloud-name/image/upload/v1234567/folder/public-id.ext
+          const urlParts = currentUser.profileImage.split('/');
+          const uploadIndex = urlParts.indexOf('upload');
+          if (uploadIndex !== -1 && uploadIndex + 1 < urlParts.length) {
+            // Get everything after 'upload/' (includes version and folder path)
+            const pathAfterUpload = urlParts.slice(uploadIndex + 1).join('/');
+            // Remove file extension to get public_id
+            const publicId = pathAfterUpload.replace(/\.[^/.]+$/, '');
+            
+            console.log('🗑️ Deleting old image from Cloudinary:', publicId);
+            await cloudinary.uploader.destroy(publicId);
+            console.log('✅ Old image deleted successfully');
+          }
+        } catch (deleteErr) {
+          console.error('⚠️ Failed to delete old image from Cloudinary:', deleteErr);
+          // Continue anyway - don't fail the update if deletion fails
+        }
+      }
+      
+      // Cloudinary returns the full URL in req.file.path
+      updates.profileImage = req.file.path;
     }
+    
     const updatedUser = await User.findByIdAndUpdate(userId, updates, {
       new: true,
     });

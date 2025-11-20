@@ -1,8 +1,6 @@
 import React from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import {
-  faDownload
-} from "@fortawesome/free-solid-svg-icons";
+import { faDownload } from "@fortawesome/free-solid-svg-icons";
 
 const ComplaintDetailsCard = ({
   title,
@@ -46,31 +44,41 @@ const ComplaintDetailsCard = ({
         <div className="mb-6">
           <h4 className="text-md font-medium text-gray-900 mb-3">Attachments</h4>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {attachments.map((file, idx) => (
-              <div
-                key={idx}
-                className="border border-gray-200 rounded-lg overflow-hidden"
-              >
-                <div className="h-40 bg-gray-100 flex items-center justify-center overflow-hidden">
-                  <img
-                    src={file.url}
-                    alt={file.alt}
-                    className="w-full h-full object-cover"
-                  />
+            {attachments.map((file, idx) => {
+              const url = typeof file === "string" ? file : file?.url;
+              const isVideo = typeof url === "string" && (url.endsWith(".mp4") || url.includes("/video/"));
+              return (
+                <div
+                  key={idx}
+                  className="border border-gray-200 rounded-lg overflow-hidden"
+                >
+                  <a href={url} target="_blank" rel="noopener noreferrer" className="block">
+                    <div className="h-40 bg-gray-100 flex items-center justify-center overflow-hidden">
+                      {isVideo ? (
+                        <video src={url} controls className="w-full h-full object-cover" />
+                      ) : (
+                        <img
+                          src={url}
+                          alt={`Attachment ${idx + 1}`}
+                          className="w-full h-full object-cover"
+                          loading="lazy"
+                        />
+                      )}
+                    </div>
+                  </a>
+                  <div className="px-3 py-2 bg-gray-50 border-t border-gray-200 flex justify-end">
+                    <a
+                      href={url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="!rounded-button whitespace-nowrap text-sm text-blue-600 hover:text-blue-800 cursor-pointer"
+                    >
+                      <FontAwesomeIcon icon={faDownload} className="mr-1" /> Open
+                    </a>
+                  </div>
                 </div>
-                <div className="p-3 bg-white">
-                  <p className="text-sm font-medium text-gray-900 truncate">
-                    {file.name}
-                  </p>
-                  <p className="text-xs text-gray-500">{file.size}</p>
-                </div>
-                <div className="px-3 py-2 bg-gray-50 border-t border-gray-200 flex justify-end">
-                  <button className="!rounded-button whitespace-nowrap text-sm text-blue-600 hover:text-blue-800 cursor-pointer">
-                    <FontAwesomeIcon icon={faDownload} className="mr-1" /> Download
-                  </button>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}

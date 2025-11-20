@@ -2,14 +2,13 @@
     flex: 1;
     overflow-y: auto;
     background-color: #f9fafb;
-    padding: 1rem;
+    padding: 2rem;
 }
 
 .complaint-detail-main-frame{
-    max-width: 80rem;
-    margin-left: auto;
-    margin-right: auto;
+    width: 100%;
     height: 100%;
+    padding: 0 1rem;
 }
 
 .complaint-detail-page-header{

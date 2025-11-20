@@ -195,9 +195,7 @@ const RoomManagement = () => {
         setIsLoading(false);
         return;
       }
-      
-      console.log("✅ Found user faculty:", userFaculty.name);
-      
+            
       // Store the faculty name for display purposes
       setUserFacultyName(userFaculty.name);
 
@@ -216,15 +214,13 @@ const RoomManagement = () => {
 
       userFaculty.faculty_blocks.forEach((block, blockIndex) => {
         const blockIdentifier = block._id || block.name;
-        console.log("📦 Processing block:", block.name, "Block ID:", blockIdentifier);
         
         const rooms = block.faculty_block_rooms || [];
-        console.log(`  📍 Found ${rooms.length} rooms in ${block.name}`);
         
         rooms.forEach((room) => {
           allRooms.push({
             roomId: room._id,
-            blockId: blockIdentifier, // Will use _id if exists, otherwise block.name
+            blockId: blockIdentifier,
             building: block.name,
             roomName: room.name,
             id: `${facultyAbbreviation}-${String(displayCounter).padStart(
@@ -298,7 +294,7 @@ const RoomManagement = () => {
       return;
     }
 
-    const facultyId = userFacultyId; // Use dynamic faculty ID from authenticated user
+    const facultyId = userFacultyId; 
     const blockId = currentRoom.blockId;
     const roomId = currentRoom.roomId;
 
@@ -336,7 +332,7 @@ const RoomManagement = () => {
     if (!roomToDelete) return;
     setIsLoading(true);
     try {
-      const facultyId = userFacultyId; // Use dynamic faculty ID from authenticated user
+      const facultyId = userFacultyId; 
 
       if (Array.isArray(roomToDelete)) {
         await bulkDeleteRooms(
@@ -377,7 +373,6 @@ const RoomManagement = () => {
     }
   }, [user]);
 
-  // Fetch rooms when userFacultyId is set
   useEffect(() => {
     if (userFacultyId) {
       fetchAndSetRooms();
