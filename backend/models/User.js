@@ -34,7 +34,7 @@ const userSchema = new mongoose.Schema({
 
   profileImage: {
     type: String,
-    default: "/images/UMlogo.png",
+    default: null, // Will be set from Cloudinary in controller
   },
 
   notifications: {

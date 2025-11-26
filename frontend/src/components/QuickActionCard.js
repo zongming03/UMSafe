@@ -25,6 +25,7 @@ const QuickActionsCard = ({
   staffMembers,
   assignedTo,
   handleAssignChange,
+  handleRevokeAssignment,
   isReportModalOpen,
   setIsReportModalOpen,
   isGenerating,
@@ -109,12 +110,26 @@ const QuickActionsCard = ({
             </button>
 
             {isAssignDropdownOpen && (
-              <div className="absolute z-20 mt-2 w-full bg-white rounded-lg shadow-md border border-gray-100">
+              <div className="absolute z-20 mt-2 w-full bg-white rounded-lg shadow-md border border-gray-100 max-h-60 overflow-y-auto">
+                {/* Revoke Admin Option */}
+                {assignedTo && assignedTo !== "Not Assigned" && (
+                  <>
+                    <button
+                      onClick={() => handleRevokeAssignment(complaint.id)}
+                      className="w-full text-left px-4 py-2 text-sm rounded-t-md text-red-600 hover:bg-red-50 border-b border-gray-200 font-medium flex items-center space-x-2"
+                    >
+                      <FontAwesomeIcon icon={faTimes} className="text-red-600" />
+                      <span>Revoke Assignment</span>
+                    </button>
+                  </>
+                )}
+                
+                {/* Staff Members List */}
                 {staffMembers.map((staff) => (
                   <button
                     key={staff.adminId}
                     onClick={() => handleAssignChange(staff)}
-                    className={`w-full text-left px-4 py-2 text-sm rounded-md ${
+                    className={`w-full text-left px-4 py-2 text-sm ${
                       assignedTo === staff.name
                         ? "bg-blue-100 text-blue-700 font-medium"
                         : "text-gray-700 hover:bg-gray-50"

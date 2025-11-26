@@ -11,6 +11,7 @@ import profileRoutes from './routes/profileRoutes.js';
 import categoryRoutes from './routes/categoryRoutes.js';
 import mobileRoutes from './routes/mobileRoutes.js';
 import analyticsRoutes from './routes/analyticsRoutes.js';
+import testEmailRoutes from './routes/testEmailRoutes.js';
 
 
 
@@ -54,3 +55,9 @@ app.use('/admin/users', userRoutes);
 app.use('/admin/profile', profileRoutes);
 app.use('/admin/categories', categoryRoutes);
 app.use('/admin/usersMobile', mobileRoutes);
+
+// Test email routes (only for development/testing)
+if (process.env.NODE_ENV !== 'production') {
+  app.use('/admin/test-emails', testEmailRoutes);
+  console.log('🧪 Email testing endpoints enabled at /admin/test-emails');
+}

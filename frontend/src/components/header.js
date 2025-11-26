@@ -32,8 +32,19 @@ const Header = () => {
                 className="flex items-center space-x-3 cursor-pointer"
                 onClick={() => setIsProfileOpen(!isProfileOpen)}
               >
-                <div className="h-8 w-8 rounded-full bg-blue-600 flex items-center justify-center text-white">
-                  <FontAwesomeIcon icon={faUserCircle} />
+                <div className="h-8 w-8 rounded-full bg-blue-600 flex items-center justify-center text-white overflow-hidden">
+                  {user?.profileImage ? (
+                    <img
+                      src={user.profileImage.startsWith('http') ? user.profileImage : `${process.env.REACT_APP_API_URL}${user.profileImage}`}
+                      alt={user.name}
+                      className="h-full w-full object-cover"
+                      onError={(e) => {
+                        e.target.style.display = 'none';
+                        e.target.nextSibling.style.display = 'flex';
+                      }}
+                    />
+                  ) : null}
+                  <FontAwesomeIcon icon={faUserCircle} className={user?.profileImage ? 'hidden' : ''} />
                 </div>
                 <span className="text-sm font-medium text-gray-700">
                   {user ? user.name : "Guest"}

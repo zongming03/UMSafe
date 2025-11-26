@@ -5,6 +5,35 @@ import sendEmail from '../utils/sendEmail.js';
 import { HOSTNAME } from '../config/urlConfig.js';
 import axios from 'axios';
 
+// Helper function to notify all admins about new complaints
+const notifyAdminsNewComplaint = async (complaintId, complaintTitle, facultyId = null) => {
+  try {
+    // Fetch all admins (and officers if needed)
+    const query = facultyId ? { facultyid: facultyId, role: { $in: ['admin', 'officer'] } } : { role: { $in: ['admin', 'officer'] } };
+    const admins = await User.find(query);
+    
+    const complaintUrl = `${HOSTNAME}/complaints/${complaintId}`;
+    
+    for (const admin of admins) {
+      // Only send if admin has email notifications enabled
+      if (admin.notifications?.emailNotifications !== false) {
+        const subject = `New Complaint Submitted: ${complaintId}`;
+        const text = `Hello ${admin.name},\n\nA new complaint has been submitted and requires attention.\n\nComplaint ID: ${complaintId}\nTitle: ${complaintTitle}\n\nYou can view the complaint here: ${complaintUrl}\n\nRegards,\nUMSafe`;
+        const html = `<p>Hello ${admin.name},</p><p>A new complaint has been submitted and requires attention.</p><div style="background:#f8f9fa;padding:15px;border-left:4px solid #3498db;margin:20px 0;border-radius:6px;"><p><strong>Complaint ID:</strong> ${complaintId}</p><p><strong>Title:</strong> ${complaintTitle}</p></div><p><a href="${complaintUrl}" style="display:inline-block;background:#3498db;color:#fff;padding:12px 20px;text-decoration:none;border-radius:5px;font-weight:bold;">View Complaint</a></p><p>Regards,<br/>UMSafe</p>`;
+        
+        try {
+          await sendEmail({ to: admin.email, subject, text, html });
+          console.log(`📧 New complaint notification sent to ${admin.email}`);
+        } catch (emailErr) {
+          console.warn(`Failed to send new complaint email to ${admin.email}:`, emailErr.message);
+        }
+      }
+    }
+  } catch (error) {
+    console.error('Error notifying admins about new complaint:', error);
+  }
+};
+
 const getAllComplaints = async (req, res) => {
   try {
     const complaints = await Report.find().populate('category_id').populate('user_id');
@@ -36,18 +65,40 @@ const updateComplaintStatus = async (req, res) => {
       const newStatus = req.body.status?.toLowerCase();
       const reportId = req.params.id;
       
-      // Get the assigned admin before status change for notification
+      // Get the assigned admin and previous status before status change for notification
       let assignedAdmin = null;
+      let previousStatus = null;
+      let reportTitle = null;
       try {
         const currentReport = await axios.get(`http://localhost:5000/admin/reports/${reportId}`, {
           headers: { 'Authorization': req.headers.authorization || '' }
         });
         const adminId = currentReport.data.report?.adminId;
+        previousStatus = currentReport.data.report?.status?.toLowerCase();
+        reportTitle = currentReport.data.report?.title;
         if (adminId) {
           assignedAdmin = await User.findById(adminId);
         }
       } catch (err) {
         console.warn('Could not fetch assigned admin:', err.message);
+      }
+      
+      // Check if complaint is being reopened (from Resolved/Closed to Open/InProgress)
+      const isReopened = (previousStatus === 'resolved' || previousStatus === 'closed') && 
+                         (newStatus === 'open' || newStatus === 'opened' || newStatus === 'inprogress' || newStatus === 'in progress');
+      
+      if (isReopened && assignedAdmin && assignedAdmin.notifications?.emailNotifications) {
+        const complaintUrl = `${HOSTNAME}/complaints/${reportId}`;
+        const subject = `Complaint ${reportId} has been reopened`;
+        const text = `Hello ${assignedAdmin.name},\n\nThe complaint #${reportId} that was previously ${previousStatus} has been reopened.\n\nYou can view the complaint here: ${complaintUrl}\n\nRegards,\nUMSafe`;
+        const html = `<p>Hello ${assignedAdmin.name},</p><p>The complaint <strong>#${reportId}</strong> that was previously <strong>${previousStatus}</strong> has been <strong>reopened</strong>.</p><p><a href="${complaintUrl}">View complaint</a></p><p>Regards,<br/>UMSafe</p>`;
+        
+        try {
+          await sendEmail({ to: assignedAdmin.email, subject, text, html });
+          console.log(`📧 Reopened complaint email sent to ${assignedAdmin.email}`);
+        } catch (emailErr) {
+          console.warn('Failed to send reopened complaint email:', emailErr.message);
+        }
       }
       
       // For "Resolved" or "Closed", use PATCH endpoints
@@ -133,6 +184,10 @@ const updateComplaintStatus = async (req, res) => {
     }
 
     // Original MongoDB-based logic for local complaints
+    // Get previous status before update
+    const oldComplaint = await Report.findById(req.params.id);
+    const previousStatus = oldComplaint?.status?.toLowerCase();
+    
     const complaint = await Report.findByIdAndUpdate(
       req.params.id,
       { status: req.body.status, updated_at: Date.now() },
@@ -141,6 +196,28 @@ const updateComplaintStatus = async (req, res) => {
     
     if (!complaint) {
       return res.status(404).json({ message: 'Complaint not found' });
+    }
+    
+    // Check if complaint is being reopened
+    const newStatus = req.body.status?.toLowerCase();
+    const isReopened = (previousStatus === 'resolved' || previousStatus === 'closed') && 
+                       (newStatus === 'open' || newStatus === 'in progress');
+    
+    if (isReopened && complaint.admin_id) {
+      const admin = await User.findById(complaint.admin_id);
+      if (admin && admin.notifications?.emailNotifications) {
+        const complaintUrl = `${HOSTNAME}/complaints/${complaint._id}`;
+        const subject = `Complaint ${complaint._id} has been reopened`;
+        const text = `Hello ${admin.name},\n\nThe complaint #${complaint._id} that was previously ${previousStatus} has been reopened.\n\nYou can view the complaint here: ${complaintUrl}\n\nRegards,\nUMSafe`;
+        const html = `<p>Hello ${admin.name},</p><p>The complaint <strong>#${complaint._id}</strong> that was previously <strong>${previousStatus}</strong> has been <strong>reopened</strong>.</p><p><a href="${complaintUrl}">View complaint</a></p><p>Regards,<br/>UMSafe</p>`;
+        
+        try {
+          await sendEmail({ to: admin.email, subject, text, html });
+          console.log(`📧 Reopened complaint email sent to ${admin.email}`);
+        } catch (emailErr) {
+          console.warn('Failed to send reopened complaint email:', emailErr.message);
+        }
+      }
     }
     
     const notifyUser = async (userRef, roleLabel) => {
@@ -329,9 +406,32 @@ const assignComplaint = async (req, res) => {
   }
 };
 
+// Webhook endpoint for new complaint notifications from partner API
+const handleNewComplaintWebhook = async (req, res) => {
+  try {
+    const { complaintId, title, facultyId } = req.body;
+    
+    if (!complaintId || !title) {
+      return res.status(400).json({ message: 'Missing required fields: complaintId, title' });
+    }
+    
+    console.log(`📬 New complaint webhook received: ${complaintId}`);
+    
+    // Notify all admins
+    await notifyAdminsNewComplaint(complaintId, title, facultyId);
+    
+    res.status(200).json({ message: 'Notification sent successfully' });
+  } catch (error) {
+    console.error('Error handling new complaint webhook:', error);
+    res.status(500).json({ message: error.message });
+  }
+};
+
 export default {
   getAllComplaints,
   getComplaintById,
   updateComplaintStatus,
-  assignComplaint
+  assignComplaint,
+  handleNewComplaintWebhook,
+  notifyAdminsNewComplaint
 };

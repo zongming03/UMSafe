@@ -43,6 +43,8 @@ const RoomManagement = () => {
   const [newRoom, setNewRoom] = useState({
     building: "",
     roomName: "",
+    latitude: "",
+    longitude: "",
   });
   const [userFacultyName, setUserFacultyName] = useState("");
   const [userFacultyId, setUserFacultyId] = useState("");
@@ -155,6 +157,8 @@ const RoomManagement = () => {
     setNewRoom({
       building: "",
       roomName: "",
+      latitude: "",
+      longitude: "",
     });
   };
 
@@ -252,14 +256,16 @@ const RoomManagement = () => {
       const facultyId = userFacultyId; 
       const blockName = newRoom.building;
       const roomName = newRoom.roomName;
+      const latitude = parseFloat(newRoom.latitude);
+      const longitude = parseFloat(newRoom.longitude);
 
-      if (!facultyId || !blockName || !roomName) {
-        setError("Please fill in all fields.");
+      if (!facultyId || !blockName || !roomName || isNaN(latitude) || isNaN(longitude)) {
+        setError("Please fill in all fields with valid values.");
         setIsLoading(false);
         return;
       }
 
-      const res = await addRoom({ facultyId, blockName, roomName });
+      const res = await addRoom({ facultyId, blockName, roomName, latitude, longitude });
 
       if (res && (res.status === 200 || res.status === 201)) {
         await fetchAndSetRooms();
@@ -282,14 +288,19 @@ const RoomManagement = () => {
     e.preventDefault();
     setIsLoading(true);
 
+    const latitude = parseFloat(currentRoom.latitude);
+    const longitude = parseFloat(currentRoom.longitude);
+
     if (
       !currentRoom ||
       !currentRoom.roomName ||
       currentRoom.roomName.trim() === "" ||
       !currentRoom.building ||
-      currentRoom.building.trim() === ""
+      currentRoom.building.trim() === "" ||
+      isNaN(latitude) ||
+      isNaN(longitude)
     ) {
-      setError("Block and Room name cannot be empty.");
+      setError("Block, Room name, Latitude, and Longitude are required and must be valid.");
       setIsLoading(false);
       return;
     }
@@ -302,6 +313,8 @@ const RoomManagement = () => {
       const res = await editRoom(facultyId, blockId, roomId, {
         newBlockName: currentRoom.building,
         newRoomName: currentRoom.roomName,
+        latitude,
+        longitude,
       });
 
       if (res && (res.status === 200 || res.status === 201)) {
@@ -491,6 +504,24 @@ const RoomManagement = () => {
                       </th>
                       <th
                         scope="col"
+                        className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer"
+                        onClick={() => handleSort("latitude")}
+                      >
+                        <div className="flex items-center">
+                          Latitude {getSortIcon("latitude")}
+                        </div>
+                      </th>
+                      <th
+                        scope="col"
+                        className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer"
+                        onClick={() => handleSort("longitude")}
+                      >
+                        <div className="flex items-center">
+                          Longitude {getSortIcon("longitude")}
+                        </div>
+                      </th>
+                      <th
+                        scope="col"
                         className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider"
                       >
                         Actions
@@ -521,6 +552,12 @@ const RoomManagement = () => {
                           <td className="px-1 py-4 whitespace-nowrap text-sm text-gray-900">
                             {room.roomName}
                           </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {room.latitude || 'N/A'}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {room.longitude || 'N/A'}
+                          </td>
                           <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                             <div className="flex justify-end space-x-3">
                               <button
@@ -546,7 +583,7 @@ const RoomManagement = () => {
                     ) : (
                       <tr>
                         <td
-                          colSpan={5}
+                          colSpan={7}
                           className="px-6 py-10 text-center text-gray-500"
                         >
                           <FontAwesomeIcon

@@ -174,9 +174,9 @@ const Dashboard = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [complaints, setComplaints] = useState([
-    // Page 1 complaints
     {
-      id: "CMP-1093",
+      id: "019a926d-e235-710f-a590-735375474e5f",
+      displayId: "RPT-202511-1",
       userId: "0199d751-fbb6-742e-b052-e4a05b2d57bc",
       username: "Testing1.",
       adminId: "68af04187c2e6f499854e2da",
@@ -184,8 +184,7 @@ const Dashboard = () => {
       facultyid: "6915cd5e4297c05ff2598c55",
       status: "Opened",
       title: "Dirty Classroom Floor",
-      description:
-        "The classroom floor has not been cleaned for days. There are food wrappers and dust everywhere.",
+      description: "The classroom floor has not been cleaned for days. There are food wrappers and dust everywhere.",
       category: { name: "Cleanliness", priority: "Low" },
       media: [
         "https://images.unsplash.com/photo-1581578731548-c64695cc6952?w=800&q=80",
@@ -193,18 +192,34 @@ const Dashboard = () => {
       ],
       timelineHistory: [
         {
-          id: "CMP-1093-evt-1",
+          id: "019a926d-e235-710f-a590-735375474e5f-evt-1",
+          reportId: "019a926d-e235-710f-a590-735375474e5f",
           actionTitle: "Report Submitted",
           actionDetails: "Complaint submitted by user Testing1.",
           initiator: "Testing1.",
           createdAt: "2025-10-23T15:59:35.599Z",
+          updatedAt: "2025-10-23T15:59:35.599Z",
+          version: 1,
         },
         {
-          id: "CMP-1093-evt-2",
-          actionTitle: "Status Updated",
-          actionDetails: "Status set to Opened.",
+          id: "019a926d-e235-710f-a590-735375474e5f-evt-2",
+          reportId: "019a926d-e235-710f-a590-735375474e5f",
+          actionTitle: "Admin Assigned",
+          actionDetails: "Admin Teoh Zong Ming assigned to complaint.",
           initiator: "System",
-          createdAt: "2025-10-23T15:59:36.000Z",
+          createdAt: "2025-10-23T16:05:00.000Z",
+          updatedAt: "2025-10-23T16:05:00.000Z",
+          version: 1,
+        },
+        {
+          id: "019a926d-e235-710f-a590-735375474e5f-evt-3",
+          reportId: "019a926d-e235-710f-a590-735375474e5f",
+          actionTitle: "Status Updated",
+          actionDetails: "Status changed to InProgress.",
+          initiator: "Teoh Zong Ming",
+          createdAt: "2025-10-23T16:05:01.000Z",
+          updatedAt: "2025-10-23T16:05:01.000Z",
+          version: 1,
         },
       ],
       latitude: 3.1271268,
@@ -222,40 +237,39 @@ const Dashboard = () => {
       version: 1,
     },
     {
-      id: "CMP-1094",
+      id: "019a926d-e235-710f-a590-735375474e60",
+      displayId: "RPT-202511-2",
       userId: "0199d751-fbb6-742e-b052-e4a05b2d57bc",
-      adminId: "null",
+      adminId: null,
       adminName: "Unassigned",
       facultyid: "6915cd5e4297c05ff2598c55",
-      status: "InProgress",
+      status: "Opened",
       title: "Student Harassment Incident",
-      description:
-        "Witnessed bullying behavior in the cafeteria during lunch hour. Multiple students involved.",
+      description: "Witnessed bullying behavior in the cafeteria during lunch hour. Multiple students involved.",
       category: { name: "Bullying", priority: "High" },
       media: [
         "https://images.unsplash.com/photo-1523050854058-8df90110c9f1?w=800&q=80",
       ],
       timelineHistory: [
         {
-          id: "CMP-1094-evt-1",
+          id: "019a926d-e235-710f-a590-735375474e60-evt-1",
+          reportId: "019a926d-e235-710f-a590-735375474e60",
           actionTitle: "Report Submitted",
           actionDetails: "Complaint submitted regarding bullying in cafeteria.",
-          initiator: "User",
+          initiator: "Testing1.",
           createdAt: "2025-10-22T16:07:10.441Z",
+          updatedAt: "2025-10-22T16:07:10.441Z",
+          version: 1,
         },
         {
-          id: "CMP-1094-evt-2",
-          actionTitle: "Admin Assigned",
-          actionDetails: "Admin oiiae assigned to complaint.",
-          initiator: "System",
-          createdAt: "2025-10-22T17:00:10.441Z",
-        },
-        {
-          id: "CMP-1094-evt-3",
+          id: "019a926d-e235-710f-a590-735375474e60-evt-2",
+          reportId: "019a926d-e235-710f-a590-735375474e60",
           actionTitle: "Status Updated",
-          actionDetails: "Status changed to InProgress.",
-          initiator: "oiiae",
-          createdAt: "2025-10-23T14:57:36.534Z",
+          actionDetails: "Status set to Opened.",
+          initiator: "System",
+          createdAt: "2025-10-22T16:07:11.000Z",
+          updatedAt: "2025-10-22T16:07:11.000Z",
+          version: 1,
         },
       ],
       latitude: 3.12719,
@@ -273,15 +287,15 @@ const Dashboard = () => {
       version: 2,
     },
     {
-      id: "CMP-1095",
+      id: "019a926d-e235-710f-a590-735375474e61",
+      displayId: "RPT-202511-3",
       userId: "0199d751-fbb6-742e-b052-e4a05b2d57bc",
-      adminId: "null",
+      adminId: null,
       adminName: "Unassigned",
       facultyid: "6915cd5e4297c05ff2598c55",
       status: "Opened",
       title: "Overflowing Trash Bins",
-      description:
-        "Trash bins near the library entrance are overflowing. Bad smell and attracting flies.",
+      description: "Trash bins near the library entrance are overflowing. Bad smell and attracting flies.",
       category: { name: "Cleanliness", priority: "Low" },
       media: [
         "https://images.unsplash.com/photo-1532996122724-e3c354a0b15b?w=800&q=80",
@@ -289,19 +303,24 @@ const Dashboard = () => {
       ],
       timelineHistory: [
         {
-          id: "CMP-1095-evt-1",
+          id: "019a926d-e235-710f-a590-735375474e61-evt-1",
+          reportId: "019a926d-e235-710f-a590-735375474e61",
           actionTitle: "Report Submitted",
-          actionDetails:
-            "Overflowing trash bins reported near library entrance.",
-          initiator: "User",
+          actionDetails: "Overflowing trash bins reported near library entrance.",
+          initiator: "Testing1.",
           createdAt: "2025-10-22T16:02:30.647Z",
+          updatedAt: "2025-10-22T16:02:30.647Z",
+          version: 1,
         },
         {
-          id: "CMP-1095-evt-2",
+          id: "019a926d-e235-710f-a590-735375474e61-evt-2",
+          reportId: "019a926d-e235-710f-a590-735375474e61",
           actionTitle: "Status Updated",
           actionDetails: "Status set to Opened.",
           initiator: "System",
           createdAt: "2025-10-22T16:02:31.000Z",
+          updatedAt: "2025-10-22T16:02:31.000Z",
+          version: 1,
         },
       ],
       latitude: 3.12719,
@@ -319,33 +338,39 @@ const Dashboard = () => {
       version: 1,
     },
     {
-      id: "CMP-1096",
+      id: "019a926d-e235-710f-a590-735375474e62",
+      displayId: "RPT-202511-4",
       userId: "testing",
-      adminId: "null",
+      adminId: null,
       adminName: "Unassigned",
       facultyid: "6915cd5e4297c05ff2598c55",
       status: "Opened",
       title: "Graffiti on Wall",
-      description:
-        "Graffiti spotted near the main entrance of the lecture hall. Contains inappropriate content.",
+      description: "Graffiti spotted near the main entrance of the lecture hall. Contains inappropriate content.",
       category: { name: "Vandalism", priority: "Medium" },
       media: [
         "https://images.unsplash.com/photo-1604509988450-70f2e6827eb6?w=800&q=80",
       ],
       timelineHistory: [
         {
-          id: "CMP-1096-evt-1",
+          id: "019a926d-e235-710f-a590-735375474e62-evt-1",
+          reportId: "019a926d-e235-710f-a590-735375474e62",
           actionTitle: "Report Submitted",
           actionDetails: "Graffiti reported at lecture hall entrance.",
           initiator: "testing",
           createdAt: "2025-06-14T12:15:00.000Z",
+          updatedAt: "2025-06-14T12:15:00.000Z",
+          version: 1,
         },
         {
-          id: "CMP-1096-evt-2",
+          id: "019a926d-e235-710f-a590-735375474e62-evt-2",
+          reportId: "019a926d-e235-710f-a590-735375474e62",
           actionTitle: "Status Updated",
           actionDetails: "Status set to Opened.",
           initiator: "System",
           createdAt: "2025-06-14T12:15:05.000Z",
+          updatedAt: "2025-06-14T12:15:05.000Z",
+          version: 1,
         },
       ],
       latitude: 0,
@@ -362,40 +387,59 @@ const Dashboard = () => {
       version: 1,
     },
     {
-      id: "CMP-1097",
+      id: "019a926d-e235-710f-a590-735375474e63",
+      displayId: "RPT-202511-5",
       userId: "0199d751-fbb6-742e-b052-e4a05b2d57bc",
       adminId: "68af04187c2e6f499854e2da",
       adminName: "Teoh Zong Ming",
       facultyid: "6915cd5e4297c05ff2598c55",
       status: "Resolved",
       title: "Broken Window in Lecture Hall",
-      description:
-        "Window on the third floor is cracked and poses safety risk. Needs immediate attention.",
+      description: "Window on the third floor is cracked and poses safety risk. Needs immediate attention.",
       category: { name: "Cleanliness", priority: "Low" },
       media: [
         "https://images.unsplash.com/photo-1497366754035-f200968a6e72?w=800&q=80",
       ],
       timelineHistory: [
         {
-          id: "CMP-1097-evt-1",
+          id: "019a926d-e235-710f-a590-735375474e63-evt-1",
+          reportId: "019a926d-e235-710f-a590-735375474e63",
           actionTitle: "Report Submitted",
           actionDetails: "Broken window reported in lecture hall.",
-          initiator: "User",
+          initiator: "Testing1.",
           createdAt: "2025-10-20T14:59:08.106Z",
+          updatedAt: "2025-10-20T14:59:08.106Z",
+          version: 1,
         },
         {
-          id: "CMP-1097-evt-2",
+          id: "019a926d-e235-710f-a590-735375474e63-evt-2",
+          reportId: "019a926d-e235-710f-a590-735375474e63",
           actionTitle: "Admin Assigned",
-          actionDetails: "Admin oiiae assigned to complaint.",
+          actionDetails: "Admin Teoh Zong Ming assigned to complaint.",
           initiator: "System",
           createdAt: "2025-10-20T15:10:08.106Z",
+          updatedAt: "2025-10-20T15:10:08.106Z",
+          version: 1,
         },
         {
-          id: "CMP-1097-evt-3",
+          id: "019a926d-e235-710f-a590-735375474e63-evt-3",
+          reportId: "019a926d-e235-710f-a590-735375474e63",
+          actionTitle: "Status Updated",
+          actionDetails: "Status changed to InProgress.",
+          initiator: "Teoh Zong Ming",
+          createdAt: "2025-10-20T15:10:09.000Z",
+          updatedAt: "2025-10-20T15:10:09.000Z",
+          version: 1,
+        },
+        {
+          id: "019a926d-e235-710f-a590-735375474e63-evt-4",
+          reportId: "019a926d-e235-710f-a590-735375474e63",
           actionTitle: "Status Updated",
           actionDetails: "Status changed to Resolved.",
-          initiator: "oiiae",
+          initiator: "Teoh Zong Ming",
           createdAt: "2025-10-20T15:50:33.823Z",
+          updatedAt: "2025-10-20T15:50:33.823Z",
+          version: 1,
         },
       ],
       latitude: 3.1271286,
@@ -413,33 +457,49 @@ const Dashboard = () => {
       version: 9,
     },
     {
-      id: "CMP-1098",
+      id: "019a926d-e235-710f-a590-735375474e64",
+      displayId: "RPT-202511-6",
       userId: "0199d751-fbb6-742e-b052-e4a05b2d57bc",
       adminId: "68af04187c2e6f499854e2da",
       adminName: "Teoh Zong Ming",
       facultyid: "6915cd5e4297c05ff2598c55",
       status: "Opened",
       title: "Stained Carpet in Study Area",
-      description:
-        "Large stain on carpet in the main study area. Looks like coffee spill that was never cleaned properly.",
+      description: "Large stain on carpet in the main study area. Looks like coffee spill that was never cleaned properly.",
       category: { name: "Cleanliness", priority: "Low" },
       media: [
         "https://images.unsplash.com/photo-1497366811353-6870744d04b2?w=800&q=80",
       ],
       timelineHistory: [
         {
-          id: "CMP-1098-evt-1",
+          id: "019a926d-e235-710f-a590-735375474e64-evt-1",
+          reportId: "019a926d-e235-710f-a590-735375474e64",
           actionTitle: "Report Submitted",
           actionDetails: "Carpet stain reported in study area.",
-          initiator: "User",
+          initiator: "Testing1.",
           createdAt: "2025-10-18T13:52:48.107Z",
+          updatedAt: "2025-10-18T13:52:48.107Z",
+          version: 1,
         },
         {
-          id: "CMP-1098-evt-2",
-          actionTitle: "Status Updated",
-          actionDetails: "Status set to Opened.",
+          id: "019a926d-e235-710f-a590-735375474e64-evt-2",
+          reportId: "019a926d-e235-710f-a590-735375474e64",
+          actionTitle: "Admin Assigned",
+          actionDetails: "Admin Teoh Zong Ming assigned to complaint.",
           initiator: "System",
-          createdAt: "2025-10-18T13:52:49.000Z",
+          createdAt: "2025-10-18T14:00:00.000Z",
+          updatedAt: "2025-10-18T14:00:00.000Z",
+          version: 1,
+        },
+        {
+          id: "019a926d-e235-710f-a590-735375474e64-evt-3",
+          reportId: "019a926d-e235-710f-a590-735375474e64",
+          actionTitle: "Status Updated",
+          actionDetails: "Status changed to InProgress.",
+          initiator: "Teoh Zong Ming",
+          createdAt: "2025-10-18T14:00:01.000Z",
+          updatedAt: "2025-10-18T14:00:01.000Z",
+          version: 1,
         },
       ],
       latitude: 3.1271274,
@@ -457,15 +517,15 @@ const Dashboard = () => {
       version: 1,
     },
     {
-      id: "CMP-1099",
+      id: "019a926d-e235-710f-a590-735375474e65",
+      displayId: "RPT-202511-7",
       userId: "0199d751-fbb6-742e-b052-e4a05b2d57bc",
       adminId: "68af04187c2e6f499854e2da",
       adminName: "Teoh Zong Ming",
       facultyid: "6915cd5e4297c05ff2598c55",
       status: "Resolved",
       title: "Cheating During Exam",
-      description:
-        "Witnessed student using unauthorized materials during final examination. Multiple instances observed.",
+      description: "Witnessed student using unauthorized materials during final examination. Multiple instances observed.",
       category: { name: "Academic Misconduct", priority: "High" },
       media: [
         "https://images.unsplash.com/photo-1434030216411-0b793f4b4173?w=800&q=80",
@@ -473,32 +533,54 @@ const Dashboard = () => {
       ],
       timelineHistory: [
         {
-          id: "CMP-1099-evt-1",
+          id: "019a926d-e235-710f-a590-735375474e65-evt-1",
+          reportId: "019a926d-e235-710f-a590-735375474e65",
           actionTitle: "Report Submitted",
           actionDetails: "Academic misconduct reported during exam.",
-          initiator: "User",
+          initiator: "Testing1.",
           createdAt: "2025-10-12T13:28:06.371Z",
+          updatedAt: "2025-10-12T13:28:06.371Z",
+          version: 1,
         },
         {
-          id: "CMP-1099-evt-2",
+          id: "019a926d-e235-710f-a590-735375474e65-evt-2",
+          reportId: "019a926d-e235-710f-a590-735375474e65",
           actionTitle: "Admin Assigned",
-          actionDetails: "Admin qwe1 assigned to complaint.",
+          actionDetails: "Admin Teoh Zong Ming assigned to complaint.",
           initiator: "System",
           createdAt: "2025-10-12T14:00:06.371Z",
+          updatedAt: "2025-10-12T14:00:06.371Z",
+          version: 1,
         },
         {
-          id: "CMP-1099-evt-3",
+          id: "019a926d-e235-710f-a590-735375474e65-evt-3",
+          reportId: "019a926d-e235-710f-a590-735375474e65",
+          actionTitle: "Status Updated",
+          actionDetails: "Status changed to InProgress.",
+          initiator: "Teoh Zong Ming",
+          createdAt: "2025-10-12T14:00:07.000Z",
+          updatedAt: "2025-10-12T14:00:07.000Z",
+          version: 1,
+        },
+        {
+          id: "019a926d-e235-710f-a590-735375474e65-evt-4",
+          reportId: "019a926d-e235-710f-a590-735375474e65",
           actionTitle: "Status Updated",
           actionDetails: "Status changed to Resolved.",
-          initiator: "qwe1",
+          initiator: "Teoh Zong Ming",
           createdAt: "2025-10-13T16:59:48.850Z",
+          updatedAt: "2025-10-13T16:59:48.850Z",
+          version: 1,
         },
         {
-          id: "CMP-1099-evt-4",
+          id: "019a926d-e235-710f-a590-735375474e65-evt-5",
+          reportId: "019a926d-e235-710f-a590-735375474e65",
           actionTitle: "Feedback Provided",
           actionDetails: "User submitted feedback after resolution.",
-          initiator: "User",
+          initiator: "Testing1.",
           createdAt: "2025-10-13T17:10:00.000Z",
+          updatedAt: "2025-10-13T17:10:00.000Z",
+          version: 1,
         },
       ],
       latitude: 3.1271261,
@@ -1239,6 +1321,7 @@ const Dashboard = () => {
                   complaints={filteredComplaints}
                   onStatusChange={handleKanbanMove}
                   onCardClick={navigateToComplaint}
+                  adminsMap={adminsMap}
                 />
               </div>
             )}
@@ -1419,7 +1502,7 @@ const Dashboard = () => {
                         <th 
                           scope="col" 
                           className="complaint-table-thread cursor-pointer hover:bg-gray-100 select-none"
-                          onClick={() => handleSort('id')}
+                          onClick={() => handleSort('displayId')}
                         >
                           <div className="flex items-center justify-between">
                             <span>ID</span>
@@ -1464,7 +1547,7 @@ const Dashboard = () => {
                           onClick={() => navigateToComplaint(complaint)}
                         >
                           <td className="complaint-table-row-id">
-                            {complaint.id}
+                            {complaint.displayId}
                           </td>
                           {(() => {
                             // Subject (truncated)

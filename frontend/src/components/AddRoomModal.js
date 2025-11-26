@@ -54,6 +54,38 @@ const AddRoomModal = ({ isOpen, onClose, onSubmit, newRoom, setNewRoom }) => {
                     />
                   </div>
                 </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label htmlFor="latitude" className="block text-sm font-medium text-gray-700">
+                      Latitude
+                    </label>
+                    <input
+                      type="number"
+                      id="latitude"
+                      step="any"
+                      value={newRoom.latitude}
+                      onChange={(e) => setNewRoom({ ...newRoom, latitude: e.target.value })}
+                      className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                      placeholder="e.g., 3.1234"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="longitude" className="block text-sm font-medium text-gray-700">
+                      Longitude
+                    </label>
+                    <input
+                      type="number"
+                      id="longitude"
+                      step="any"
+                      value={newRoom.longitude}
+                      onChange={(e) => setNewRoom({ ...newRoom, longitude: e.target.value })}
+                      className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                      placeholder="e.g., 101.5678"
+                      required
+                    />
+                  </div>
+                </div>
               </div>
             </div>
             <div className="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">

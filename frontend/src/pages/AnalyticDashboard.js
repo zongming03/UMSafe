@@ -37,13 +37,20 @@ import { faStar as faStarSolid, faStarHalfAlt } from "@fortawesome/free-solid-sv
 
 function App() {
   const { user } = useContext(AuthContext);
-  // Helpers to compute a default date range: from 1 month before today to today
+  
+  // ============================================================================
+  // UTILITY FUNCTIONS
+  // ============================================================================
+  
+  // Helper to format dates as YYYY-MM-DD
   const formatDate = (d) => {
     const yyyy = d.getFullYear();
     const mm = String(d.getMonth() + 1).padStart(2, "0");
     const dd = String(d.getDate()).padStart(2, "0");
     return `${yyyy}-${mm}-${dd}`;
   };
+  
+  // Compute default date range: 1 month before today to today
   const getDefaultDateRange = () => {
     const today = new Date();
     const from = new Date(today);
@@ -52,25 +59,62 @@ function App() {
   };
 
   
-  // Temporary: force analytics to use local mock data for ALL modules (no API).
-  // Flip this to false later to enable backend fetching again.
+  // ============================================================================
+  // MOCK DATA & CONFIGURATION
+  // ============================================================================
+  
+  // Force analytics to use local mock data (set to false to enable backend API)
   const USE_MOCK_ANALYTICS = true;
 
-  // Local fallback data for development only; real data comes from router state.
+  // Development mock complaints data
   const DEV_MOCK_COMPLAINTS = [
     {
-      id: "CMP-1093",
+      id: "019a926d-e235-710f-a590-735375474e5f",
+      displayId: "RPT-202511-1",
       userId: "0199d751-fbb6-742e-b052-e4a05b2d57bc",
       username: "Testing1.",
       adminId: "68af04187c2e6f499854e2da",
-      adminName: "Unassigned",
+      adminName: "Teoh Zong Ming",
+      facultyid: "6915cd5e4297c05ff2598c55",
       status: "Opened",
-      title: "Testing username",
-      description: "New name",
+      title: "Dirty Classroom Floor",
+      description: "The classroom floor has not been cleaned for days. There are food wrappers and dust everywhere.",
       category: { name: "Cleanliness", priority: "Low" },
       media: [
-        "https://res.cloudinary.com/dcv38gpis/video/upload/v1761235173/reports/019a11cb-f3b4-73ea-a2d2-12fdd76f687f.mp4",
-        "https://res.cloudinary.com/dcv38gpis/video/upload/v1761235173/reports/019a11cb-f40c-71aa-bc70-6fd25718bfe0.mp4",
+        "https://images.unsplash.com/photo-1581578731548-c64695cc6952?w=800&q=80",
+        "https://images.unsplash.com/photo-1584622650111-993a426fbf0a?w=800&q=80",
+      ],
+      timelineHistory: [
+        {
+          id: "019a926d-e235-710f-a590-735375474e5f-evt-1",
+          reportId: "019a926d-e235-710f-a590-735375474e5f",
+          actionTitle: "Report Submitted",
+          actionDetails: "Complaint submitted by user Testing1.",
+          initiator: "Testing1.",
+          createdAt: "2025-10-23T15:59:35.599Z",
+          updatedAt: "2025-10-23T15:59:35.599Z",
+          version: 1,
+        },
+        {
+          id: "019a926d-e235-710f-a590-735375474e5f-evt-2",
+          reportId: "019a926d-e235-710f-a590-735375474e5f",
+          actionTitle: "Admin Assigned",
+          actionDetails: "Admin Teoh Zong Ming assigned to complaint.",
+          initiator: "System",
+          createdAt: "2025-10-23T16:05:00.000Z",
+          updatedAt: "2025-10-23T16:05:00.000Z",
+          version: 1,
+        },
+        {
+          id: "019a926d-e235-710f-a590-735375474e5f-evt-3",
+          reportId: "019a926d-e235-710f-a590-735375474e5f",
+          actionTitle: "Status Updated",
+          actionDetails: "Status changed to InProgress.",
+          initiator: "Teoh Zong Ming",
+          createdAt: "2025-10-23T16:05:01.000Z",
+          updatedAt: "2025-10-23T16:05:01.000Z",
+          version: 1,
+        },
       ],
       latitude: 3.1271268,
       longitude: 101.6349605,
@@ -87,15 +131,40 @@ function App() {
       version: 1,
     },
     {
-      id: "CMP-1094",
+      id: "019a926d-e235-710f-a590-735375474e60",
+      displayId: "RPT-202511-2",
       userId: "0199d751-fbb6-742e-b052-e4a05b2d57bc",
-      adminId: "oiiae",
-      status: "InProgress",
-      title: "Kk",
-      description: "Ok",
+      adminId: null,
+      adminName: "Unassigned",
+      facultyid: "6915cd5e4297c05ff2598c55",
+      status: "Opened",
+      title: "Student Harassment Incident",
+      description: "Witnessed bullying behavior in the cafeteria during lunch hour. Multiple students involved.",
       category: { name: "Bullying", priority: "High" },
       media: [
-        "https://res.cloudinary.com/dcv38gpis/video/upload/v1761149227/reports/019a0cac-840a-73e1-b12d-3ab2393a4abf.mp4",
+        "https://images.unsplash.com/photo-1523050854058-8df90110c9f1?w=800&q=80",
+      ],
+      timelineHistory: [
+        {
+          id: "019a926d-e235-710f-a590-735375474e60-evt-1",
+          reportId: "019a926d-e235-710f-a590-735375474e60",
+          actionTitle: "Report Submitted",
+          actionDetails: "Complaint submitted regarding bullying in cafeteria.",
+          initiator: "Testing1.",
+          createdAt: "2025-10-22T16:07:10.441Z",
+          updatedAt: "2025-10-22T16:07:10.441Z",
+          version: 1,
+        },
+        {
+          id: "019a926d-e235-710f-a590-735375474e60-evt-2",
+          reportId: "019a926d-e235-710f-a590-735375474e60",
+          actionTitle: "Status Updated",
+          actionDetails: "Status set to Opened.",
+          initiator: "System",
+          createdAt: "2025-10-22T16:07:11.000Z",
+          updatedAt: "2025-10-22T16:07:11.000Z",
+          version: 1,
+        },
       ],
       latitude: 3.12719,
       longitude: 101.634895,
@@ -106,22 +175,47 @@ function App() {
       },
       isAnonymous: false,
       isFeedbackProvided: false,
-      chatroomId: "",
+      chatroomId: "FAKE-ROOM-1094",
       createdAt: "2025-10-22T16:07:10.441Z",
       updatedAt: "2025-10-23T14:57:36.534Z",
       version: 2,
     },
     {
-      id: "CMP-1095",
+      id: "019a926d-e235-710f-a590-735375474e61",
+      displayId: "RPT-202511-3",
       userId: "0199d751-fbb6-742e-b052-e4a05b2d57bc",
-      adminId: "Unassigned",
+      adminId: null,
+      adminName: "Unassigned",
+      facultyid: "6915cd5e4297c05ff2598c55",
       status: "Opened",
-      title: "Testing video ",
-      description: "Video testing",
+      title: "Overflowing Trash Bins",
+      description: "Trash bins near the library entrance are overflowing. Bad smell and attracting flies.",
       category: { name: "Cleanliness", priority: "Low" },
       media: [
-        "https://res.cloudinary.com/dcv38gpis/image/upload/v1761148942/reports/019a0ca8-27ab-757d-a4f4-5f2dd76ec559.jpg",
-        "https://res.cloudinary.com/dcv38gpis/video/upload/v1761148947/reports/019a0ca8-4442-739e-937f-e6539a96135a.mp4",
+        "https://images.unsplash.com/photo-1532996122724-e3c354a0b15b?w=800&q=80",
+        "https://images.unsplash.com/photo-1604187351574-c75ca79f5807?w=800&q=80",
+      ],
+      timelineHistory: [
+        {
+          id: "019a926d-e235-710f-a590-735375474e61-evt-1",
+          reportId: "019a926d-e235-710f-a590-735375474e61",
+          actionTitle: "Report Submitted",
+          actionDetails: "Overflowing trash bins reported near library entrance.",
+          initiator: "Testing1.",
+          createdAt: "2025-10-22T16:02:30.647Z",
+          updatedAt: "2025-10-22T16:02:30.647Z",
+          version: 1,
+        },
+        {
+          id: "019a926d-e235-710f-a590-735375474e61-evt-2",
+          reportId: "019a926d-e235-710f-a590-735375474e61",
+          actionTitle: "Status Updated",
+          actionDetails: "Status set to Opened.",
+          initiator: "System",
+          createdAt: "2025-10-22T16:02:31.000Z",
+          updatedAt: "2025-10-22T16:02:31.000Z",
+          version: 1,
+        },
       ],
       latitude: 3.12719,
       longitude: 101.634895,
@@ -138,16 +232,40 @@ function App() {
       version: 1,
     },
     {
-      id: "CMP-1096",
+      id: "019a926d-e235-710f-a590-735375474e62",
+      displayId: "RPT-202511-4",
       userId: "testing",
-      adminId: "Unassigned",
+      adminId: null,
+      adminName: "Unassigned",
+      facultyid: "6915cd5e4297c05ff2598c55",
       status: "Opened",
       title: "Graffiti on Wall",
-      description:
-        "Graffiti spotted near the main entrance of the lecture hall.",
+      description: "Graffiti spotted near the main entrance of the lecture hall. Contains inappropriate content.",
       category: { name: "Vandalism", priority: "Medium" },
       media: [
-        "https://res.cloudinary.com/example/image/upload/v1750655596/reports/graffiti.jpg",
+        "https://images.unsplash.com/photo-1604509988450-70f2e6827eb6?w=800&q=80",
+      ],
+      timelineHistory: [
+        {
+          id: "019a926d-e235-710f-a590-735375474e62-evt-1",
+          reportId: "019a926d-e235-710f-a590-735375474e62",
+          actionTitle: "Report Submitted",
+          actionDetails: "Graffiti reported at lecture hall entrance.",
+          initiator: "testing",
+          createdAt: "2025-06-14T12:15:00.000Z",
+          updatedAt: "2025-06-14T12:15:00.000Z",
+          version: 1,
+        },
+        {
+          id: "019a926d-e235-710f-a590-735375474e62-evt-2",
+          reportId: "019a926d-e235-710f-a590-735375474e62",
+          actionTitle: "Status Updated",
+          actionDetails: "Status set to Opened.",
+          initiator: "System",
+          createdAt: "2025-06-14T12:15:05.000Z",
+          updatedAt: "2025-06-14T12:15:05.000Z",
+          version: 1,
+        },
       ],
       latitude: 0,
       longitude: 0,
@@ -163,16 +281,60 @@ function App() {
       version: 1,
     },
     {
-      id: "CMP-1097",
+      id: "019a926d-e235-710f-a590-735375474e63",
+      displayId: "RPT-202511-5",
       userId: "0199d751-fbb6-742e-b052-e4a05b2d57bc",
-      adminId: "oiiae",
+      adminId: "68af04187c2e6f499854e2da",
+      adminName: "Teoh Zong Ming",
+      facultyid: "6915cd5e4297c05ff2598c55",
       status: "Resolved",
-      title:
-        "Testing to make this a really long title to see how will my UI render",
-      description: "Cooked",
+      title: "Broken Window in Lecture Hall",
+      description: "Window on the third floor is cracked and poses safety risk. Needs immediate attention.",
       category: { name: "Cleanliness", priority: "Low" },
       media: [
-        "https://res.cloudinary.com/dcv38gpis/image/upload/v1760972343/reports/019a0221-7750-70d1-8c53-19ede5b8d3f7.jpg",
+        "https://images.unsplash.com/photo-1497366754035-f200968a6e72?w=800&q=80",
+      ],
+      timelineHistory: [
+        {
+          id: "019a926d-e235-710f-a590-735375474e63-evt-1",
+          reportId: "019a926d-e235-710f-a590-735375474e63",
+          actionTitle: "Report Submitted",
+          actionDetails: "Broken window reported in lecture hall.",
+          initiator: "Testing1.",
+          createdAt: "2025-10-20T14:59:08.106Z",
+          updatedAt: "2025-10-20T14:59:08.106Z",
+          version: 1,
+        },
+        {
+          id: "019a926d-e235-710f-a590-735375474e63-evt-2",
+          reportId: "019a926d-e235-710f-a590-735375474e63",
+          actionTitle: "Admin Assigned",
+          actionDetails: "Admin Teoh Zong Ming assigned to complaint.",
+          initiator: "System",
+          createdAt: "2025-10-20T15:10:08.106Z",
+          updatedAt: "2025-10-20T15:10:08.106Z",
+          version: 1,
+        },
+        {
+          id: "019a926d-e235-710f-a590-735375474e63-evt-3",
+          reportId: "019a926d-e235-710f-a590-735375474e63",
+          actionTitle: "Status Updated",
+          actionDetails: "Status changed to InProgress.",
+          initiator: "Teoh Zong Ming",
+          createdAt: "2025-10-20T15:10:09.000Z",
+          updatedAt: "2025-10-20T15:10:09.000Z",
+          version: 1,
+        },
+        {
+          id: "019a926d-e235-710f-a590-735375474e63-evt-4",
+          reportId: "019a926d-e235-710f-a590-735375474e63",
+          actionTitle: "Status Updated",
+          actionDetails: "Status changed to Resolved.",
+          initiator: "Teoh Zong Ming",
+          createdAt: "2025-10-20T15:50:33.823Z",
+          updatedAt: "2025-10-20T15:50:33.823Z",
+          version: 1,
+        },
       ],
       latitude: 3.1271286,
       longitude: 101.6349525,
@@ -182,22 +344,67 @@ function App() {
         facultyBlockRoom: "Room 401",
       },
       isAnonymous: false,
-      isFeedbackProvided: false,
+      isFeedbackProvided: true,
       chatroomId: "019a0236-cdb6-74dc-878a-b6e675995c1d",
       createdAt: "2025-10-20T14:59:08.106Z",
       updatedAt: "2025-10-20T15:50:33.823Z",
       version: 9,
+      feedback: {
+        id: "019b0abc-aaaa-71f1-b100-123456789001",
+        reportId: "019a926d-e235-710f-a590-735375474e63",
+        q1Rating: 4,
+        q2Rating: 5,
+        overallComment: "Prompt fix. Window replaced quickly.",
+        createdAt: "2025-10-20T15:55:00.000Z",
+        updatedAt: "2025-10-20T15:55:00.000Z",
+        version: 1
+      },
     },
     {
-      id: "CMP-1098",
+      id: "019a926d-e235-710f-a590-735375474e64",
+      displayId: "RPT-202511-6",
       userId: "0199d751-fbb6-742e-b052-e4a05b2d57bc",
-      adminId: "Unassigned",
+      adminId: "68af04187c2e6f499854e2da",
+      adminName: "Teoh Zong Ming",
+      facultyid: "6915cd5e4297c05ff2598c55",
       status: "Opened",
-      title: "Yoasobi",
-      description: "Yoasobi supremacy",
+      title: "Stained Carpet in Study Area",
+      description: "Large stain on carpet in the main study area. Looks like coffee spill that was never cleaned properly.",
       category: { name: "Cleanliness", priority: "Low" },
       media: [
-        "https://res.cloudinary.com/dcv38gpis/image/upload/v1760795567/reports/0199f798-1949-730f-b730-628436f6e0cc.jpg",
+        "https://images.unsplash.com/photo-1497366811353-6870744d04b2?w=800&q=80",
+      ],
+      timelineHistory: [
+        {
+          id: "019a926d-e235-710f-a590-735375474e64-evt-1",
+          reportId: "019a926d-e235-710f-a590-735375474e64",
+          actionTitle: "Report Submitted",
+          actionDetails: "Carpet stain reported in study area.",
+          initiator: "Testing1.",
+          createdAt: "2025-10-18T13:52:48.107Z",
+          updatedAt: "2025-10-18T13:52:48.107Z",
+          version: 1,
+        },
+        {
+          id: "019a926d-e235-710f-a590-735375474e64-evt-2",
+          reportId: "019a926d-e235-710f-a590-735375474e64",
+          actionTitle: "Admin Assigned",
+          actionDetails: "Admin Teoh Zong Ming assigned to complaint.",
+          initiator: "System",
+          createdAt: "2025-10-18T14:00:00.000Z",
+          updatedAt: "2025-10-18T14:00:00.000Z",
+          version: 1,
+        },
+        {
+          id: "019a926d-e235-710f-a590-735375474e64-evt-3",
+          reportId: "019a926d-e235-710f-a590-735375474e64",
+          actionTitle: "Status Updated",
+          actionDetails: "Status changed to InProgress.",
+          initiator: "Teoh Zong Ming",
+          createdAt: "2025-10-18T14:00:01.000Z",
+          updatedAt: "2025-10-18T14:00:01.000Z",
+          version: 1,
+        },
       ],
       latitude: 3.1271274,
       longitude: 101.6349593,
@@ -214,16 +421,71 @@ function App() {
       version: 1,
     },
     {
-      id: "CMP-1099",
+      id: "019a926d-e235-710f-a590-735375474e65",
+      displayId: "RPT-202511-7",
       userId: "0199d751-fbb6-742e-b052-e4a05b2d57bc",
-      adminId: "qwe1",
+      adminId: "68af04187c2e6f499854e2da",
+      adminName: "Teoh Zong Ming",
+      facultyid: "6915cd5e4297c05ff2598c55",
       status: "Resolved",
-      title: "Kk",
-      description: "Ok",
+      title: "Cheating During Exam",
+      description: "Witnessed student using unauthorized materials during final examination. Multiple instances observed.",
       category: { name: "Academic Misconduct", priority: "High" },
       media: [
-        "https://res.cloudinary.com/dcv38gpis/image/upload/v1760275685/reports/0199d89b-536e-73af-98a7-ec83159b6b58.jpg",
-        "https://res.cloudinary.com/dcv38gpis/image/upload/v1760275685/reports/0199d89b-5371-723c-a73f-294a2db34940.jpg",
+        "https://images.unsplash.com/photo-1434030216411-0b793f4b4173?w=800&q=80",
+        "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?w=800&q=80",
+      ],
+      timelineHistory: [
+        {
+          id: "019a926d-e235-710f-a590-735375474e65-evt-1",
+          reportId: "019a926d-e235-710f-a590-735375474e65",
+          actionTitle: "Report Submitted",
+          actionDetails: "Academic misconduct reported during exam.",
+          initiator: "Testing1.",
+          createdAt: "2025-10-12T13:28:06.371Z",
+          updatedAt: "2025-10-12T13:28:06.371Z",
+          version: 1,
+        },
+        {
+          id: "019a926d-e235-710f-a590-735375474e65-evt-2",
+          reportId: "019a926d-e235-710f-a590-735375474e65",
+          actionTitle: "Admin Assigned",
+          actionDetails: "Admin Teoh Zong Ming assigned to complaint.",
+          initiator: "System",
+          createdAt: "2025-10-12T14:00:06.371Z",
+          updatedAt: "2025-10-12T14:00:06.371Z",
+          version: 1,
+        },
+        {
+          id: "019a926d-e235-710f-a590-735375474e65-evt-3",
+          reportId: "019a926d-e235-710f-a590-735375474e65",
+          actionTitle: "Status Updated",
+          actionDetails: "Status changed to InProgress.",
+          initiator: "Teoh Zong Ming",
+          createdAt: "2025-10-12T14:00:07.000Z",
+          updatedAt: "2025-10-12T14:00:07.000Z",
+          version: 1,
+        },
+        {
+          id: "019a926d-e235-710f-a590-735375474e65-evt-4",
+          reportId: "019a926d-e235-710f-a590-735375474e65",
+          actionTitle: "Status Updated",
+          actionDetails: "Status changed to Resolved.",
+          initiator: "Teoh Zong Ming",
+          createdAt: "2025-10-13T16:59:48.850Z",
+          updatedAt: "2025-10-13T16:59:48.850Z",
+          version: 1,
+        },
+        {
+          id: "019a926d-e235-710f-a590-735375474e65-evt-5",
+          reportId: "019a926d-e235-710f-a590-735375474e65",
+          actionTitle: "Feedback Provided",
+          actionDetails: "User submitted feedback after resolution.",
+          initiator: "Testing1.",
+          createdAt: "2025-10-13T17:10:00.000Z",
+          updatedAt: "2025-10-13T17:10:00.000Z",
+          version: 1,
+        },
       ],
       latitude: 3.1271261,
       longitude: 101.6349792,
@@ -238,14 +500,28 @@ function App() {
       createdAt: "2025-10-12T13:28:06.371Z",
       updatedAt: "2025-10-13T16:59:48.850Z",
       version: 15,
+      feedback: {
+        id: "019b0abc-bbbb-71f1-b100-123456789002",
+        reportId: "019a926d-e235-710f-a590-735375474e65",
+        q1Rating: 3,
+        q2Rating: 4,
+        overallComment: "Investigation handled well, appreciate transparency.",
+        createdAt: "2025-10-13T17:12:00.000Z",
+        updatedAt: "2025-10-13T17:12:00.000Z",
+        version: 1
+      },
     },
-  ];
+  ];;
 
+  // ============================================================================
+  // STATE MANAGEMENT
+  // ============================================================================
+  
+  // Filter states
   const [dateRange, setDateRange] = useState(() => getDefaultDateRange());
-
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [selectedLocation, setSelectedLocation] = useState("all");
-  // New hierarchical location filters
+  // Hierarchical location filters
   const [selectedBlock, setSelectedBlock] = useState("all");
   const [selectedRoom, setSelectedRoom] = useState("all");
   const [selectedStatus, setSelectedStatus] = useState("");
@@ -267,41 +543,16 @@ function App() {
   const locationChartRef = useRef(null);
   const performanceChartRef = useRef(null);
   const ageChartRef = useRef(null);
-  // Priority chart removed; using summary cards instead
   const filterRefetchTimer = useRef(null);
   const location = useLocation();
   const initialDataRef = useRef(null);
-  // When true, never call API; always use router-provided state (or empty array)
   const [preferLocationData, setPreferLocationData] = useState(true);
-  const [notifications, setNotifications] = useState([
-    {
-      id: 1,
-      message: "New complaint assigned to you",
-      time: "10 minutes ago",
-      read: false,
-    },
-    {
-      id: 2,
-      message: "Complaint #1089 has been resolved",
-      time: "1 hour ago",
-      read: false,
-    },
-    {
-      id: 3,
-      message: "System maintenance scheduled for tonight",
-      time: "3 hours ago",
-      read: true,
-    },
-    {
-      id: 4,
-      message: "Weekly report is now available",
-      time: "Yesterday",
-      read: true,
-    },
-  ]);
-  const unreadCount = notifications.filter(
-    (notification) => !notification.read
-  ).length;
+  const [notifications, setNotifications] = useState([]);
+
+  // ============================================================================
+  // EVENT HANDLERS
+  // ============================================================================
+  
   const handleClickOutside = (event) => {
     if (profileRef.current && !profileRef.current.contains(event.target)) {
       setIsProfileOpen(false);
@@ -313,6 +564,11 @@ function App() {
       setIsNotificationsOpen(false);
     }
   };
+  
+  // ============================================================================
+  // DATA LOADING & SIDE EFFECTS
+  // ============================================================================
+  
   useEffect(() => {
     document.addEventListener("mousedown", handleClickOutside);
     return () => {
@@ -320,12 +576,9 @@ function App() {
     };
   }, []);
 
-  // (Removed) Complaints by Priority chart; replaced with responsive summary cards
-
-  // Load officers filtered by current faculty (backend enforces faculty via auth)
+  // Load officer options for assignment filter
   useEffect(() => {
     const loadOfficers = async () => {
-      // When using mock analytics, derive officer list from the local dataset and skip API
       if (USE_MOCK_ANALYTICS) {
         const base =
           (initialDataRef.current && initialDataRef.current.length
@@ -334,8 +587,11 @@ function App() {
         const pairs = [];
         base.forEach((c) => {
           const id = String(c.adminId || c.assignedTo || c.assigned_to || "").trim();
-          const name = String(c.adminName || c.assignedName || id || "Unassigned").trim();
-          if (id || name) pairs.push({ _id: id || name, name });
+          const name = String(c.adminName || c.assignedName || "").trim();
+          // Only add if we have a valid ID and name (skip empty/unassigned)
+          if (id && name && name !== "Unassigned") {
+            pairs.push({ _id: id, name });
+          }
         });
         const dedup = Array.from(
           new Map(pairs.map((p) => [String(p._id), p]))
@@ -347,7 +603,7 @@ function App() {
         const res = await api.get("/users");
         const list = Array.isArray(res.data) ? res.data : [];
         const mapped = list
-          .filter((u) => u && (u.role === "officer" || u.role === "admin"))
+          .filter((u) => u && u._id && u.name && (u.role === "officer" || u.role === "admin"))
           .map((u) => ({ _id: u._id, name: u.name }));
         setOfficerOptions(mapped);
       } catch (e) {
@@ -360,8 +616,11 @@ function App() {
         const pairs = [];
         base.forEach((c) => {
           const id = String(c.adminId || c.assignedTo || c.assigned_to || "").trim();
-          const name = String(c.adminName || c.assignedName || id || "Unassigned").trim();
-          if (id || name) pairs.push({ _id: id || name, name });
+          const name = String(c.adminName || c.assignedName || "").trim();
+          // Only add if we have a valid ID and name (skip empty/unassigned)
+          if (id && name && name !== "Unassigned") {
+            pairs.push({ _id: id, name });
+          }
         });
         const dedup = Array.from(
           new Map(pairs.map((p) => [String(p._id), p]))
@@ -436,13 +695,10 @@ function App() {
       }
     };
     loadRooms();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.facultyid]);
 
-  // When block changes, recompute room options and reset selectedRoom
   useEffect(() => {
     const refreshRoomsForBlock = async () => {
-      // Use mock dataset to recompute rooms for the selected block
       if (USE_MOCK_ANALYTICS) {
         const base =
           (initialDataRef.current && initialDataRef.current.length
@@ -471,7 +727,6 @@ function App() {
         setRoomOptions(rooms);
         setSelectedRoom("all");
       } catch (e) {
-        // Ignore; keep previous roomOptions
       }
     };
     if (selectedBlock && selectedBlock !== "all") {
@@ -541,8 +796,13 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // ============================================================================
+  // CHART INITIALIZATION
+  // ============================================================================
+  
+  // Initialize complaint distribution chart (pie chart)
   useEffect(() => {
-    if (!complaintChartRef.current) return;
+    if (activeTab !== "overview" || !complaintChartRef.current) return;
     const el = complaintChartRef.current;
     let chart = null;
     let onResize = null;
@@ -614,9 +874,11 @@ function App() {
       if (onResize) window.removeEventListener("resize", onResize);
       if (chart) chart.dispose();
     };
-  }, []);
+  }, [activeTab]);
+  
+  // Initialize trend chart (line chart - small overview version)
   useEffect(() => {
-    if (!trendChartRef.current) return;
+    if (activeTab !== "overview" || !trendChartRef.current) return;
     const el = trendChartRef.current;
     let chart = null;
     let onResize = null;
@@ -679,9 +941,9 @@ function App() {
       if (onResize) window.removeEventListener("resize", onResize);
       if (chart) chart.dispose();
     };
-  }, []);
-  // Initialize large Trends chart (Trends tab) separately to avoid ref conflicts
-  // Initialize large Trends chart when the Trends tab becomes active
+  }, [activeTab]);
+
+  // Initialize large trend chart (trends tab full-size version)
   useEffect(() => {
     if (activeTab !== "trends" || !trendChartLargeRef.current) return;
     const el = trendChartLargeRef.current;
@@ -701,8 +963,10 @@ function App() {
     }
     chart.resize();
   }, [activeTab]);
+  
+  // Initialize location chart (horizontal bar chart - not currently used but kept for future)
   useEffect(() => {
-    if (!locationChartRef.current) return;
+    if (activeTab !== "overview" || !locationChartRef.current) return;
     const el = locationChartRef.current;
     let chart = null;
     let onResize = null;
@@ -734,24 +998,13 @@ function App() {
         },
         yAxis: {
           type: "category",
-          data: [
-            "Science Bldg 302",
-            "Library Entrance",
-            "Engineering Bldg",
-            "Cafeteria",
-            "Arts Bldg 105",
-            "Law Building",
-            "Student Center",
-            "Parking Lot A",
-            "Dormitory B",
-            "Admin Office",
-          ],
+          data: [],
         },
         series: [
           {
             name: "Complaints",
             type: "bar",
-            data: [35, 25, 22, 20, 18, 15, 12, 10, 8, 5],
+            data: [],
             itemStyle: {
               color: function (params) {
                 const colorList = [
@@ -791,9 +1044,11 @@ function App() {
       if (onResize) window.removeEventListener("resize", onResize);
       if (chart) chart.dispose();
     };
-  }, []);
+  }, [activeTab]);
+  
+  // Initialize performance chart (combined bar+line chart for officer metrics)
   useEffect(() => {
-    if (!performanceChartRef.current) return;
+    if (activeTab !== "performance" || !performanceChartRef.current) return;
     const el = performanceChartRef.current;
     let chart = null;
     let onResize = null;
@@ -812,14 +1067,14 @@ function App() {
             return params
               .map((param) => {
                 return `${param.seriesName}: ${param.value}${
-                  param.seriesName.includes("Rate") ? "%" : ""
+                  param.seriesName.includes("Rate") ? "%" : "h"
                 }`;
               })
               .join("<br/>");
           },
         },
         legend: {
-          data: ["Resolution Rate", "Resolution Time (hrs)"],
+          data: ["Resolution Rate (%)", "Avg Response Time (hrs)", "Avg Resolution Time (hrs)"],
           bottom: 10,
         },
         grid: {
@@ -831,13 +1086,7 @@ function App() {
         xAxis: [
           {
             type: "category",
-            data: [
-              "John Smith",
-              "Emma Davis",
-              "Sarah Johnson",
-              "Michael Brown",
-              "Team Average",
-            ],
+            data: [],
             axisLabel: {
               interval: 0,
               rotate: 30,
@@ -857,10 +1106,8 @@ function App() {
           },
           {
             type: "value",
-            name: "Resolution Time",
+            name: "Time (hours)",
             min: 0,
-            max: 100,
-            interval: 20,
             axisLabel: {
               formatter: "{value}h",
             },
@@ -868,22 +1115,36 @@ function App() {
         ],
         series: [
           {
-            name: "Resolution Rate",
+            name: "Resolution Rate (%)",
             type: "bar",
-            data: [85, 78, 92, 80, 84],
+            data: [],
             itemStyle: {
               color: "#5470c6",
             },
           },
           {
-            name: "Resolution Time (hrs)",
+            name: "Avg Response Time (hrs)",
             type: "line",
             yAxisIndex: 1,
-            data: [77, 60, 98, 91, 82],
+            data: [],
             symbol: "circle",
             symbolSize: 8,
             itemStyle: {
               color: "#91cc75",
+            },
+            lineStyle: {
+              width: 3,
+            },
+          },
+          {
+            name: "Avg Resolution Time (hrs)",
+            type: "line",
+            yAxisIndex: 1,
+            data: [],
+            symbol: "diamond",
+            symbolSize: 8,
+            itemStyle: {
+              color: "#fac858",
             },
             lineStyle: {
               width: 3,
@@ -910,11 +1171,11 @@ function App() {
       if (onResize) window.removeEventListener("resize", onResize);
       if (chart) chart.dispose();
     };
-  }, []);
+  }, [activeTab]);
 
   // Initialize Open Case Age Distribution chart
   useEffect(() => {
-    if (!ageChartRef.current) return;
+    if (activeTab !== "overview" || !ageChartRef.current) return;
     const el = ageChartRef.current;
     let chart = null;
     let onResize = null;
@@ -950,7 +1211,7 @@ function App() {
       if (onResize) window.removeEventListener("resize", onResize);
       if (chart) chart.dispose();
     };
-  }, []);
+  }, [activeTab]);
   const [isLoading, setIsLoading] = useState(false);
   const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState("");
@@ -961,7 +1222,11 @@ function App() {
 
 
 
-  // Utility to apply current filters to a dataset
+  // ============================================================================
+  // DATA PROCESSING & FILTERING
+  // ============================================================================
+  
+  // Apply current filter settings to complaint dataset
   const filterData = (data) => {
     const fromTs = dateRange.from ? Date.parse(dateRange.from) : null;
     const toTs = dateRange.to ? Date.parse(dateRange.to) : null;
@@ -1035,7 +1300,6 @@ function App() {
       setToastMessage(message);
       setShowToast(true);
     }
-    // If we prefer router/mock data, just (re)filter it and skip API
     if (preferLocationData) {
       const base =
         initialDataRef.current && initialDataRef.current.length
@@ -1151,7 +1415,6 @@ function App() {
         (state.complaint ? [state.complaint] : null);
     }
     const hasRouterData = Array.isArray(locComplaints);
-    // Prefer router data; otherwise use local mock while backend isn’t connected
     initialDataRef.current = hasRouterData ? locComplaints : DEV_MOCK_COMPLAINTS;
     console.log(
       "[Analytics] Seed complaints (router?",
@@ -1170,14 +1433,10 @@ function App() {
     setHasData(filtered.length > 0);
     if (filtered.length > 0) updateChartsWithData(filtered);
     setLastUpdatedAt(new Date());
-    // Prefer local/router data only if router actually provided complaints; otherwise use backend
     setPreferLocationData(hasRouterData);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location]);
 
-  // No API load for now when preferLocationData is true; data comes from router or mock
 
-  // Re-fetch immediately (debounced) whenever filters change so summary cards reflect current filters
   useEffect(() => {
     if (filterRefetchTimer.current) clearTimeout(filterRefetchTimer.current);
     filterRefetchTimer.current = setTimeout(() => {
@@ -1349,7 +1608,7 @@ function App() {
       chart?.setOption({ xAxis: { data: ageBuckets }, series: [{ name: "Open Cases", data: ageCounts }] });
     }
 
-    // Performance per officer (assignedTo) - resolution rate and average resolution time
+    // Performance per officer (assignedTo) - resolution rate, response time and resolution time
     const officerMap = {};
     data.forEach((c) => {
       const officer =
@@ -1357,34 +1616,68 @@ function App() {
       officerMap[officer] = officerMap[officer] || {
         total: 0,
         resolved: 0,
-        times: [],
+        responseTimes: [],
+        resolutionTimes: [],
       };
       officerMap[officer].total += 1;
       const status = (c.status || "").toLowerCase();
       if (status === "resolved" || status === "closed")
         officerMap[officer].resolved += 1;
-      // resolution time if resolved
-      if (c.resolvedAt || c.resolved_at) {
-        const created = c.createdAt
-          ? Date.parse(c.createdAt)
-          : Date.parse(c.created_at || c.created);
-        const resolved = c.resolvedAt
-          ? Date.parse(c.resolvedAt)
-          : Date.parse(c.resolved_at || 0);
-        if (!isNaN(created) && !isNaN(resolved) && resolved > created) {
-          const hours = (resolved - created) / (1000 * 60 * 60);
-          officerMap[officer].times.push(hours);
+      
+      // Calculate Response Time and Resolution Time from timelineHistory
+      if (c.timelineHistory && Array.isArray(c.timelineHistory)) {
+        const submittedEvent = c.timelineHistory.find(evt => evt.actionTitle === "Report Submitted");
+        const assignedEvent = c.timelineHistory.find(evt => evt.actionTitle === "Admin Assigned");
+        
+        // Response Time: from submitted to assigned
+        if (submittedEvent && assignedEvent) {
+          const submittedTime = Date.parse(submittedEvent.createdAt);
+          const assignedTime = Date.parse(assignedEvent.createdAt);
+          if (!isNaN(submittedTime) && !isNaN(assignedTime) && assignedTime > submittedTime) {
+            const responseHrs = (assignedTime - submittedTime) / (1000 * 60 * 60);
+            officerMap[officer].responseTimes.push(responseHrs);
+          }
+        }
+
+        // Resolution Time: from assigned to resolved/closed
+        if ((status === "resolved" || status === "closed") && assignedEvent) {
+          const resolvedEvent = c.timelineHistory.find(evt => 
+            evt.actionTitle === "Status Updated" && 
+            (evt.actionDetails?.includes("Resolved") || evt.actionDetails?.includes("Closed"))
+          );
+          
+          if (resolvedEvent) {
+            const assignedTime = Date.parse(assignedEvent.createdAt);
+            const resolvedTime = Date.parse(resolvedEvent.createdAt);
+            if (!isNaN(assignedTime) && !isNaN(resolvedTime) && resolvedTime > assignedTime) {
+              const resolutionHrs = (resolvedTime - assignedTime) / (1000 * 60 * 60);
+              officerMap[officer].resolutionTimes.push(resolutionHrs);
+            }
+          }
         }
       }
     });
-    const officers = Object.keys(officerMap).slice(0, 5);
-    const resolutionRates = officers.map((o) =>
+    // Filter out Unassigned and get staff names for chart
+    const officerIds = Object.keys(officerMap).filter(o => o !== "Unassigned");
+    const officersWithNames = officerIds.map(id => {
+      const name = officerOptions.find((o) => String(o._id) === String(id))?.name || id;
+      return { id, name };
+    }).slice(0, 5);
+    
+    const officers = officersWithNames.map(o => o.name);
+    const resolutionRates = officersWithNames.map((o) =>
       Math.round(
-        (officerMap[o].resolved / Math.max(1, officerMap[o].total)) * 100
+        (officerMap[o.id].resolved / Math.max(1, officerMap[o.id].total)) * 100
       )
     );
-    const avgResTimes = officers.map((o) => {
-      const arr = officerMap[o].times;
+    const avgResponseTimes = officersWithNames.map((o) => {
+      const arr = officerMap[o.id].responseTimes;
+      if (!arr || arr.length === 0) return 0;
+      const s = arr.reduce((a, b) => a + b, 0);
+      return Math.round((s / arr.length) * 10) / 10;
+    });
+    const avgResolutionTimes = officersWithNames.map((o) => {
+      const arr = officerMap[o.id].resolutionTimes;
       if (!arr || arr.length === 0) return 0;
       const s = arr.reduce((a, b) => a + b, 0);
       return Math.round((s / arr.length) * 10) / 10;
@@ -1394,8 +1687,9 @@ function App() {
       chart?.setOption({
         xAxis: [{ data: officers }],
         series: [
-          { name: "Resolution Rate", data: resolutionRates },
-          { name: "Resolution Time (hrs)", data: avgResTimes },
+          { name: "Resolution Rate (%)", data: resolutionRates },
+          { name: "Avg Response Time (hrs)", data: avgResponseTimes },
+          { name: "Avg Resolution Time (hrs)", data: avgResolutionTimes },
         ],
       });
     }
@@ -1475,7 +1769,11 @@ function App() {
     }, 2000);
   };
 
-  // derive summary metrics from complaints state
+  // ============================================================================
+  // COMPUTED METRICS (useMemo)
+  // ============================================================================
+  
+  // Calculate summary metrics (total, resolved, in-progress, open, resolution rate)
   const metrics = useMemo(() => {
     const total = complaints?.length || 0;
     const resolved =
@@ -1651,98 +1949,198 @@ function App() {
     ];
   }, [complaints, dateRange.to]);
 
-  // Compute feedback-derived metrics (if complaints include feedback/rating fields)
-  const feedbackMetrics = useMemo(() => {
-    const ratings = [];
-    const resolutionRatings = [];
-    const responseRatings = [];
-    (complaints || []).forEach((c) => {
-      const r =
-        c.feedback?.overallRating ?? c.feedback?.overall ?? c.rating ?? c.satisfaction ?? c.overallRating;
-      const rr = c.feedback?.resolutionRating ?? c.feedback?.resolution_rating ?? c.resolutionRating;
-      const resp = c.feedback?.responseRating ?? c.feedback?.response_rating ?? c.responseRating;
-      if (r !== undefined && r !== null && r !== "") {
-        const num = Number(r);
-        if (!isNaN(num)) ratings.push(Math.max(1, Math.min(5, Math.round(num))));
+  // Filter complaints that have explicit feedback provided flag and feedback object
+  const feedbackComplaints = useMemo(() => {
+    return (complaints || []).filter(
+      (c) => c.isFeedbackProvided === true && c.feedback && (c.feedback.q1Rating || c.feedback.q2Rating || c.feedback.overallComment)
+    );
+  }, [complaints]);
+
+  // Extract common feedback themes from overallComment text
+  const themeMetrics = useMemo(() => {
+    const texts = feedbackComplaints
+      .map(c => (c.feedback?.overallComment || '').trim())
+      .filter(t => t.length > 0);
+    if (!texts.length) return { positive: [], improvement: [], recent: [], topPhrases: [] };
+    const stop = new Set(['the','and','a','to','of','in','is','it','for','on','at','with','this','that','was','are','be','an','as','by','or','we','i','you','they','but','from','have','has','had','were','not','more','less']);
+    const positiveKeywords = ['quick','fast','helpful','professional','clear','responsive','friendly','timely','efficient','resolved','resolution','transparent'];
+    const improvementKeywords = ['slow','delayed','unclear','confusing','late','no','lack','status','update','updates','response','detail','details','waiting','wait'];
+    const freq = {};
+    const nowTs = Date.now();
+    const recentWindowMs = 7 * 24 * 60 * 60 * 1000; // last 7 days for emerging
+    const recentSet = new Set();
+    texts.forEach((t, idx) => {
+      const cleaned = t.toLowerCase().replace(/[^a-z0-9\s]/g,' ');
+      const tokens = cleaned.split(/\s+/).filter(w => w && !stop.has(w));
+      // single word frequency
+      tokens.forEach(w => { freq[w] = (freq[w]||0)+1; });
+      // bi-grams for phrase context
+      for (let i=0;i<tokens.length-1;i++) {
+        const bi = tokens[i] + ' ' + tokens[i+1];
+        freq[bi] = (freq[bi]||0)+1;
       }
-      if (rr !== undefined && rr !== null && rr !== "") {
-        const num = Number(rr);
-        if (!isNaN(num)) resolutionRatings.push(Math.max(1, Math.min(5, Math.round(num))));
-      }
-      if (resp !== undefined && resp !== null && resp !== "") {
-        const num = Number(resp);
-        if (!isNaN(num)) responseRatings.push(Math.max(1, Math.min(5, Math.round(num))));
+      // mark recent phrases if complaint updated recently
+      const comp = feedbackComplaints[idx];
+      const ts = Date.parse(comp.feedback?.updatedAt || comp.feedback?.createdAt || comp.updatedAt || comp.createdAt || 0);
+      if (!isNaN(ts) && (nowTs - ts) <= recentWindowMs) {
+        tokens.slice(0,5).forEach(w => recentSet.add(w));
       }
     });
-    const dist = { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 };
-    ratings.forEach((v) => (dist[v] = (dist[v] || 0) + 1));
-    const total = ratings.length;
-    const pct = (n) => (total ? Math.round((n / total) * 1000) / 10 : 0);
-    const avg = total ? Math.round((ratings.reduce((a, b) => a + b, 0) / total) * 10) / 10 : null;
-    const avgResolution = resolutionRatings.length
-      ? Math.round((resolutionRatings.reduce((a, b) => a + b, 0) / resolutionRatings.length) * 10) / 10
-      : null;
-    const avgResponse = responseRatings.length
-      ? Math.round((responseRatings.reduce((a, b) => a + b, 0) / responseRatings.length) * 10) / 10
-      : null;
-    return {
-      total,
-      dist,
-      pct,
-      avg,
-      avgResolution,
-      avgResponse,
+    const toArray = (keywords, label) => {
+      const out = [];
+      keywords.forEach(k => {
+        // consider both keyword and its common bigram forms
+        const candidates = Object.keys(freq).filter(fk => fk.includes(k));
+        let total = 0;
+        candidates.forEach(c => { total += freq[c]; });
+        if (total > 0) out.push({ theme: k, count: total });
+      });
+      out.sort((a,b)=> b.count - a.count);
+      return out.slice(0,6);
     };
-  }, [complaints]);
+    const positive = toArray(positiveKeywords,'positive');
+    const improvement = toArray(improvementKeywords,'improvement');
+    const recent = Array.from(recentSet).map(w => ({ theme: w, count: freq[w]||1 })).sort((a,b)=> b.count - a.count).slice(0,6);
+    // top phrases (bi-grams prioritized)
+    const topPhrases = Object.keys(freq)
+      .filter(k => k.includes(' '))
+      .map(k => ({ phrase: k, count: freq[k] }))
+      .sort((a,b)=> b.count - a.count)
+      .slice(0,5);
+    return { positive, improvement, recent, topPhrases };
+  }, [feedbackComplaints]);
+
+  // Compute feedback-derived metrics strictly from feedbackComplaints
+  const feedbackMetrics = useMemo(() => {
+    const q1Values = [];
+    const q2Values = [];
+    feedbackComplaints.forEach((c) => {
+      const q1 = Number(c.feedback.q1Rating);
+      const q2 = Number(c.feedback.q2Rating);
+      if (!isNaN(q1) && q1 > 0) q1Values.push(Math.max(1, Math.min(5, Math.round(q1))));
+      if (!isNaN(q2) && q2 > 0) q2Values.push(Math.max(1, Math.min(5, Math.round(q2))));
+    });
+    const distQ1 = { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 };
+    q1Values.forEach((v) => (distQ1[v] = (distQ1[v] || 0) + 1));
+    const count = feedbackComplaints.length;
+    const avgQ1 = q1Values.length ? Math.round((q1Values.reduce((a, b) => a + b, 0) / q1Values.length) * 10) / 10 : null;
+    const avgQ2 = q2Values.length ? Math.round((q2Values.reduce((a, b) => a + b, 0) / q2Values.length) * 10) / 10 : null;
+    const avgOverall = avgQ1 != null && avgQ2 != null ? Math.round(((avgQ1 + avgQ2) / 2) * 10) / 10 : (avgQ1 ?? avgQ2);
+    const pct = (n) => (q1Values.length ? Math.round((n / q1Values.length) * 1000) / 10 : 0);
+    const entries = feedbackComplaints
+      .slice()
+      .sort((a, b) => {
+        const ta = Date.parse(a.feedback.updatedAt || a.feedback.createdAt || a.updatedAt || a.createdAt || 0);
+        const tb = Date.parse(b.feedback.updatedAt || b.feedback.createdAt || b.updatedAt || b.createdAt || 0);
+        return tb - ta;
+      });
+    return { entries, count, avgQ1, avgQ2, avgOverall, distQ1, pct };
+  }, [feedbackComplaints]);
 
   // Compute officer performance stats from complaints (used to render performance table)
   const officerStats = useMemo(() => {
     const map = {};
+    
+    // Initialize all officers from officerOptions with zero values
+    officerOptions.forEach((officer) => {
+      map[officer._id] = { total: 0, resolved: 0, responseTimes: [], resolutionTimes: [], sats: [] };
+    });
+    
+    // Process complaints and update officer stats
     (complaints || []).forEach((c) => {
-      const officerKey = c.assignedTo || c.adminId || c.assigned_to || "Unassigned";
-      if (!map[officerKey]) map[officerKey] = { total: 0, resolved: 0, times: [], sats: [] };
-      map[officerKey].total += 1;
-      const s = (c.status || "").toString().toLowerCase();
-      if (s === "resolved" || s === "closed") map[officerKey].resolved += 1;
-      const created = c.createdAt ? Date.parse(c.createdAt) : Date.parse(c.created_at || 0);
-      const resolvedAt = c.resolvedAt ? Date.parse(c.resolvedAt) : Date.parse(c.resolved_at || 0);
-      if (!isNaN(created) && !isNaN(resolvedAt) && resolvedAt > created) {
-        const hrs = (resolvedAt - created) / (1000 * 60 * 60);
-        map[officerKey].times.push(hrs);
-      }
-      const fsat = c.feedback?.overallRating ?? c.feedback?.overall ?? c.rating ?? c.satisfaction ?? c.overallRating;
-      if (fsat !== undefined && fsat !== null && fsat !== "") {
-        const num = Number(fsat);
-        if (!isNaN(num)) map[officerKey].sats.push(Math.max(1, Math.min(5, Math.round(num))));
+      const officerKey = c.assignedTo || c.adminId || c.assigned_to;
+      
+      // Only process if officer is assigned (not Unassigned or null)
+      if (officerKey && officerKey !== "Unassigned" && map[officerKey]) {
+        map[officerKey].total += 1;
+        const s = (c.status || "").toString().toLowerCase();
+        if (s === "resolved" || s === "closed") map[officerKey].resolved += 1;
+
+        // Calculate Response Time: from "Report Submitted" to "Admin Assigned" using timelineHistory
+        if (c.timelineHistory && Array.isArray(c.timelineHistory)) {
+          const submittedEvent = c.timelineHistory.find(evt => evt.actionTitle === "Report Submitted");
+          const assignedEvent = c.timelineHistory.find(evt => evt.actionTitle === "Admin Assigned");
+          
+          if (submittedEvent && assignedEvent) {
+            const submittedTime = Date.parse(submittedEvent.createdAt);
+            const assignedTime = Date.parse(assignedEvent.createdAt);
+            if (!isNaN(submittedTime) && !isNaN(assignedTime) && assignedTime > submittedTime) {
+              const responseHrs = (assignedTime - submittedTime) / (1000 * 60 * 60);
+              map[officerKey].responseTimes.push(responseHrs);
+            }
+          }
+
+          // Calculate Resolution Time: from "Admin Assigned" to "Status changed to Resolved/Closed" using timelineHistory
+          if ((s === "resolved" || s === "closed") && assignedEvent) {
+            const resolvedEvent = c.timelineHistory.find(evt => 
+              evt.actionTitle === "Status Updated" && 
+              (evt.actionDetails?.includes("Resolved") || evt.actionDetails?.includes("Closed"))
+            );
+            
+            if (resolvedEvent) {
+              const assignedTime = Date.parse(assignedEvent.createdAt);
+              const resolvedTime = Date.parse(resolvedEvent.createdAt);
+              if (!isNaN(assignedTime) && !isNaN(resolvedTime) && resolvedTime > assignedTime) {
+                const resolutionHrs = (resolvedTime - assignedTime) / (1000 * 60 * 60);
+                map[officerKey].resolutionTimes.push(resolutionHrs);
+              }
+            }
+          }
+        }
+
+        // Calculate Satisfaction: average of (q1Rating + q2Rating) / 2
+        if (c.feedback && c.isFeedbackProvided === true) {
+          const q1 = Number(c.feedback.q1Rating);
+          const q2 = Number(c.feedback.q2Rating);
+          if (!isNaN(q1) && !isNaN(q2) && q1 > 0 && q2 > 0) {
+            const avgFeedback = (q1 + q2) / 2;
+            map[officerKey].sats.push(Math.max(1, Math.min(5, avgFeedback)));
+          }
+        }
       }
     });
-    const list = Object.keys(map).map((k) => {
-      const item = map[k];
-      const name = officerOptions.find((o) => String(o._id) === String(k))?.name || k;
-      const resolutionRate = Math.round((item.resolved / Math.max(1, item.total)) * 1000) / 10;
-      const avgResTime = item.times.length ? Math.round((item.times.reduce((a, b) => a + b, 0) / item.times.length) * 10) / 10 : 0;
+
+    // Create list from all officers (including those with 0 cases)
+    const list = officerOptions.map((officer) => {
+      const item = map[officer._id];
+      const resolutionRate = item.total > 0 ? Math.round((item.resolved / item.total) * 1000) / 10 : 0;
+      const avgResponseTime = item.responseTimes.length ? Math.round((item.responseTimes.reduce((a, b) => a + b, 0) / item.responseTimes.length) * 10) / 10 : 0;
+      const avgResolutionTime = item.resolutionTimes.length ? Math.round((item.resolutionTimes.reduce((a, b) => a + b, 0) / item.resolutionTimes.length) * 10) / 10 : 0;
       const avgSat = item.sats.length ? Math.round((item.sats.reduce((a, b) => a + b, 0) / item.sats.length) * 10) / 10 : null;
       return {
-        id: k,
-        name,
+        id: officer._id,
+        name: officer.name,
         total: item.total,
         resolved: item.resolved,
         resolutionRate,
-        avgResTime,
+        avgResponseTime,
+        avgResolutionTime,
         avgSat,
       };
     });
+    
+    // Sort by total cases (descending), but keep all officers
     list.sort((a, b) => b.total - a.total);
-    // Team averages
-    const totals = list.reduce((acc, it) => ({ total: acc.total + it.total, resolved: acc.resolved + it.resolved, timesSum: acc.timesSum + (it.avgResTime * it.total), satSum: acc.satSum + ((it.avgSat || 0) * it.total) }), { total: 0, resolved: 0, timesSum: 0, satSum: 0 });
+    
+    // Team averages (only count officers with cases)
+    const officersWithCases = list.filter(o => o.total > 0);
+    const totals = officersWithCases.reduce((acc, it) => ({ 
+      total: acc.total + it.total, 
+      resolved: acc.resolved + it.resolved, 
+      responseTimeSum: acc.responseTimeSum + (it.avgResponseTime * it.total), 
+      resolutionTimeSum: acc.resolutionTimeSum + (it.avgResolutionTime * it.total), 
+      satSum: acc.satSum + ((it.avgSat || 0) * it.total) 
+    }), { total: 0, resolved: 0, responseTimeSum: 0, resolutionTimeSum: 0, satSum: 0 });
+    
     const teamAvg = {
-      total: totals.total ? Math.round((totals.total / Math.max(1, list.length)) * 10) / 10 : 0,
-      resolved: totals.resolved ? Math.round((totals.resolved / Math.max(1, list.length)) * 10) / 10 : 0,
+      total: totals.total && officersWithCases.length ? Math.round((totals.total / officersWithCases.length) * 10) / 10 : 0,
+      resolved: totals.resolved && officersWithCases.length ? Math.round((totals.resolved / officersWithCases.length) * 10) / 10 : 0,
       resolutionRate: totals.total ? Math.round((totals.resolved / totals.total) * 1000) / 10 : 0,
-      avgResTime: totals.total ? Math.round((totals.timesSum / totals.total) * 10) / 10 : 0,
+      avgResponseTime: totals.total ? Math.round((totals.responseTimeSum / totals.total) * 10) / 10 : 0,
+      avgResolutionTime: totals.total ? Math.round((totals.resolutionTimeSum / totals.total) * 10) / 10 : 0,
       avgSat: totals.total ? Math.round((totals.satSum / totals.total) * 10) / 10 : null,
     };
-    return { list: list.slice(0, 10), teamAvg };
+    return { list, teamAvg };
   }, [complaints, officerOptions]);
 
   // Small helper to render star icons for a 1-5 integer rating (may be null)
@@ -1846,6 +2244,26 @@ function App() {
           updateChartsWithData(complaints);
         } catch (err) {
           console.warn('[Analytics] Error re-initializing overview charts:', err);
+        }
+      }, 50);
+      return () => clearTimeout(timer);
+    }
+  }, [activeTab, complaints]);
+
+  // When switching to Performance tab, re-initialize and populate performance chart
+  useEffect(() => {
+    if (activeTab === 'performance' && complaints && complaints.length) {
+      const timer = setTimeout(() => {
+        try {
+          if (performanceChartRef.current) {
+            let chart = echarts.getInstanceByDom(performanceChartRef.current);
+            if (!chart) chart = echarts.init(performanceChartRef.current);
+            chart.resize();
+          }
+          // Re-populate performance chart with current data
+          updateChartsWithData(complaints);
+        } catch (err) {
+          console.warn('[Analytics] Error re-initializing performance chart:', err);
         }
       }, 50);
       return () => clearTimeout(timer);
@@ -2143,6 +2561,7 @@ function App() {
                           <select
                             id="category-filter"
                             className="peer block w-full pl-9 pr-10 h-10 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md appearance-none"
+                            style={{ maxHeight: '300px', overflowY: 'auto' }}
                             value={selectedCategory}
                             onChange={(e) =>
                               setSelectedCategory(e.target.value)
@@ -2172,6 +2591,7 @@ function App() {
                           <select
                             id="block-filter"
                             className="peer block w-full pl-9 pr-10 h-10 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md appearance-none"
+                            style={{ maxHeight: '300px', overflowY: 'auto' }}
                             value={selectedBlock}
                             onChange={(e) => setSelectedBlock(e.target.value)}
                           >
@@ -2284,6 +2704,7 @@ function App() {
                           <select
                             id="officer-filter"
                             className="peer block w-full pl-9 pr-10 h-10 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md appearance-none"
+                            style={{ maxHeight: '300px', overflowY: 'auto' }}
                             value={selectedOfficer}
                             onChange={(e) => setSelectedOfficer(e.target.value)}
                           >
@@ -2608,444 +3029,211 @@ function App() {
                 <h3 className="text-lg font-medium text-gray-900 mb-6">
                   Complaint Trends Over Time
                 </h3>
-                <div ref={trendChartLargeRef} className="w-full" style={{ height: "600px" }}></div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-8">
-                  <div className="bg-gray-50 rounded-lg p-4">
-                    <h4 className="text-md font-medium text-gray-800 mb-2">
-                      Growth Trends
-                    </h4>
-                    <ul className="space-y-2">
-                      {growthMetrics.map((g) => (
-                        <li key={g.label} className="flex justify-between items-center">
-                          <span className="text-sm text-gray-600">{g.label}:</span>
-                          <span className={`text-sm font-medium ${g.direction === 'up' ? 'text-green-600' : g.direction === 'down' ? 'text-red-600' : 'text-gray-600'}`}>
-                            {g.direction === 'down' ? '' : g.percent >= 0 ? '+' : ''}{g.percent}%
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
-                    <p className="mt-3 text-xs text-gray-500">Comparison windows use trailing periods (7/30/90/365 days) ending at the current To date filter.</p>
+                {!hasData || complaints.length === 0 ? (
+                  <div className="text-center py-20">
+                    <FontAwesomeIcon icon={faChartLine} className="text-6xl text-gray-300 mb-4" />
+                    <p className="text-gray-500 text-lg">No data available for the selected filters</p>
                   </div>
-                </div>
+                ) : (
+                  <>
+                    <div ref={trendChartLargeRef} className="w-full" style={{ height: "600px" }}></div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-8">
+                      <div className="bg-gray-50 rounded-lg p-4">
+                        <h4 className="text-md font-medium text-gray-800 mb-2">
+                          Growth Trends
+                        </h4>
+                        <ul className="space-y-2">
+                          {growthMetrics.map((g) => (
+                            <li key={g.label} className="flex justify-between items-center">
+                              <span className="text-sm text-gray-600">{g.label}:</span>
+                              <span className={`text-sm font-medium ${g.direction === 'up' ? 'text-green-600' : g.direction === 'down' ? 'text-red-600' : 'text-gray-600'}`}>
+                                {g.direction === 'down' ? '' : g.percent >= 0 ? '+' : ''}{g.percent}%
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                        <p className="mt-3 text-xs text-gray-500">Comparison windows use trailing periods (7/30/90/365 days) ending at the current To date filter.</p>
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
             )}
             {activeTab === "locations" && (
               <div className="bg-white shadow rounded-lg p-6 mb-6">
-                <h3 className="text-lg font-medium text-gray-900 mb-6">
-                  Student Feedback Analysis
-                </h3>
+                <h3 className="text-lg font-medium text-gray-900 mb-6">Student Feedback Analysis</h3>
+                {feedbackMetrics.count === 0 && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 mb-6">
+                    <div className="flex items-center">
+                      <FontAwesomeIcon icon={faInfoCircle} className="text-blue-600 text-2xl mr-3" />
+                      <div>
+                        <h4 className="text-md font-medium text-blue-900 mb-1">No Feedback Available</h4>
+                        <p className="text-sm text-blue-700">There are no student feedback entries for the selected filters. Adjust your filters to view feedback data.</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                {/* Summary Cards - Only show if feedback exists */}
+                {feedbackMetrics.count > 0 && (
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
                   <div className="bg-blue-50 rounded-lg p-6">
-                    <h4 className="text-md font-medium text-blue-900 mb-2">
-                      Overall Satisfaction
-                    </h4>
+                    <h4 className="text-md font-medium text-blue-900 mb-2">Overall Satisfaction</h4>
                     <div className="flex items-center space-x-1 text-yellow-400 text-2xl mb-2">
-                      <FontAwesomeIcon icon={faStarSolid} />
-                      <FontAwesomeIcon icon={faStarSolid} />
-                      <FontAwesomeIcon icon={faStarSolid} />
-                      <FontAwesomeIcon icon={faStarSolid} />
-                      <FontAwesomeIcon icon={faStarHalfAlt} />
+                      {renderStars(Math.round(feedbackMetrics.avgOverall || 0))}
                     </div>
-                    <p className="text-3xl font-bold text-blue-900">4.5/5.0</p>
-                    <p className="text-sm text-blue-700 mt-2">
-                      Based on {metrics.total} responses
-                    </p>
+                    <p className="text-3xl font-bold text-blue-900">{feedbackMetrics.avgOverall ? `${feedbackMetrics.avgOverall}/5.0` : '–'}</p>
+                    <p className="text-sm text-blue-700 mt-2">Based on {feedbackMetrics.count} feedback{feedbackMetrics.count === 1 ? '' : 's'}</p>
                   </div>
                   <div className="bg-purple-50 rounded-lg p-6">
-                    <h4 className="text-md font-medium text-purple-900 mb-2">
-                      Resolution Satisfaction
-                    </h4>
-                    <div className="flex items-center space-x-1 text-yellow-400 text-2xl mb-2">
-                      <FontAwesomeIcon icon={faStarSolid} />
-                      <FontAwesomeIcon icon={faStarSolid} />
-                      <FontAwesomeIcon icon={faStarSolid} />
-                      <FontAwesomeIcon icon={faStarSolid} />
-                      <FontAwesomeIcon icon={faStarRegular} />
-                    </div>
-                    <p className="text-3xl font-bold text-purple-900">
-                      4.2/5.0
-                    </p>
-                    <p className="text-sm text-purple-700 mt-2">
-                      Based on {metrics.resolved} resolved cases
-                    </p>
+                    <h4 className="text-md font-medium text-purple-900 mb-2">Resolution Satisfaction (Q1)</h4>
+                    <div className="flex items-center space-x-1 text-yellow-400 text-2xl mb-2">{renderStars(Math.round(feedbackMetrics.avgQ1 || 0))}</div>
+                    <p className="text-3xl font-bold text-purple-900">{feedbackMetrics.avgQ1 ? `${feedbackMetrics.avgQ1}/5.0` : '–'}</p>
+                    <p className="text-sm text-purple-700 mt-2">From {feedbackMetrics.count} entries</p>
                   </div>
                   <div className="bg-green-50 rounded-lg p-6">
-                    <h4 className="text-md font-medium text-green-900 mb-2">
-                      Response Time Rating
-                    </h4>
-                    <div className="flex items-center space-x-1 text-yellow-400 text-2xl mb-2">
-                      <FontAwesomeIcon icon={faStarSolid} />
-                      <FontAwesomeIcon icon={faStarSolid} />
-                      <FontAwesomeIcon icon={faStarSolid} />
-                      <FontAwesomeIcon icon={faStarSolid} />
-                      <FontAwesomeIcon icon={faStarRegular} />
-                    </div>
-                    <p className="text-3xl font-bold text-green-900">4.0/5.0</p>
-                    <p className="text-sm text-green-700 mt-2">
-                      Average response rating
-                    </p>
+                    <h4 className="text-md font-medium text-green-900 mb-2">Response Time Rating (Q2)</h4>
+                    <div className="flex items-center space-x-1 text-yellow-400 text-2xl mb-2">{renderStars(Math.round(feedbackMetrics.avgQ2 || 0))}</div>
+                    <p className="text-3xl font-bold text-green-900">{feedbackMetrics.avgQ2 ? `${feedbackMetrics.avgQ2}/5.0` : '–'}</p>
+                    <p className="text-sm text-green-700 mt-2">Average response rating</p>
                   </div>
                 </div>
+                )}
+                {/* Recent Feedback Table - Only show if feedback exists */}
+                {feedbackMetrics.count > 0 && (
                 <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
-                  <div className="px-6 py-4 border-b border-gray-200">
-                    <h4 className="text-lg font-medium text-gray-900">
-                      Recent Student Feedback
-                    </h4>
-                  </div>
+                  <div className="px-6 py-4 border-b border-gray-200"><h4 className="text-lg font-medium text-gray-900">Recent Student Feedback</h4></div>
                   <div className="overflow-x-auto">
                     <table className="min-w-full divide-y divide-gray-200">
                       <thead className="bg-gray-50">
                         <tr>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Complaint ID
-                          </th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Category
-                          </th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Overall Satisfaction
-                          </th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Resolution Rating
-                          </th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Student Comments
-                          </th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Date
-                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Complaint ID</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Q1 Rating</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Q2 Rating</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Student Comment</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
                         </tr>
                       </thead>
                       <tbody className="bg-white divide-y divide-gray-200">
-                        <tr>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            #2025-042
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            IT Services
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="flex items-center text-yellow-400">
-                              <FontAwesomeIcon icon={faStarSolid} />
-                              <FontAwesomeIcon icon={faStarSolid} />
-                              <FontAwesomeIcon icon={faStarSolid} />
-                              <FontAwesomeIcon icon={faStarSolid} />
-                              <FontAwesomeIcon icon={faStarSolid} />
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="flex items-center text-yellow-400">
-                              <FontAwesomeIcon icon={faStarSolid} />
-                              <FontAwesomeIcon icon={faStarSolid} />
-                              <FontAwesomeIcon icon={faStarSolid} />
-                              <FontAwesomeIcon icon={faStarSolid} />
-                              <FontAwesomeIcon icon={faStarRegular} />
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 text-sm text-gray-500">
-                            Quick response and effective resolution of Wi-Fi
-                            connectivity issues.
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            May 16, 2025
-                          </td>
-                        </tr>
-                        <tr>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            #2025-041
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            Facilities
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="flex items-center text-yellow-400">
-                              <FontAwesomeIcon icon={faStarSolid} />
-                              <FontAwesomeIcon icon={faStarSolid} />
-                              <FontAwesomeIcon icon={faStarSolid} />
-                              <FontAwesomeIcon icon={faStarSolid} />
-                              <FontAwesomeIcon icon={faStarRegular} />
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="flex items-center text-yellow-400">
-                              <FontAwesomeIcon icon={faStarSolid} />
-                              <FontAwesomeIcon icon={faStarSolid} />
-                              <FontAwesomeIcon icon={faStarSolid} />
-                              <FontAwesomeIcon icon={faStarSolid} />
-                              <FontAwesomeIcon icon={faStarSolid} />
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 text-sm text-gray-500">
-                            The maintenance team fixed the AC issue promptly.
-                            Very satisfied with the service.
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            May 15, 2025
-                          </td>
-                        </tr>
-                        <tr>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            #2025-040
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            Academic
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="flex items-center text-yellow-400">
-                              <FontAwesomeIcon icon={faStarSolid} />
-                              <FontAwesomeIcon icon={faStarSolid} />
-                              <FontAwesomeIcon icon={faStarSolid} />
-                              <FontAwesomeIcon icon={faStarRegular} />
-                              <FontAwesomeIcon icon={faStarRegular} />
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="flex items-center text-yellow-400">
-                              <FontAwesomeIcon icon={faStarSolid} />
-                              <FontAwesomeIcon icon={faStarSolid} />
-                              <FontAwesomeIcon icon={faStarSolid} />
-                              <FontAwesomeIcon icon={faStarSolid} />
-                              <FontAwesomeIcon icon={faStarSolid} />
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 text-sm text-gray-500">
-                            Resolution took longer than expected, but the issue
-                            was eventually resolved.
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            May 15, 2025
-                          </td>
-                        </tr>
-                        <tr>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            #2025-039
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            Administrative
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="flex items-center text-yellow-400">
-                              <FontAwesomeIcon icon={faStarSolid} />
-                              <FontAwesomeIcon icon={faStarSolid} />
-                              <FontAwesomeIcon icon={faStarSolid} />
-                              <FontAwesomeIcon icon={faStarSolid} />
-                              <FontAwesomeIcon icon={faStarHalfAlt} />
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="flex items-center text-yellow-400">
-                              <FontAwesomeIcon icon={faStarSolid} />
-                              <FontAwesomeIcon icon={faStarSolid} />
-                              <FontAwesomeIcon icon={faStarSolid} />
-                              <FontAwesomeIcon icon={faStarSolid} />
-                              <FontAwesomeIcon icon={faStarSolid} />
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 text-sm text-gray-500">
-                            Very professional handling of my registration issue.
-                            Thank you!
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            May 14, 2025
-                          </td>
-                        </tr>
-                        <tr>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            #2025-038
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            Services
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="flex items-center text-yellow-400">
-                              <FontAwesomeIcon icon={faStarSolid} />
-                              <FontAwesomeIcon icon={faStarSolid} />
-                              <FontAwesomeIcon icon={faStarSolid} />
-                              <FontAwesomeIcon icon={faStarSolid} />
-                              <FontAwesomeIcon icon={faStarRegular} />
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="flex items-center text-yellow-400">
-                              <FontAwesomeIcon icon={faStarSolid} />
-                              <FontAwesomeIcon icon={faStarSolid} />
-                              <FontAwesomeIcon icon={faStarSolid} />
-                              <FontAwesomeIcon icon={faStarSolid} />
-                              <FontAwesomeIcon icon={faStarRegular} />
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 text-sm text-gray-500">
-                            Good service overall, but could be a bit faster in
-                            responding.
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            May 14, 2025
-                          </td>
-                        </tr>
+                        {feedbackMetrics.entries.length === 0 && (
+                          <tr>
+                            <td colSpan={6} className="px-6 py-8 text-center text-sm text-gray-500">No feedback available for current filters.</td>
+                          </tr>
+                        )}
+                        {feedbackMetrics.entries.slice(0, 15).map((c) => {
+                          const fb = c.feedback;
+                          const dateStr = fb?.updatedAt || fb?.createdAt || c.updatedAt || c.createdAt;
+                          const cat = (c.category && (c.category.name || c.category.title)) || 'Unknown';
+                          return (
+                            <tr key={c.id}>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{c.displayId || c.id}</td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{cat}</td>
+                              <td className="px-6 py-4 whitespace-nowrap">{renderStars(fb?.q1Rating)}</td>
+                              <td className="px-6 py-4 whitespace-nowrap">{renderStars(fb?.q2Rating)}</td>
+                              <td className="px-6 py-4 text-sm text-gray-500 max-w-xs truncate" title={fb?.overallComment}>{fb?.overallComment || '—'}</td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{formatFriendlyDate(dateStr)}</td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
                 </div>
+                )}
+                {/* Distribution & Themes - Only show if feedback exists */}
+                {feedbackMetrics.count > 0 && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
                   <div className="bg-white shadow rounded-lg p-6">
-                    <h4 className="text-lg font-medium text-gray-900 mb-4">
-                      Satisfaction Distribution
-                    </h4>
+                    <h4 className="text-lg font-medium text-gray-900 mb-4">Satisfaction Distribution (Q1)</h4>
                     <div className="space-y-4">
-                      <div>
-                        <div className="flex items-center justify-between mb-1">
-                            <div className="flex items-center text-yellow-400">
-                              <FontAwesomeIcon icon={faStarSolid} />
-                              <FontAwesomeIcon icon={faStarSolid} />
-                              <FontAwesomeIcon icon={faStarSolid} />
-                              <FontAwesomeIcon icon={faStarRegular} />
-                              <FontAwesomeIcon icon={faStarRegular} />
+                      {[5,4,3,2,1].map((star) => {
+                        const count = feedbackMetrics.distQ1[star] || 0;
+                        const percent = feedbackMetrics.pct(count);
+                        return (
+                          <div key={star}>
+                            <div className="flex items-center justify-between mb-1">
+                              <div className="flex items-center text-yellow-400">
+                                {renderStars(star)}
+                                <span className="ml-2 text-gray-700">{star} star{star>1?'s':''}</span>
+                              </div>
+                              <span className="text-sm font-medium text-gray-900">{percent}%</span>
+                            </div>
+                            <div className="w-full bg-gray-200 rounded-full h-2">
+                              <div className="bg-yellow-400 h-2 rounded-full" style={{ width: `${percent}%` }}></div>
                             </div>
                           </div>
-                          <span className="text-sm font-medium text-gray-900">
-                            45%
-                          </span>
-                        </div>
-                        <div className="w-full bg-gray-200 rounded-full h-2">
-                          <div
-                            className="bg-yellow-400 h-2 rounded-full"
-                            style={{ width: "45%" }}
-                          ></div>
-                        </div>
-                      </div>
-                      <div>
-                        <div className="flex items-center justify-between mb-1">
-                          <div className="flex items-center text-yellow-400">
-                            <FontAwesomeIcon icon={faStarSolid} />
-                            <FontAwesomeIcon icon={faStarSolid} />
-                            <FontAwesomeIcon icon={faStarSolid} />
-                            <FontAwesomeIcon icon={faStarSolid} />
-                            <FontAwesomeIcon icon={faStarRegular} />
-                            <span className="ml-2 text-gray-700">4 stars</span>
-                          </div>
-                          <span className="text-sm font-medium text-gray-900">
-                            30%
-                          </span>
-                        </div>
-                        <div className="w-full bg-gray-200 rounded-full h-2">
-                          <div
-                            className="bg-yellow-400 h-2 rounded-full"
-                            style={{ width: "30%" }}
-                          ></div>
-                        </div>
-                      </div>
-                      <div>
-                        <div className="flex items-center justify-between mb-1">
-                          <div className="flex items-center text-yellow-400">
-                            <FontAwesomeIcon icon={faStarSolid} />
-                            <FontAwesomeIcon icon={faStarSolid} />
-                            <FontAwesomeIcon icon={faStarSolid} />
-                            <FontAwesomeIcon icon={faStarRegular} />
-                            <FontAwesomeIcon icon={faStarRegular} />
-                            <span className="ml-2 text-gray-700">3 stars</span>
-                          </div>
-                          <span className="text-sm font-medium text-gray-900">
-                            15%
-                          </span>
-                        </div>
-                        <div className="w-full bg-gray-200 rounded-full h-2">
-                          <div
-                            className="bg-yellow-400 h-2 rounded-full"
-                            style={{ width: "15%" }}
-                          ></div>
-                        </div>
-                      </div>
-                      <div>
-                        <div className="flex items-center justify-between mb-1">
-                          <div className="flex items-center text-yellow-400">
-                            <FontAwesomeIcon icon={faStarSolid} />
-                            <FontAwesomeIcon icon={faStarSolid} />
-                            <FontAwesomeIcon icon={faStarRegular} />
-                            <FontAwesomeIcon icon={faStarRegular} />
-                            <FontAwesomeIcon icon={faStarRegular} />
-                            <span className="ml-2 text-gray-700">2 stars</span>
-                          </div>
-                          <span className="text-sm font-medium text-gray-900">
-                            7%
-                          </span>
-                        </div>
-                        <div className="w-full bg-gray-200 rounded-full h-2">
-                          <div
-                            className="bg-yellow-400 h-2 rounded-full"
-                            style={{ width: "7%" }}
-                          ></div>
-                        </div>
-                      </div>
-                      <div>
-                        <div className="flex items-center justify-between mb-1">
-                          <div className="flex items-center text-yellow-400">
-                            <FontAwesomeIcon icon={faStarSolid} />
-                            <FontAwesomeIcon icon={faStarRegular} />
-                            <FontAwesomeIcon icon={faStarRegular} />
-                            <FontAwesomeIcon icon={faStarRegular} />
-                            <FontAwesomeIcon icon={faStarRegular} />
-                            <span className="ml-2 text-gray-700">1 star</span>
-                          </div>
-                          <span className="text-sm font-medium text-gray-900">
-                            3%
-                          </span>
-                        </div>
-                        <div className="w-full bg-gray-200 rounded-full h-2">
-                          <div
-                            className="bg-yellow-400 h-2 rounded-full"
-                            style={{ width: "3%" }}
-                          ></div>
-                        </div>
-                      </div>
+                        );
+                      })}
+                      {feedbackMetrics.count === 0 && (
+                        <p className="text-sm text-gray-500">No feedback entries to build distribution.</p>
+                      )}
                     </div>
                   </div>
                   <div className="bg-white shadow rounded-lg p-6">
-                    <h4 className="text-lg font-medium text-gray-900 mb-4">
-                      Common Feedback Themes
-                    </h4>
-                    <div className="space-y-4">
+                    <h4 className="text-lg font-medium text-gray-900 mb-4">Common Feedback Themes</h4>
+                    {themeMetrics.positive.length === 0 && themeMetrics.improvement.length === 0 && (
+                      <p className="text-sm text-gray-500">No recurring themes detected from current feedback comments.</p>
+                    )}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                       <div className="p-4 bg-green-50 rounded-lg">
-                        <h5 className="text-sm font-medium text-green-800 mb-2">
-                          Positive Feedback
+                        <h5 className="text-sm font-medium text-green-800 mb-3 flex items-center">
+                          <FontAwesomeIcon icon={faCheckCircle} className="mr-2" />Positive Feedback
                         </h5>
-                        <ul className="space-y-2 text-sm text-green-700">
-                          <li className="flex items-center">
-                            <FontAwesomeIcon icon={faCheckCircle} className="mr-2" />
-                            Quick response time
-                          </li>
-                          <li className="flex items-center">
-                            <FontAwesomeIcon icon={faCheckCircle} className="mr-2" />
-                            Professional staff
-                          </li>
-                          <li className="flex items-center">
-                            <FontAwesomeIcon icon={faCheckCircle} className="mr-2" />
-                            Effective solutions
-                          </li>
+                        <ul className="space-y-2 text-xs text-green-700">
+                          {themeMetrics.positive.map(t => (
+                            <li key={t.theme} className="flex justify-between">
+                              <span className="truncate max-w-[70%]" title={t.theme}>{t.theme}</span>
+                              <span className="font-semibold">{t.count}</span>
+                            </li>
+                          ))}
+                          {themeMetrics.positive.length === 0 && <li className="text-green-600 opacity-70">No positive themes</li>}
                         </ul>
                       </div>
                       <div className="p-4 bg-red-50 rounded-lg">
-                        <h5 className="text-sm font-medium text-red-800 mb-2">
-                          Areas for Improvement
+                        <h5 className="text-sm font-medium text-red-800 mb-3 flex items-center">
+                          <FontAwesomeIcon icon={faExclamationCircle} className="mr-2" />Areas for Improvement
                         </h5>
-                        <ul className="space-y-2 text-sm text-red-700">
-                          <li className="flex items-center">
-                            <FontAwesomeIcon icon={faExclamationCircle} className="mr-2" />
-                            Communication updates
-                          </li>
-                          <li className="flex items-center">
-                            <FontAwesomeIcon icon={faExclamationCircle} className="mr-2" />
-                            Resolution time
-                          </li>
-                          <li className="flex items-center">
-                            <FontAwesomeIcon icon={faExclamationCircle} className="mr-2" />
-                            Follow-up process
-                          </li>
+                        <ul className="space-y-2 text-xs text-red-700">
+                          {themeMetrics.improvement.map(t => (
+                            <li key={t.theme} className="flex justify-between">
+                              <span className="truncate max-w-[70%]" title={t.theme}>{t.theme}</span>
+                              <span className="font-semibold">{t.count}</span>
+                            </li>
+                          ))}
+                          {themeMetrics.improvement.length === 0 && <li className="text-red-600 opacity-70">No improvement themes</li>}
                         </ul>
+                      </div>
+                      <div className="p-4 bg-blue-50 rounded-lg">
+                        <h5 className="text-sm font-medium text-blue-800 mb-3 flex items-center">
+                          <FontAwesomeIcon icon={faInfoCircle} className="mr-2" />Emerging (Last 7 Days)
+                        </h5>
+                        <ul className="space-y-2 text-xs text-blue-700">
+                          {themeMetrics.recent.map(t => (
+                            <li key={t.theme} className="flex justify-between">
+                              <span className="truncate max-w-[70%]" title={t.theme}>{t.theme}</span>
+                              <span className="font-semibold">{t.count}</span>
+                            </li>
+                          ))}
+                          {themeMetrics.recent.length === 0 && <li className="text-blue-600 opacity-70">No recent themes</li>}
+                        </ul>
+                        {themeMetrics.topPhrases.length > 0 && (
+                          <div className="mt-4 border-t pt-3">
+                            <h6 className="text-xs font-semibold text-blue-800 mb-2">Top Phrases</h6>
+                            <div className="flex flex-wrap gap-2">
+                              {themeMetrics.topPhrases.map(p => (
+                                <span key={p.phrase} className="px-2 py-1 bg-white border border-blue-200 rounded-full text-[11px] text-blue-700" title={`${p.count} occurrences`}>
+                                  {p.phrase} ({p.count})
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
                 </div>
-              
+                )}
+              </div>
             )}
             {activeTab === "performance" && (
               <>
@@ -3122,121 +3310,63 @@ function App() {
                         </tr>
                       </thead>
                       <tbody className="bg-white divide-y divide-gray-200">
-                        <tr>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                            John Smith
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            42
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            36
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            85.7%
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            12h
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            3.2 days
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            4.2/5
-                          </td>
-                        </tr>
-                        <tr>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                            Emma Davis
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            36
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            28
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            77.8%
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            8h
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            2.5 days
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            4.5/5
-                          </td>
-                        </tr>
-                        <tr>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                            Sarah Johnson
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            28
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            26
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            92.9%
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            15h
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            4.1 days
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            4.7/5
-                          </td>
-                        </tr>
-                        <tr>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                            Michael Brown
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            32
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            25
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            78.1%
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            10h
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            3.8 days
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            4.0/5
-                          </td>
-                        </tr>
-                        <tr>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                            Team Average
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                            34.5
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                            28.8
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                            83.5%
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                            11h
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                            3.4 days
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                            4.3/5
-                          </td>
-                        </tr>
+                        {officerStats.list.length === 0 && (
+                          <tr>
+                            <td colSpan={7} className="px-6 py-8 text-center text-sm text-gray-500">
+                              No officer performance data available for current filters.
+                            </td>
+                          </tr>
+                        )}
+                        {officerStats.list.map((officer) => (
+                          <tr key={officer.id}>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                              {officer.name}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                              {officer.total}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                              {officer.resolved}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                              {officer.resolutionRate}%
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                              {officer.avgResponseTime ? `${officer.avgResponseTime}h` : '—'}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                              {officer.avgResolutionTime ? `${officer.avgResolutionTime}h` : '—'}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                              {officer.avgSat ? `${officer.avgSat}/5` : '—'}
+                            </td>
+                          </tr>
+                        ))}
+                        {officerStats.list.length > 0 && (
+                          <tr>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                              Team Average
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                              {officerStats.teamAvg.total}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                              {officerStats.teamAvg.resolved}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                              {officerStats.teamAvg.resolutionRate}%
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                              {officerStats.teamAvg.avgResponseTime ? `${officerStats.teamAvg.avgResponseTime}h` : '—'}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                              {officerStats.teamAvg.avgResolutionTime ? `${officerStats.teamAvg.avgResolutionTime}h` : '—'}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                              {officerStats.teamAvg.avgSat ? `${officerStats.teamAvg.avgSat}/5` : '—'}
+                            </td>
+                          </tr>
+                        )}
                       </tbody>
                     </table>
                   </div>

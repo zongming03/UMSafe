@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 import nodemailer from "nodemailer";
 import validator from "email-validator";
 import { HOSTNAME, ADMIN_PREFIX } from "../config/urlConfig.js";
+import { getDefaultProfileImageUrl } from "../utils/uploadDefaultImage.js";
 
 const transporter = nodemailer.createTransport({
   service: "Gmail",
@@ -40,6 +41,9 @@ export const addOfficer = async (req, res) => {
     const hashed = await bcrypt.hash(password, 10);
     console.log("[addOfficer] InputHash:", hashed);
 
+    // Get default profile image from Cloudinary
+    const defaultProfileImage = await getDefaultProfileImageUrl();
+
     const newUser = new User({
       facultyid,
       name,
@@ -48,6 +52,7 @@ export const addOfficer = async (req, res) => {
       role,
       hashedpassword: hashed,
       phone,
+      profileImage: defaultProfileImage,
     });
 
     const savedUser = await newUser.save();

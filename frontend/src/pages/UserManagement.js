@@ -157,7 +157,7 @@ const UserManagement = () => {
 
   const handleSubmitEditUser = async (e) => {
     e.preventDefault();
-    console.log("[Submit Edit] User form data:", userForm); // ✅ Log userForm content
+    console.log("[Submit Edit] User form data:", userForm); 
     setIsLoading(true);
     if (
       !userForm.name?.trim() ||
@@ -490,7 +490,18 @@ const UserManagement = () => {
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="flex items-center">
                             <div className="h-10 w-10 flex-shrink-0">
-                              <div className="h-10 w-10 rounded-full bg-gray-200 flex items-center justify-center text-gray-500">
+                              {user.profileImage ? (
+                                <img
+                                  src={user.profileImage.startsWith('http') ? user.profileImage : `${process.env.REACT_APP_API_URL}${user.profileImage}`}
+                                  alt={user.name}
+                                  className="h-10 w-10 rounded-full object-cover"
+                                  onError={(e) => {
+                                    e.target.style.display = 'none';
+                                    e.target.nextSibling.style.display = 'flex';
+                                  }}
+                                />
+                              ) : null}
+                              <div className={`h-10 w-10 rounded-full bg-gray-200 flex items-center justify-center text-gray-500 ${user.profileImage ? 'hidden' : ''}`}>
                                 <FontAwesomeIcon icon={faUser} />
                               </div>
                             </div>

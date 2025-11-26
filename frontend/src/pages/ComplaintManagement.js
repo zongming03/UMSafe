@@ -30,6 +30,319 @@ const ComplaintManagement = () => {
   const [selectedComplaints, setSelectedComplaints] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [activeFilter, setActiveFilter] = useState("all");
+
+  // Export utility functions
+  const formatDate = (dateString) => {
+    if (!dateString) return 'N/A';
+    const date = new Date(dateString);
+    return date.toLocaleString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
+
+  const getComplaintsForExport = () => {
+    return filteredComplaints.filter(complaint => 
+      selectedComplaints.includes(complaint.displayId || complaint.id)
+    );
+  };
+
+  const exportToCSV = () => {
+    const complaintsToExport = getComplaintsForExport();
+    if (complaintsToExport.length === 0) return;
+
+    // Define CSV headers
+    const headers = [
+      'Complaint ID',
+      'Title',
+      'Description',
+      'Status',
+      'Category',
+      'Priority',
+      'Reporter',
+      'Assigned To',
+      'Location',
+      'Created Date',
+      'Last Updated',
+      'Anonymous'
+    ];
+
+    // Convert complaints to CSV rows
+    const rows = complaintsToExport.map(complaint => [
+      complaint.displayId || complaint.id,
+      complaint.title,
+      complaint.description?.replace(/[\n\r]/g, ' ').replace(/"/g, '""') || 'N/A',
+      complaint.status,
+      complaint.category?.name || 'N/A',
+      complaint.category?.priority || 'N/A',
+      complaint.username || 'Unknown',
+      complaint.adminName || 'Unassigned',
+      `${complaint.facultyLocation?.faculty || ''} ${complaint.facultyLocation?.facultyBlock || ''} ${complaint.facultyLocation?.facultyBlockRoom || ''}`.trim() || 'N/A',
+      formatDate(complaint.createdAt),
+      formatDate(complaint.updatedAt),
+      complaint.isAnonymous ? 'Yes' : 'No'
+    ]);
+
+    // Create CSV content
+    const csvContent = [
+      headers.map(h => `"${h}"`).join(','),
+      ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
+    ].join('\n');
+
+    // Create and download file
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    const timestamp = new Date().toISOString().slice(0, 10);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `UMSafe_Complaints_${timestamp}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const exportToExcel = () => {
+    const complaintsToExport = getComplaintsForExport();
+    if (complaintsToExport.length === 0) return;
+
+    // Create HTML table
+    const headers = [
+      'Complaint ID', 'Title', 'Description', 'Status', 'Category', 'Priority',
+      'Reporter', 'Assigned To', 'Faculty', 'Block', 'Room',
+      'Created Date', 'Last Updated', 'Anonymous'
+    ];
+
+    const rows = complaintsToExport.map(complaint => [
+      complaint.displayId || complaint.id,
+      complaint.title,
+      complaint.description || 'N/A',
+      complaint.status,
+      complaint.category?.name || 'N/A',
+      complaint.category?.priority || 'N/A',
+      complaint.username || 'Unknown',
+      complaint.adminName || 'Unassigned',
+      complaint.facultyLocation?.faculty || 'N/A',
+      complaint.facultyLocation?.facultyBlock || 'N/A',
+      complaint.facultyLocation?.facultyBlockRoom || 'N/A',
+      formatDate(complaint.createdAt),
+      formatDate(complaint.updatedAt),
+      complaint.isAnonymous ? 'Yes' : 'No'
+    ]);
+
+    // Create Excel-compatible HTML with professional styling
+    const htmlContent = `
+      <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
+      <head>
+        <meta charset="utf-8">
+        <style>
+          table { border-collapse: collapse; width: 100%; font-family: Arial, sans-serif; }
+          th { background-color: #4F46E5; color: white; font-weight: bold; padding: 12px 8px; text-align: left; border: 1px solid #ddd; }
+          td { padding: 10px 8px; border: 1px solid #ddd; vertical-align: top; }
+          tr:nth-child(even) { background-color: #f9fafb; }
+          .header { font-size: 18px; font-weight: bold; margin-bottom: 10px; color: #1f2937; }
+          .meta { font-size: 12px; color: #6b7280; margin-bottom: 20px; }
+        </style>
+      </head>
+      <body>
+        <div class="header">UMSafe Complaint Management System - Export Report</div>
+        <div class="meta">Generated on: ${new Date().toLocaleString()} | Total Records: ${complaintsToExport.length}</div>
+        <table>
+          <thead>
+            <tr>${headers.map(h => `<th>${h}</th>`).join('')}</tr>
+          </thead>
+          <tbody>
+            ${rows.map(row => `<tr>${row.map(cell => `<td>${cell}</td>`).join('')}</tr>`).join('')}
+          </tbody>
+        </table>
+      </body>
+      </html>
+    `;
+
+    // Create and download file
+    const blob = new Blob([htmlContent], { type: 'application/vnd.ms-excel' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    const timestamp = new Date().toISOString().slice(0, 10);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `UMSafe_Complaints_${timestamp}.xls`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const exportToPDF = () => {
+    const complaintsToExport = getComplaintsForExport();
+    if (complaintsToExport.length === 0) return;
+
+    // Create a print-friendly HTML page
+    const printWindow = window.open('', '_blank');
+    const timestamp = new Date().toLocaleString();
+
+    const htmlContent = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>UMSafe Complaints Export</title>
+        <style>
+          @media print {
+            @page { size: A4 landscape; margin: 1cm; }
+            body { margin: 0; }
+            .no-print { display: none; }
+            .page-break { page-break-after: always; }
+          }
+          body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            color: #1f2937;
+          }
+          .header {
+            text-align: center;
+            margin-bottom: 30px;
+            border-bottom: 3px solid #4F46E5;
+            padding-bottom: 15px;
+          }
+          .header h1 {
+            margin: 0;
+            color: #4F46E5;
+            font-size: 24px;
+          }
+          .header .meta {
+            margin-top: 8px;
+            font-size: 12px;
+            color: #6b7280;
+          }
+          .complaint-card {
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            background: white;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+          }
+          .complaint-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: start;
+            margin-bottom: 15px;
+            border-bottom: 2px solid #f3f4f6;
+            padding-bottom: 10px;
+          }
+          .complaint-id {
+            font-size: 18px;
+            font-weight: bold;
+            color: #4F46E5;
+          }
+          .complaint-status {
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+          }
+          .status-opened { background: #FEF3C7; color: #92400E; }
+          .status-inprogress { background: #DBEAFE; color: #1E40AF; }
+          .status-resolved { background: #D1FAE5; color: #065F46; }
+          .status-closed { background: #E5E7EB; color: #374151; }
+          .complaint-title {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 10px;
+            color: #111827;
+          }
+          .complaint-description {
+            margin-bottom: 15px;
+            color: #4b5563;
+            line-height: 1.6;
+          }
+          .complaint-details {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px;
+            font-size: 13px;
+          }
+          .detail-row {
+            display: flex;
+          }
+          .detail-label {
+            font-weight: 600;
+            color: #6b7280;
+            width: 130px;
+          }
+          .detail-value {
+            color: #1f2937;
+          }
+          .print-button {
+            background: #4F46E5;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            margin-bottom: 20px;
+          }
+          .print-button:hover {
+            background: #4338CA;
+          }
+        </style>
+      </head>
+      <body>
+        <button class="print-button no-print" onclick="window.print()">🖨️ Print / Save as PDF</button>
+        <div class="header">
+          <h1>UMSafe Complaint Management System</h1>
+          <div class="meta">
+            <strong>Export Report</strong><br>
+            Generated: ${timestamp} | Total Records: ${complaintsToExport.length}
+          </div>
+        </div>
+        ${complaintsToExport.map((complaint, index) => `
+          <div class="complaint-card">
+            <div class="complaint-header">
+              <div class="complaint-id">${complaint.displayId || complaint.id}</div>
+              <div class="complaint-status status-${complaint.status.toLowerCase()}">${complaint.status}</div>
+            </div>
+            <div class="complaint-title">${complaint.title}</div>
+            <div class="complaint-description">${complaint.description || 'No description provided'}</div>
+            <div class="complaint-details">
+              <div class="detail-row">
+                <span class="detail-label">Category:</span>
+                <span class="detail-value">${complaint.category?.name || 'N/A'} (${complaint.category?.priority || 'N/A'} Priority)</span>
+              </div>
+              <div class="detail-row">
+                <span class="detail-label">Reporter:</span>
+                <span class="detail-value">${complaint.isAnonymous ? 'Anonymous' : (complaint.username || 'Unknown')}</span>
+              </div>
+              <div class="detail-row">
+                <span class="detail-label">Assigned To:</span>
+                <span class="detail-value">${complaint.adminName || 'Unassigned'}</span>
+              </div>
+              <div class="detail-row">
+                <span class="detail-label">Location:</span>
+                <span class="detail-value">${[complaint.facultyLocation?.faculty, complaint.facultyLocation?.facultyBlock, complaint.facultyLocation?.facultyBlockRoom].filter(Boolean).join(', ') || 'N/A'}</span>
+              </div>
+              <div class="detail-row">
+                <span class="detail-label">Created:</span>
+                <span class="detail-value">${formatDate(complaint.createdAt)}</span>
+              </div>
+              <div class="detail-row">
+                <span class="detail-label">Last Updated:</span>
+                <span class="detail-value">${formatDate(complaint.updatedAt)}</span>
+              </div>
+            </div>
+          </div>
+          ${(index + 1) % 3 === 0 && index !== complaintsToExport.length - 1 ? '<div class="page-break"></div>' : ''}
+        `).join('')}
+      </body>
+      </html>
+    `;
+
+    printWindow.document.write(htmlContent);
+    printWindow.document.close();
+  };
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [currentPage, setCurrentPage] = useState(1);
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
@@ -123,7 +436,8 @@ const ComplaintManagement = () => {
   // MOCK DATA (kept as fallback for reference - will be removed after testing)
   const MOCK_COMPLAINTS = [
     {
-      id: "CMP-1093",
+      id: "019a926d-e235-710f-a590-735375474e5f",
+      displayId: "RPT-202511-1",
       userId: "0199d751-fbb6-742e-b052-e4a05b2d57bc",
       username: "Testing1.",
       adminId: "68af04187c2e6f499854e2da",
@@ -139,18 +453,34 @@ const ComplaintManagement = () => {
       ],
       timelineHistory: [
         {
-          id: "CMP-1093-evt-1",
+          id: "019a926d-e235-710f-a590-735375474e5f-evt-1",
+          reportId: "019a926d-e235-710f-a590-735375474e5f",
           actionTitle: "Report Submitted",
           actionDetails: "Complaint submitted by user Testing1.",
           initiator: "Testing1.",
           createdAt: "2025-10-23T15:59:35.599Z",
+          updatedAt: "2025-10-23T15:59:35.599Z",
+          version: 1,
         },
         {
-          id: "CMP-1093-evt-2",
-          actionTitle: "Status Updated",
-          actionDetails: "Status set to Opened.",
+          id: "019a926d-e235-710f-a590-735375474e5f-evt-2",
+          reportId: "019a926d-e235-710f-a590-735375474e5f",
+          actionTitle: "Admin Assigned",
+          actionDetails: "Admin Teoh Zong Ming assigned to complaint.",
           initiator: "System",
-          createdAt: "2025-10-23T15:59:36.000Z",
+          createdAt: "2025-10-23T16:05:00.000Z",
+          updatedAt: "2025-10-23T16:05:00.000Z",
+          version: 1,
+        },
+        {
+          id: "019a926d-e235-710f-a590-735375474e5f-evt-3",
+          reportId: "019a926d-e235-710f-a590-735375474e5f",
+          actionTitle: "Status Updated",
+          actionDetails: "Status changed to InProgress.",
+          initiator: "Teoh Zong Ming",
+          createdAt: "2025-10-23T16:05:01.000Z",
+          updatedAt: "2025-10-23T16:05:01.000Z",
+          version: 1,
         },
       ],
       latitude: 3.1271268,
@@ -168,12 +498,13 @@ const ComplaintManagement = () => {
       version: 1,
     },
     {
-      id: "CMP-1094",
+      id: "019a926d-e235-710f-a590-735375474e60",
+      displayId: "RPT-202511-2",
       userId: "0199d751-fbb6-742e-b052-e4a05b2d57bc",
-      adminId: "null",
+      adminId: null,
       adminName: "Unassigned",
       facultyid: "6915cd5e4297c05ff2598c55",
-      status: "InProgress",
+      status: "Opened",
       title: "Student Harassment Incident",
       description: "Witnessed bullying behavior in the cafeteria during lunch hour. Multiple students involved.",
       category: { name: "Bullying", priority: "High" },
@@ -182,25 +513,24 @@ const ComplaintManagement = () => {
       ],
       timelineHistory: [
         {
-          id: "CMP-1094-evt-1",
+          id: "019a926d-e235-710f-a590-735375474e60-evt-1",
+          reportId: "019a926d-e235-710f-a590-735375474e60",
           actionTitle: "Report Submitted",
           actionDetails: "Complaint submitted regarding bullying in cafeteria.",
-          initiator: "User",
+          initiator: "Testing1.",
           createdAt: "2025-10-22T16:07:10.441Z",
+          updatedAt: "2025-10-22T16:07:10.441Z",
+          version: 1,
         },
         {
-          id: "CMP-1094-evt-2",
-          actionTitle: "Admin Assigned",
-          actionDetails: "Admin oiiae assigned to complaint.",
-          initiator: "System",
-          createdAt: "2025-10-22T17:00:10.441Z",
-        },
-        {
-          id: "CMP-1094-evt-3",
+          id: "019a926d-e235-710f-a590-735375474e60-evt-2",
+          reportId: "019a926d-e235-710f-a590-735375474e60",
           actionTitle: "Status Updated",
-          actionDetails: "Status changed to InProgress.",
-          initiator: "oiiae",
-          createdAt: "2025-10-23T14:57:36.534Z",
+          actionDetails: "Status set to Opened.",
+          initiator: "System",
+          createdAt: "2025-10-22T16:07:11.000Z",
+          updatedAt: "2025-10-22T16:07:11.000Z",
+          version: 1,
         },
       ],
       latitude: 3.12719,
@@ -218,9 +548,10 @@ const ComplaintManagement = () => {
       version: 2,
     },
     {
-      id: "CMP-1095",
+      id: "019a926d-e235-710f-a590-735375474e61",
+      displayId: "RPT-202511-3",
       userId: "0199d751-fbb6-742e-b052-e4a05b2d57bc",
-      adminId: "null",
+      adminId: null,
       adminName: "Unassigned",
       facultyid: "6915cd5e4297c05ff2598c55",
       status: "Opened",
@@ -233,18 +564,24 @@ const ComplaintManagement = () => {
       ],
       timelineHistory: [
         {
-          id: "CMP-1095-evt-1",
+          id: "019a926d-e235-710f-a590-735375474e61-evt-1",
+          reportId: "019a926d-e235-710f-a590-735375474e61",
           actionTitle: "Report Submitted",
           actionDetails: "Overflowing trash bins reported near library entrance.",
-          initiator: "User",
+          initiator: "Testing1.",
           createdAt: "2025-10-22T16:02:30.647Z",
+          updatedAt: "2025-10-22T16:02:30.647Z",
+          version: 1,
         },
         {
-          id: "CMP-1095-evt-2",
+          id: "019a926d-e235-710f-a590-735375474e61-evt-2",
+          reportId: "019a926d-e235-710f-a590-735375474e61",
           actionTitle: "Status Updated",
           actionDetails: "Status set to Opened.",
           initiator: "System",
           createdAt: "2025-10-22T16:02:31.000Z",
+          updatedAt: "2025-10-22T16:02:31.000Z",
+          version: 1,
         },
       ],
       latitude: 3.12719,
@@ -262,9 +599,10 @@ const ComplaintManagement = () => {
       version: 1,
     },
     {
-      id: "CMP-1096",
+      id: "019a926d-e235-710f-a590-735375474e62",
+      displayId: "RPT-202511-4",
       userId: "testing",
-      adminId: "null",
+      adminId: null,
       adminName: "Unassigned",
       facultyid: "6915cd5e4297c05ff2598c55",
       status: "Opened",
@@ -276,18 +614,24 @@ const ComplaintManagement = () => {
       ],
       timelineHistory: [
         {
-          id: "CMP-1096-evt-1",
+          id: "019a926d-e235-710f-a590-735375474e62-evt-1",
+          reportId: "019a926d-e235-710f-a590-735375474e62",
           actionTitle: "Report Submitted",
           actionDetails: "Graffiti reported at lecture hall entrance.",
           initiator: "testing",
           createdAt: "2025-06-14T12:15:00.000Z",
+          updatedAt: "2025-06-14T12:15:00.000Z",
+          version: 1,
         },
         {
-          id: "CMP-1096-evt-2",
+          id: "019a926d-e235-710f-a590-735375474e62-evt-2",
+          reportId: "019a926d-e235-710f-a590-735375474e62",
           actionTitle: "Status Updated",
           actionDetails: "Status set to Opened.",
           initiator: "System",
           createdAt: "2025-06-14T12:15:05.000Z",
+          updatedAt: "2025-06-14T12:15:05.000Z",
+          version: 1,
         },
       ],
       latitude: 0,
@@ -304,7 +648,8 @@ const ComplaintManagement = () => {
       version: 1,
     },
     {
-      id: "CMP-1097",
+      id: "019a926d-e235-710f-a590-735375474e63",
+      displayId: "RPT-202511-5",
       userId: "0199d751-fbb6-742e-b052-e4a05b2d57bc",
       adminId: "68af04187c2e6f499854e2da",
       adminName: "Teoh Zong Ming",
@@ -318,25 +663,44 @@ const ComplaintManagement = () => {
       ],
       timelineHistory: [
         {
-          id: "CMP-1097-evt-1",
+          id: "019a926d-e235-710f-a590-735375474e63-evt-1",
+          reportId: "019a926d-e235-710f-a590-735375474e63",
           actionTitle: "Report Submitted",
           actionDetails: "Broken window reported in lecture hall.",
-          initiator: "User",
+          initiator: "Testing1.",
           createdAt: "2025-10-20T14:59:08.106Z",
+          updatedAt: "2025-10-20T14:59:08.106Z",
+          version: 1,
         },
         {
-          id: "CMP-1097-evt-2",
+          id: "019a926d-e235-710f-a590-735375474e63-evt-2",
+          reportId: "019a926d-e235-710f-a590-735375474e63",
           actionTitle: "Admin Assigned",
-          actionDetails: "Admin oiiae assigned to complaint.",
+          actionDetails: "Admin Teoh Zong Ming assigned to complaint.",
           initiator: "System",
           createdAt: "2025-10-20T15:10:08.106Z",
+          updatedAt: "2025-10-20T15:10:08.106Z",
+          version: 1,
         },
         {
-          id: "CMP-1097-evt-3",
+          id: "019a926d-e235-710f-a590-735375474e63-evt-3",
+          reportId: "019a926d-e235-710f-a590-735375474e63",
+          actionTitle: "Status Updated",
+          actionDetails: "Status changed to InProgress.",
+          initiator: "Teoh Zong Ming",
+          createdAt: "2025-10-20T15:10:09.000Z",
+          updatedAt: "2025-10-20T15:10:09.000Z",
+          version: 1,
+        },
+        {
+          id: "019a926d-e235-710f-a590-735375474e63-evt-4",
+          reportId: "019a926d-e235-710f-a590-735375474e63",
           actionTitle: "Status Updated",
           actionDetails: "Status changed to Resolved.",
-          initiator: "oiiae",
+          initiator: "Teoh Zong Ming",
           createdAt: "2025-10-20T15:50:33.823Z",
+          updatedAt: "2025-10-20T15:50:33.823Z",
+          version: 1,
         },
       ],
       latitude: 3.1271286,
@@ -347,16 +711,27 @@ const ComplaintManagement = () => {
         facultyBlockRoom: "Room 401",
       },
       isAnonymous: false,
-      isFeedbackProvided: false,
+      isFeedbackProvided: true,
       chatroomId: "019a0236-cdb6-74dc-878a-b6e675995c1d",
       createdAt: "2025-10-20T14:59:08.106Z",
       updatedAt: "2025-10-20T15:50:33.823Z",
       version: 9,
+      feedback: {
+        id: "019b0abc-aaaa-71f1-b100-123456789001",
+        reportId: "019a926d-e235-710f-a590-735375474e63",
+        q1Rating: 4,
+        q2Rating: 5,
+        overallComment: "Prompt fix. Window replaced quickly.",
+        createdAt: "2025-10-20T15:55:00.000Z",
+        updatedAt: "2025-10-20T15:55:00.000Z",
+        version: 1
+      },
     },
     {
-      id: "CMP-1098",
+      id: "019a926d-e235-710f-a590-735375474e64",
+      displayId: "RPT-202511-6",
       userId: "0199d751-fbb6-742e-b052-e4a05b2d57bc",
-     adminId: "68af04187c2e6f499854e2da",
+      adminId: "68af04187c2e6f499854e2da",
       adminName: "Teoh Zong Ming",
       facultyid: "6915cd5e4297c05ff2598c55",
       status: "Opened",
@@ -368,18 +743,34 @@ const ComplaintManagement = () => {
       ],
       timelineHistory: [
         {
-          id: "CMP-1098-evt-1",
+          id: "019a926d-e235-710f-a590-735375474e64-evt-1",
+          reportId: "019a926d-e235-710f-a590-735375474e64",
           actionTitle: "Report Submitted",
           actionDetails: "Carpet stain reported in study area.",
-          initiator: "User",
+          initiator: "Testing1.",
           createdAt: "2025-10-18T13:52:48.107Z",
+          updatedAt: "2025-10-18T13:52:48.107Z",
+          version: 1,
         },
         {
-          id: "CMP-1098-evt-2",
-          actionTitle: "Status Updated",
-          actionDetails: "Status set to Opened.",
+          id: "019a926d-e235-710f-a590-735375474e64-evt-2",
+          reportId: "019a926d-e235-710f-a590-735375474e64",
+          actionTitle: "Admin Assigned",
+          actionDetails: "Admin Teoh Zong Ming assigned to complaint.",
           initiator: "System",
-          createdAt: "2025-10-18T13:52:49.000Z",
+          createdAt: "2025-10-18T14:00:00.000Z",
+          updatedAt: "2025-10-18T14:00:00.000Z",
+          version: 1,
+        },
+        {
+          id: "019a926d-e235-710f-a590-735375474e64-evt-3",
+          reportId: "019a926d-e235-710f-a590-735375474e64",
+          actionTitle: "Status Updated",
+          actionDetails: "Status changed to InProgress.",
+          initiator: "Teoh Zong Ming",
+          createdAt: "2025-10-18T14:00:01.000Z",
+          updatedAt: "2025-10-18T14:00:01.000Z",
+          version: 1,
         },
       ],
       latitude: 3.1271274,
@@ -397,7 +788,8 @@ const ComplaintManagement = () => {
       version: 1,
     },
     {
-      id: "CMP-1099",
+      id: "019a926d-e235-710f-a590-735375474e65",
+      displayId: "RPT-202511-7",
       userId: "0199d751-fbb6-742e-b052-e4a05b2d57bc",
       adminId: "68af04187c2e6f499854e2da",
       adminName: "Teoh Zong Ming",
@@ -412,32 +804,54 @@ const ComplaintManagement = () => {
       ],
       timelineHistory: [
         {
-          id: "CMP-1099-evt-1",
+          id: "019a926d-e235-710f-a590-735375474e65-evt-1",
+          reportId: "019a926d-e235-710f-a590-735375474e65",
           actionTitle: "Report Submitted",
           actionDetails: "Academic misconduct reported during exam.",
-          initiator: "User",
+          initiator: "Testing1.",
           createdAt: "2025-10-12T13:28:06.371Z",
+          updatedAt: "2025-10-12T13:28:06.371Z",
+          version: 1,
         },
         {
-          id: "CMP-1099-evt-2",
+          id: "019a926d-e235-710f-a590-735375474e65-evt-2",
+          reportId: "019a926d-e235-710f-a590-735375474e65",
           actionTitle: "Admin Assigned",
-          actionDetails: "Admin qwe1 assigned to complaint.",
+          actionDetails: "Admin Teoh Zong Ming assigned to complaint.",
           initiator: "System",
           createdAt: "2025-10-12T14:00:06.371Z",
+          updatedAt: "2025-10-12T14:00:06.371Z",
+          version: 1,
         },
         {
-          id: "CMP-1099-evt-3",
+          id: "019a926d-e235-710f-a590-735375474e65-evt-3",
+          reportId: "019a926d-e235-710f-a590-735375474e65",
+          actionTitle: "Status Updated",
+          actionDetails: "Status changed to InProgress.",
+          initiator: "Teoh Zong Ming",
+          createdAt: "2025-10-12T14:00:07.000Z",
+          updatedAt: "2025-10-12T14:00:07.000Z",
+          version: 1,
+        },
+        {
+          id: "019a926d-e235-710f-a590-735375474e65-evt-4",
+          reportId: "019a926d-e235-710f-a590-735375474e65",
           actionTitle: "Status Updated",
           actionDetails: "Status changed to Resolved.",
-          initiator: "qwe1",
+          initiator: "Teoh Zong Ming",
           createdAt: "2025-10-13T16:59:48.850Z",
+          updatedAt: "2025-10-13T16:59:48.850Z",
+          version: 1,
         },
         {
-          id: "CMP-1099-evt-4",
+          id: "019a926d-e235-710f-a590-735375474e65-evt-5",
+          reportId: "019a926d-e235-710f-a590-735375474e65",
           actionTitle: "Feedback Provided",
           actionDetails: "User submitted feedback after resolution.",
-          initiator: "User",
+          initiator: "Testing1.",
           createdAt: "2025-10-13T17:10:00.000Z",
+          updatedAt: "2025-10-13T17:10:00.000Z",
+          version: 1,
         },
       ],
       latitude: 3.1271261,
@@ -453,6 +867,16 @@ const ComplaintManagement = () => {
       createdAt: "2025-10-12T13:28:06.371Z",
       updatedAt: "2025-10-13T16:59:48.850Z",
       version: 15,
+      feedback: {
+        id: "019b0abc-bbbb-71f1-b100-123456789002",
+        reportId: "019a926d-e235-710f-a590-735375474e65",
+        q1Rating: 3,
+        q2Rating: 4,
+        overallComment: "Investigation handled well, appreciate transparency.",
+        createdAt: "2025-10-13T17:12:00.000Z",
+        updatedAt: "2025-10-13T17:12:00.000Z",
+        version: 1
+      },
     },
   ];
 
@@ -597,7 +1021,7 @@ const ComplaintManagement = () => {
   const handleSelectAll = (e) => {
     if (e.target.checked) {
       setSelectedComplaints(
-        filteredComplaints.map((complaint) => complaint.id)
+        filteredComplaints.map((complaint) => complaint.displayId)
       );
     } else {
       setSelectedComplaints([]);
@@ -648,13 +1072,13 @@ const ComplaintManagement = () => {
   const applyFilters = () => {
     const filtered = complaints.filter((complaint) => {
       const title = complaint?.title || "";
-      const id = complaint?.id || "";
+      const displayId = complaint?.displayId || "";
       const adminName = getAdminName(complaint.adminId) || "";
 
-      // ✅ Search filter
+      // ✅ Search filter (use displayId)
       const matchesSearch =
         title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        id.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        displayId.toLowerCase().includes(searchTerm.toLowerCase()) ||
         adminName.toLowerCase().includes(searchTerm.toLowerCase());
 
       // ✅ Status filter
@@ -814,7 +1238,7 @@ const ComplaintManagement = () => {
                     </button>
                     <div
                       id="exportDropdown"
-                      className="hidden absolute left-0 top-full mt-2 w-56 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 z-50"
+                      className="hidden absolute right-0 top-full mt-2 w-56 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 z-50"
                     >
                     <div className="py-1">
                       <div className="px-4 py-2 text-sm text-gray-700 border-b border-gray-200">
@@ -829,11 +1253,22 @@ const ComplaintManagement = () => {
                           onClick={() => {
                             const count = selectedComplaints.length;
                             if (count === 0 || count > 10) return;
-                            const n = document.createElement("div");
-                            n.className = "export-notification";
-                            n.innerHTML = `<span>Exporting ${count} selected as CSV...</span>`;
-                            document.body.appendChild(n);
-                            setTimeout(() => n.remove(), 3000);
+                            try {
+                              exportToCSV();
+                              const n = document.createElement("div");
+                              n.className = "export-notification";
+                              n.innerHTML = `<span>✅ Successfully exported ${count} complaints as CSV</span>`;
+                              document.body.appendChild(n);
+                              setTimeout(() => n.remove(), 3000);
+                            } catch (error) {
+                              const n = document.createElement("div");
+                              n.className = "export-notification";
+                              n.style.background = "#FEE2E2";
+                              n.style.color = "#991B1B";
+                              n.innerHTML = `<span>❌ Export failed. Please try again.</span>`;
+                              document.body.appendChild(n);
+                              setTimeout(() => n.remove(), 3000);
+                            }
                             document.getElementById("exportDropdown")?.classList.add("hidden");
                           }}
                           className="complaint-export-button-selection"
@@ -850,11 +1285,22 @@ const ComplaintManagement = () => {
                           onClick={() => {
                             const count = selectedComplaints.length;
                             if (count === 0 || count > 10) return;
-                            const n = document.createElement("div");
-                            n.className = "export-notification";
-                            n.innerHTML = `<span>Exporting ${count} selected as Excel...</span>`;
-                            document.body.appendChild(n);
-                            setTimeout(() => n.remove(), 3000);
+                            try {
+                              exportToExcel();
+                              const n = document.createElement("div");
+                              n.className = "export-notification";
+                              n.innerHTML = `<span>✅ Successfully exported ${count} complaints as Excel</span>`;
+                              document.body.appendChild(n);
+                              setTimeout(() => n.remove(), 3000);
+                            } catch (error) {
+                              const n = document.createElement("div");
+                              n.className = "export-notification";
+                              n.style.background = "#FEE2E2";
+                              n.style.color = "#991B1B";
+                              n.innerHTML = `<span>❌ Export failed. Please try again.</span>`;
+                              document.body.appendChild(n);
+                              setTimeout(() => n.remove(), 3000);
+                            }
                             document.getElementById("exportDropdown")?.classList.add("hidden");
                           }}
                           className="complaint-export-button-selection"
@@ -870,11 +1316,22 @@ const ComplaintManagement = () => {
                           onClick={() => {
                             const count = selectedComplaints.length;
                             if (count === 0 || count > 10) return;
-                            const n = document.createElement("div");
-                            n.className = "export-notification";
-                            n.innerHTML = `<span>Exporting ${count} selected as PDF...</span>`;
-                            document.body.appendChild(n);
-                            setTimeout(() => n.remove(), 3000);
+                            try {
+                              exportToPDF();
+                              const n = document.createElement("div");
+                              n.className = "export-notification";
+                              n.innerHTML = `<span>✅ Print preview opened for ${count} complaints</span>`;
+                              document.body.appendChild(n);
+                              setTimeout(() => n.remove(), 3000);
+                            } catch (error) {
+                              const n = document.createElement("div");
+                              n.className = "export-notification";
+                              n.style.background = "#FEE2E2";
+                              n.style.color = "#991B1B";
+                              n.innerHTML = `<span>❌ Export failed. Please try again.</span>`;
+                              document.body.appendChild(n);
+                              setTimeout(() => n.remove(), 3000);
+                            }
                             document.getElementById("exportDropdown")?.classList.add("hidden");
                           }}
                           className="complaint-export-button-selection"
@@ -1232,16 +1689,16 @@ const ComplaintManagement = () => {
                                   type="checkbox"
                                   className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
                                   checked={selectedComplaints.includes(
-                                    complaint.id
+                                    complaint.displayId
                                   )}
                                   onChange={() =>
-                                    handleSelectComplaint(complaint.id)
+                                    handleSelectComplaint(complaint.displayId)
                                   }
                                 />
                               </div>
                             </td>
                             <td className="px-3 py-4 whitespace-nowrap text-sm font-medium text-blue-600 cursor-pointer">
-                              {complaint.id}
+                              {complaint.displayId}
                             </td>
                             <td
                               className="px-6 py-4 text-sm text-gray-900 cursor-pointer"
@@ -1354,7 +1811,7 @@ const ComplaintManagement = () => {
                                                   Are you sure you want to
                                                   delete complaint{" "}
                                                   <span className="font-medium">
-                                                    {complaintToDelete.id}
+                                                    {complaintToDelete.displayId}
                                                   </span>
                                                   ?
                                                 </p>
