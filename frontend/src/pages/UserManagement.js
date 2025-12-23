@@ -51,7 +51,19 @@ const UserManagement = () => {
   const [error, setError] = useState(null);
   const [userToDelete, setUserToDelete] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
-  const currentLoggedInUserId = localStorage.getItem("userId"); 
+  
+  const getCurrentUserId = () => {
+    const userData = localStorage.getItem("user") || sessionStorage.getItem("user");
+    if (userData) {
+      try {
+        const user = JSON.parse(userData);
+        return user._id || user.id;
+      } catch (err) {
+        return null;
+      }
+    }
+    return null;
+  }; 
 
   // Filtered users based on search and filters
   const filteredUsers = users.filter((user) => {
@@ -135,6 +147,17 @@ const UserManagement = () => {
     try {
       const res = await addOfficer(userForm);
       if (res && (res.status === 200 || res.status === 201)) {
+        // Show success notification (no clipboard copy)
+        if (res.data?.password) {
+          const password = res.data.password;
+          showNotification(
+            `User added successfully! Temporary password: ${password}`,
+            "success"
+          );
+        } else {
+          showNotification("User added successfully", "success");
+        }
+
         await fetchAndSetUsers();
         setIsAddUserModalOpen(false);
         setUserForm({
@@ -144,11 +167,18 @@ const UserManagement = () => {
           email: "",
           phone: "",
         });
-        showNotification("User added successfully");
       }
     } catch (error) {
       console.error("Error adding user:", error);
-      setError("Failed to add user. Please check the details .");
+      // Prefer detailed API message when available (e.g., duplicate email/staff ID)
+      const apiMessage =
+        error?.response?.data?.message ||
+        error?.response?.data?.msg ||
+        error?.message ||
+        "Failed to add user. Please try again.";
+
+      setError(apiMessage);
+      showNotification(apiMessage);
       return;
     } finally {
       setIsLoading(false);
@@ -203,18 +233,32 @@ const UserManagement = () => {
   };
 
   const handleConfirmDelete = async () => {
-    console.log("Aaaaa:", userToDelete);
     if (!userToDelete) return showNotification("User to delete is empty...");
     setIsLoading(true);
 
+    const currentUserId = getCurrentUserId();
+
+    // Prevent deleting own account (single delete)
     if (
       !Array.isArray(userToDelete) &&
-      userToDelete._id === currentLoggedInUserId
+      currentUserId &&
+      userToDelete._id === currentUserId
     ) {
       showNotification("You cannot delete your own account.");
       setIsDeleteModalOpen(false);
       setIsLoading(false);
       return;
+    }
+
+    // Prevent bulk delete if it includes current user
+    if (Array.isArray(userToDelete) && currentUserId) {
+      const includesCurrentUser = userToDelete.some(user => user._id === currentUserId);
+      if (includesCurrentUser) {
+        showNotification("You cannot delete your own account.");
+        setIsDeleteModalOpen(false);
+        setIsLoading(false);
+        return;
+      }
     }
 
     try {
@@ -542,13 +586,13 @@ const UserManagement = () => {
                             <button
                               onClick={() => handleDeleteUser(user)}
                               className={`text-red-600 hover:text-red-900 cursor-pointer ${
-                                isLastAdmin(user._id)
+                                isLastAdmin(user._id) || user._id === getCurrentUserId()
                                   ? "opacity-50 cursor-not-allowed"
                                   : ""
                               }`}
                               disabled={
                                 isLastAdmin(user._id) ||
-                                user._id === currentLoggedInUserId
+                                user._id === getCurrentUserId()
                               }
                             >
                               <FontAwesomeIcon icon={faTrashAlt} />

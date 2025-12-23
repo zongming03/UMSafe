@@ -25,6 +25,7 @@ import {
   bulkDeleteCategories,
   fetchReports,
 } from "../services/api";
+import mockComplaints from "../mock/mockComplaints";
 import LoadingOverlay from "../components/LoadingOverlay";
 
 const ComplaintCategory = () => {
@@ -125,20 +126,21 @@ const ComplaintCategory = () => {
       const categoriesData = categoriesRes.data;
       console.log("📂 Categories fetched:", categoriesData);
 
-      // Try fetching reports; if it fails, default to null so counts = 0
+      // Try fetching reports; if it fails, use mock data as fallback
       let reportsData = null;
       try {
         const reportsRes = await fetchReports();
         reportsData = reportsRes.data?.reports || reportsRes.data?.data || reportsRes.data || [];
         console.log("📋 Reports fetched:", reportsData);
       } catch (reportsError) {
-        console.warn("⚠️ Reports fetch failed, defaulting counts to 0", reportsError);
-        reportsData = null;
+        console.warn("⚠️ Reports fetch failed, using mock complaints data as fallback", reportsError);
+        // Use mock complaints data as fallback
+        reportsData = mockComplaints || [];
       }
 
       const categoryComplaintsCount = {};
       (reportsData || []).forEach(report => {
-        const categoryName = report.category?.name;
+        const categoryName = report.category?.name || report.category;
         if (categoryName) {
           categoryComplaintsCount[categoryName] = (categoryComplaintsCount[categoryName] || 0) + 1;
         }
@@ -238,7 +240,7 @@ const ComplaintCategory = () => {
             : "",
         priority: currentCategory.priority || "low",
       };
-      console.log("[EditCategory] Input:", updatedCategory); // <-- log input
+   
       const res = await updateCategory(currentCategory._id, updatedCategory);
       if (res && (res.status === 200 || res.status === 201)) {
         await fetchAndSetCategories();

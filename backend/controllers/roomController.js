@@ -2,7 +2,7 @@ import FacultyModel from "../models/Room.js";
 
 // POST /api/rooms
 export const addRoom = async (req, res) => {
-  const { facultyId, blockName, roomName } = req.body;
+  const { facultyId, blockName, roomName, latitude, longitude } = req.body;
 
   try {
     const faculty = await FacultyModel.findById(facultyId);
@@ -29,11 +29,11 @@ export const addRoom = async (req, res) => {
       console.log("Block not found, creating new block:", blockName);
       faculty.faculty_blocks.push({
         name: blockName,
-        faculty_block_rooms: [{ name: roomName }],
+        faculty_block_rooms: [{ name: roomName, latitude, longitude }],
       });
     } else {
       // If block exists, just add the room
-      block.faculty_block_rooms.push({ name: roomName });
+      block.faculty_block_rooms.push({ name: roomName, latitude, longitude });
       console.log("Room added to existing block:", roomName);
     }
 

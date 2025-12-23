@@ -1,6 +1,9 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import * as echarts from "echarts";
+import MOCK_COMPLAINTS from "../mock/mockComplaints";
+import { useComplaintUpdates } from "../hooks/useComplaintUpdates";
+import { fetchReports } from "../services/api";
 
 import "../styles/Dashboard.css";
 import SummaryCard from "../components/SummaryCard";
@@ -22,13 +25,10 @@ import {
 } from "@fortawesome/free-solid-svg-icons";
 
 const Dashboard = () => {
-  const [activeTab, setActiveTab] = useState("dashboard");
   const [isProfileOpen, setIsProfileOpen] = useState(false);
-  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [isTimeRangeOpen, setIsTimeRangeOpen] = useState(false);
   const [selectedTimeRange, setSelectedTimeRange] = useState("Last 7 Days");
-  const [isCustomRangeOpen, setIsCustomRangeOpen] = useState(false);
   const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
 
   const timeRangeOptions = [
@@ -173,433 +173,86 @@ const Dashboard = () => {
   const [adminsMap, setAdminsMap] = useState({});
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
-  const [complaints, setComplaints] = useState([
-    {
-      id: "019a926d-e235-710f-a590-735375474e5f",
-      displayId: "RPT-202511-1",
-      userId: "0199d751-fbb6-742e-b052-e4a05b2d57bc",
-      username: "Testing1.",
-      adminId: "68af04187c2e6f499854e2da",
-      adminName: "Teoh Zong Ming",
-      facultyid: "6915cd5e4297c05ff2598c55",
-      status: "Opened",
-      title: "Dirty Classroom Floor",
-      description: "The classroom floor has not been cleaned for days. There are food wrappers and dust everywhere.",
-      category: { name: "Cleanliness", priority: "Low" },
-      media: [
-        "https://images.unsplash.com/photo-1581578731548-c64695cc6952?w=800&q=80",
-        "https://images.unsplash.com/photo-1584622650111-993a426fbf0a?w=800&q=80",
-      ],
-      timelineHistory: [
-        {
-          id: "019a926d-e235-710f-a590-735375474e5f-evt-1",
-          reportId: "019a926d-e235-710f-a590-735375474e5f",
-          actionTitle: "Report Submitted",
-          actionDetails: "Complaint submitted by user Testing1.",
-          initiator: "Testing1.",
-          createdAt: "2025-10-23T15:59:35.599Z",
-          updatedAt: "2025-10-23T15:59:35.599Z",
-          version: 1,
-        },
-        {
-          id: "019a926d-e235-710f-a590-735375474e5f-evt-2",
-          reportId: "019a926d-e235-710f-a590-735375474e5f",
-          actionTitle: "Admin Assigned",
-          actionDetails: "Admin Teoh Zong Ming assigned to complaint.",
-          initiator: "System",
-          createdAt: "2025-10-23T16:05:00.000Z",
-          updatedAt: "2025-10-23T16:05:00.000Z",
-          version: 1,
-        },
-        {
-          id: "019a926d-e235-710f-a590-735375474e5f-evt-3",
-          reportId: "019a926d-e235-710f-a590-735375474e5f",
-          actionTitle: "Status Updated",
-          actionDetails: "Status changed to InProgress.",
-          initiator: "Teoh Zong Ming",
-          createdAt: "2025-10-23T16:05:01.000Z",
-          updatedAt: "2025-10-23T16:05:01.000Z",
-          version: 1,
-        },
-      ],
-      latitude: 3.1271268,
-      longitude: 101.6349605,
-      facultyLocation: {
-        faculty: "Faculty of Computer Science and Engineering",
-        facultyBlock: "Block A",
-        facultyBlockRoom: "Room 101",
-      },
-      isAnonymous: false,
-      isFeedbackProvided: false,
-      chatroomId: "FAKE-ROOM-1093",
-      createdAt: "2025-10-23T15:59:35.599Z",
-      updatedAt: "2025-10-23T15:59:35.599Z",
-      version: 1,
-    },
-    {
-      id: "019a926d-e235-710f-a590-735375474e60",
-      displayId: "RPT-202511-2",
-      userId: "0199d751-fbb6-742e-b052-e4a05b2d57bc",
-      adminId: null,
-      adminName: "Unassigned",
-      facultyid: "6915cd5e4297c05ff2598c55",
-      status: "Opened",
-      title: "Student Harassment Incident",
-      description: "Witnessed bullying behavior in the cafeteria during lunch hour. Multiple students involved.",
-      category: { name: "Bullying", priority: "High" },
-      media: [
-        "https://images.unsplash.com/photo-1523050854058-8df90110c9f1?w=800&q=80",
-      ],
-      timelineHistory: [
-        {
-          id: "019a926d-e235-710f-a590-735375474e60-evt-1",
-          reportId: "019a926d-e235-710f-a590-735375474e60",
-          actionTitle: "Report Submitted",
-          actionDetails: "Complaint submitted regarding bullying in cafeteria.",
-          initiator: "Testing1.",
-          createdAt: "2025-10-22T16:07:10.441Z",
-          updatedAt: "2025-10-22T16:07:10.441Z",
-          version: 1,
-        },
-        {
-          id: "019a926d-e235-710f-a590-735375474e60-evt-2",
-          reportId: "019a926d-e235-710f-a590-735375474e60",
-          actionTitle: "Status Updated",
-          actionDetails: "Status set to Opened.",
-          initiator: "System",
-          createdAt: "2025-10-22T16:07:11.000Z",
-          updatedAt: "2025-10-22T16:07:11.000Z",
-          version: 1,
-        },
-      ],
-      latitude: 3.12719,
-      longitude: 101.634895,
-      facultyLocation: {
-        faculty: "Faculty of Computer Science and Engineering",
-        facultyBlock: "Block B",
-        facultyBlockRoom: "Room 201",
-      },
-      isAnonymous: false,
-      isFeedbackProvided: false,
-      chatroomId: "FAKE-ROOM-1094",
-      createdAt: "2025-10-22T16:07:10.441Z",
-      updatedAt: "2025-10-23T14:57:36.534Z",
-      version: 2,
-    },
-    {
-      id: "019a926d-e235-710f-a590-735375474e61",
-      displayId: "RPT-202511-3",
-      userId: "0199d751-fbb6-742e-b052-e4a05b2d57bc",
-      adminId: null,
-      adminName: "Unassigned",
-      facultyid: "6915cd5e4297c05ff2598c55",
-      status: "Opened",
-      title: "Overflowing Trash Bins",
-      description: "Trash bins near the library entrance are overflowing. Bad smell and attracting flies.",
-      category: { name: "Cleanliness", priority: "Low" },
-      media: [
-        "https://images.unsplash.com/photo-1532996122724-e3c354a0b15b?w=800&q=80",
-        "https://images.unsplash.com/photo-1604187351574-c75ca79f5807?w=800&q=80",
-      ],
-      timelineHistory: [
-        {
-          id: "019a926d-e235-710f-a590-735375474e61-evt-1",
-          reportId: "019a926d-e235-710f-a590-735375474e61",
-          actionTitle: "Report Submitted",
-          actionDetails: "Overflowing trash bins reported near library entrance.",
-          initiator: "Testing1.",
-          createdAt: "2025-10-22T16:02:30.647Z",
-          updatedAt: "2025-10-22T16:02:30.647Z",
-          version: 1,
-        },
-        {
-          id: "019a926d-e235-710f-a590-735375474e61-evt-2",
-          reportId: "019a926d-e235-710f-a590-735375474e61",
-          actionTitle: "Status Updated",
-          actionDetails: "Status set to Opened.",
-          initiator: "System",
-          createdAt: "2025-10-22T16:02:31.000Z",
-          updatedAt: "2025-10-22T16:02:31.000Z",
-          version: 1,
-        },
-      ],
-      latitude: 3.12719,
-      longitude: 101.634895,
-      facultyLocation: {
-        faculty: "Faculty of Business and Economics",
-        facultyBlock: "Block E",
-        facultyBlockRoom: "Room 501",
-      },
-      isAnonymous: false,
-      isFeedbackProvided: false,
-      chatroomId: "",
-      createdAt: "2025-10-22T16:02:30.647Z",
-      updatedAt: "2025-10-22T16:02:30.647Z",
-      version: 1,
-    },
-    {
-      id: "019a926d-e235-710f-a590-735375474e62",
-      displayId: "RPT-202511-4",
-      userId: "testing",
-      adminId: null,
-      adminName: "Unassigned",
-      facultyid: "6915cd5e4297c05ff2598c55",
-      status: "Opened",
-      title: "Graffiti on Wall",
-      description: "Graffiti spotted near the main entrance of the lecture hall. Contains inappropriate content.",
-      category: { name: "Vandalism", priority: "Medium" },
-      media: [
-        "https://images.unsplash.com/photo-1604509988450-70f2e6827eb6?w=800&q=80",
-      ],
-      timelineHistory: [
-        {
-          id: "019a926d-e235-710f-a590-735375474e62-evt-1",
-          reportId: "019a926d-e235-710f-a590-735375474e62",
-          actionTitle: "Report Submitted",
-          actionDetails: "Graffiti reported at lecture hall entrance.",
-          initiator: "testing",
-          createdAt: "2025-06-14T12:15:00.000Z",
-          updatedAt: "2025-06-14T12:15:00.000Z",
-          version: 1,
-        },
-        {
-          id: "019a926d-e235-710f-a590-735375474e62-evt-2",
-          reportId: "019a926d-e235-710f-a590-735375474e62",
-          actionTitle: "Status Updated",
-          actionDetails: "Status set to Opened.",
-          initiator: "System",
-          createdAt: "2025-06-14T12:15:05.000Z",
-          updatedAt: "2025-06-14T12:15:05.000Z",
-          version: 1,
-        },
-      ],
-      latitude: 0,
-      longitude: 0,
-      facultyLocation: {
-        faculty: "Faculty of Law",
-        facultyBlock: "Block D",
-        facultyBlockRoom: "Room 101",
-      },
-      isAnonymous: false,
-      chatroomId: "",
-      createdAt: "2025-06-14T12:15:00.000Z",
-      updatedAt: "2025-06-23T12:15:00.000Z",
-      version: 1,
-    },
-    {
-      id: "019a926d-e235-710f-a590-735375474e63",
-      displayId: "RPT-202511-5",
-      userId: "0199d751-fbb6-742e-b052-e4a05b2d57bc",
-      adminId: "68af04187c2e6f499854e2da",
-      adminName: "Teoh Zong Ming",
-      facultyid: "6915cd5e4297c05ff2598c55",
-      status: "Resolved",
-      title: "Broken Window in Lecture Hall",
-      description: "Window on the third floor is cracked and poses safety risk. Needs immediate attention.",
-      category: { name: "Cleanliness", priority: "Low" },
-      media: [
-        "https://images.unsplash.com/photo-1497366754035-f200968a6e72?w=800&q=80",
-      ],
-      timelineHistory: [
-        {
-          id: "019a926d-e235-710f-a590-735375474e63-evt-1",
-          reportId: "019a926d-e235-710f-a590-735375474e63",
-          actionTitle: "Report Submitted",
-          actionDetails: "Broken window reported in lecture hall.",
-          initiator: "Testing1.",
-          createdAt: "2025-10-20T14:59:08.106Z",
-          updatedAt: "2025-10-20T14:59:08.106Z",
-          version: 1,
-        },
-        {
-          id: "019a926d-e235-710f-a590-735375474e63-evt-2",
-          reportId: "019a926d-e235-710f-a590-735375474e63",
-          actionTitle: "Admin Assigned",
-          actionDetails: "Admin Teoh Zong Ming assigned to complaint.",
-          initiator: "System",
-          createdAt: "2025-10-20T15:10:08.106Z",
-          updatedAt: "2025-10-20T15:10:08.106Z",
-          version: 1,
-        },
-        {
-          id: "019a926d-e235-710f-a590-735375474e63-evt-3",
-          reportId: "019a926d-e235-710f-a590-735375474e63",
-          actionTitle: "Status Updated",
-          actionDetails: "Status changed to InProgress.",
-          initiator: "Teoh Zong Ming",
-          createdAt: "2025-10-20T15:10:09.000Z",
-          updatedAt: "2025-10-20T15:10:09.000Z",
-          version: 1,
-        },
-        {
-          id: "019a926d-e235-710f-a590-735375474e63-evt-4",
-          reportId: "019a926d-e235-710f-a590-735375474e63",
-          actionTitle: "Status Updated",
-          actionDetails: "Status changed to Resolved.",
-          initiator: "Teoh Zong Ming",
-          createdAt: "2025-10-20T15:50:33.823Z",
-          updatedAt: "2025-10-20T15:50:33.823Z",
-          version: 1,
-        },
-      ],
-      latitude: 3.1271286,
-      longitude: 101.6349525,
-      facultyLocation: {
-        faculty: "Faculty of Business and Economics",
-        facultyBlock: "Block D",
-        facultyBlockRoom: "Room 401",
-      },
-      isAnonymous: false,
-      isFeedbackProvided: false,
-      chatroomId: "019a0236-cdb6-74dc-878a-b6e675995c1d",
-      createdAt: "2025-10-20T14:59:08.106Z",
-      updatedAt: "2025-10-20T15:50:33.823Z",
-      version: 9,
-    },
-    {
-      id: "019a926d-e235-710f-a590-735375474e64",
-      displayId: "RPT-202511-6",
-      userId: "0199d751-fbb6-742e-b052-e4a05b2d57bc",
-      adminId: "68af04187c2e6f499854e2da",
-      adminName: "Teoh Zong Ming",
-      facultyid: "6915cd5e4297c05ff2598c55",
-      status: "Opened",
-      title: "Stained Carpet in Study Area",
-      description: "Large stain on carpet in the main study area. Looks like coffee spill that was never cleaned properly.",
-      category: { name: "Cleanliness", priority: "Low" },
-      media: [
-        "https://images.unsplash.com/photo-1497366811353-6870744d04b2?w=800&q=80",
-      ],
-      timelineHistory: [
-        {
-          id: "019a926d-e235-710f-a590-735375474e64-evt-1",
-          reportId: "019a926d-e235-710f-a590-735375474e64",
-          actionTitle: "Report Submitted",
-          actionDetails: "Carpet stain reported in study area.",
-          initiator: "Testing1.",
-          createdAt: "2025-10-18T13:52:48.107Z",
-          updatedAt: "2025-10-18T13:52:48.107Z",
-          version: 1,
-        },
-        {
-          id: "019a926d-e235-710f-a590-735375474e64-evt-2",
-          reportId: "019a926d-e235-710f-a590-735375474e64",
-          actionTitle: "Admin Assigned",
-          actionDetails: "Admin Teoh Zong Ming assigned to complaint.",
-          initiator: "System",
-          createdAt: "2025-10-18T14:00:00.000Z",
-          updatedAt: "2025-10-18T14:00:00.000Z",
-          version: 1,
-        },
-        {
-          id: "019a926d-e235-710f-a590-735375474e64-evt-3",
-          reportId: "019a926d-e235-710f-a590-735375474e64",
-          actionTitle: "Status Updated",
-          actionDetails: "Status changed to InProgress.",
-          initiator: "Teoh Zong Ming",
-          createdAt: "2025-10-18T14:00:01.000Z",
-          updatedAt: "2025-10-18T14:00:01.000Z",
-          version: 1,
-        },
-      ],
-      latitude: 3.1271274,
-      longitude: 101.6349593,
-      facultyLocation: {
-        faculty: "Faculty of Business and Economics",
-        facultyBlock: "Block E",
-        facultyBlockRoom: "Room 501",
-      },
-      isAnonymous: false,
-      isFeedbackProvided: false,
-      chatroomId: "",
-      createdAt: "2025-10-18T13:52:48.107Z",
-      updatedAt: "2025-10-18T13:52:48.107Z",
-      version: 1,
-    },
-    {
-      id: "019a926d-e235-710f-a590-735375474e65",
-      displayId: "RPT-202511-7",
-      userId: "0199d751-fbb6-742e-b052-e4a05b2d57bc",
-      adminId: "68af04187c2e6f499854e2da",
-      adminName: "Teoh Zong Ming",
-      facultyid: "6915cd5e4297c05ff2598c55",
-      status: "Resolved",
-      title: "Cheating During Exam",
-      description: "Witnessed student using unauthorized materials during final examination. Multiple instances observed.",
-      category: { name: "Academic Misconduct", priority: "High" },
-      media: [
-        "https://images.unsplash.com/photo-1434030216411-0b793f4b4173?w=800&q=80",
-        "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?w=800&q=80",
-      ],
-      timelineHistory: [
-        {
-          id: "019a926d-e235-710f-a590-735375474e65-evt-1",
-          reportId: "019a926d-e235-710f-a590-735375474e65",
-          actionTitle: "Report Submitted",
-          actionDetails: "Academic misconduct reported during exam.",
-          initiator: "Testing1.",
-          createdAt: "2025-10-12T13:28:06.371Z",
-          updatedAt: "2025-10-12T13:28:06.371Z",
-          version: 1,
-        },
-        {
-          id: "019a926d-e235-710f-a590-735375474e65-evt-2",
-          reportId: "019a926d-e235-710f-a590-735375474e65",
-          actionTitle: "Admin Assigned",
-          actionDetails: "Admin Teoh Zong Ming assigned to complaint.",
-          initiator: "System",
-          createdAt: "2025-10-12T14:00:06.371Z",
-          updatedAt: "2025-10-12T14:00:06.371Z",
-          version: 1,
-        },
-        {
-          id: "019a926d-e235-710f-a590-735375474e65-evt-3",
-          reportId: "019a926d-e235-710f-a590-735375474e65",
-          actionTitle: "Status Updated",
-          actionDetails: "Status changed to InProgress.",
-          initiator: "Teoh Zong Ming",
-          createdAt: "2025-10-12T14:00:07.000Z",
-          updatedAt: "2025-10-12T14:00:07.000Z",
-          version: 1,
-        },
-        {
-          id: "019a926d-e235-710f-a590-735375474e65-evt-4",
-          reportId: "019a926d-e235-710f-a590-735375474e65",
-          actionTitle: "Status Updated",
-          actionDetails: "Status changed to Resolved.",
-          initiator: "Teoh Zong Ming",
-          createdAt: "2025-10-13T16:59:48.850Z",
-          updatedAt: "2025-10-13T16:59:48.850Z",
-          version: 1,
-        },
-        {
-          id: "019a926d-e235-710f-a590-735375474e65-evt-5",
-          reportId: "019a926d-e235-710f-a590-735375474e65",
-          actionTitle: "Feedback Provided",
-          actionDetails: "User submitted feedback after resolution.",
-          initiator: "Testing1.",
-          createdAt: "2025-10-13T17:10:00.000Z",
-          updatedAt: "2025-10-13T17:10:00.000Z",
-          version: 1,
-        },
-      ],
-      latitude: 3.1271261,
-      longitude: 101.6349792,
-      facultyLocation: {
-        faculty: "Faculty of Computer Science and Engineering",
-        facultyBlock: "Block A",
-        facultyBlockRoom: "Room 101",
-      },
-      isAnonymous: false,
-      isFeedbackProvided: true,
-      chatroomId: "0199de07-70b5-72a8-b62c-27bceb8d0289",
-      createdAt: "2025-10-12T13:28:06.371Z",
-      updatedAt: "2025-10-13T16:59:48.850Z",
-      version: 15,
-    },
-  ]);
+  const [complaints, setComplaints] = useState([]);
+  const [isLoadingComplaints, setIsLoadingComplaints] = useState(true);
   const itemsPerPage = 6;
   const navigate = useNavigate();
+
+  // Fetch complaints from API on mount
+  useEffect(() => {
+    const loadComplaints = async () => {
+      setIsLoadingComplaints(true);
+      try {
+        const response = await fetchReports();
+        const reportsData = response.data?.reports || response.data?.data || response.data || [];
+        
+        // Map API response to match component's expected format
+        const mappedComplaints = reportsData.map(report => ({
+          id: report.id,
+          displayId: report.displayId || report.id,
+          userId: report.userId,
+          username: report.username,
+          adminId: report.adminId,
+          adminName: report.adminName || "Unassigned",
+          status: report.status,
+          title: report.title,
+          description: report.description,
+          category: report.category || {},
+          media: report.media || [],
+          latitude: report.latitude,
+          longitude: report.longitude,
+          facultyLocation: report.facultyLocation || {},
+          isAnonymous: report.isAnonymous,
+          isFeedbackProvided: report.isFeedbackProvided,
+          chatroomId: report.chatroomId || "",
+          createdAt: report.createdAt,
+          updatedAt: report.updatedAt,
+          timelineHistory: report.timelineHistory || []
+        }));
+        
+        console.log("✅ Dashboard: Loaded complaints from API:", mappedComplaints.length);
+        setComplaints(mappedComplaints);
+      } catch (err) {
+        console.error("❌ Dashboard: Error fetching complaints, using mock data:", err);
+        setComplaints(MOCK_COMPLAINTS);
+      } finally {
+        setIsLoadingComplaints(false);
+      }
+    };
+
+    loadComplaints();
+  }, []);
+
+  // Real-time complaint updates
+  useComplaintUpdates({
+    onNewComplaint: (payload) => {
+      // Refetch or add new complaint to list
+      setComplaints((prev) => [
+        { id: payload.complaintId, title: payload.title, status: 'Open', createdAt: payload.createdAt || new Date().toISOString() },
+        ...prev,
+      ]);
+    },
+    onStatusChange: (payload) => {
+      // Update complaint status in local state
+      setComplaints((prev) =>
+        prev.map((c) =>
+          c.id === payload.complaintId || c.displayId === payload.complaintId
+            ? { ...c, status: payload.status }
+            : c
+        )
+      );
+    },
+    onAssignment: (payload) => {
+      // Update complaint assignment in local state
+      setComplaints((prev) =>
+        prev.map((c) =>
+          c.id === payload.complaintId || c.displayId === payload.complaintId
+            ? { ...c, adminId: payload.adminId, adminName: payload.adminName || payload.adminId }
+            : c
+        )
+      );
+    },
+  });
 
   const navigateToComplaint = (complaint) => {
     if (!complaint) return;
@@ -627,8 +280,9 @@ const Dashboard = () => {
 
     // Attempt to persist change to backend
     try {
+      const ngrokBase = (process.env.REACT_APP_NGROK_BASE_URL ).replace(/\/$/, "");
       const res = await fetch(
-        `http://localhost:5000/admin/complaints/${complaintId}/status`,
+        `${ngrokBase}/complaints/${complaintId}/status`,
         {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
@@ -1106,8 +760,9 @@ const Dashboard = () => {
   useEffect(() => {
     const loadAdmins = async () => {
       try {
+        const apiBase = "http://localhost:5000/admin";
         const res = await fetch(
-          "http://localhost:5000/admin/usersMobile/users",
+          `${apiBase}/usersMobile/users`,
           { credentials: "include" }
         );
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -1729,3 +1384,4 @@ const Dashboard = () => {
   );
 };
 export default Dashboard;
+

@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useRef, useMemo, useContext } from "react";
 import * as echarts from "echarts";
-import api from "../services/api";
+import jsPDF from "jspdf";
+import api, { fetchReports } from "../services/api";
 import { AuthContext } from "../context/AuthContext";
 import { useLocation } from "react-router-dom";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import MOCK_COMPLAINTS from "../mock/mockComplaints";
 import {
   faSpinner,
   faCheckCircle,
@@ -29,10 +31,11 @@ import {
   faExclamationCircle,
   faHourglassHalf,
   faSignal,
-  faDownload,
+  faMapMarkerAlt,
+  faClock
 } from "@fortawesome/free-solid-svg-icons";
 import { faStar as faStarRegular } from "@fortawesome/free-regular-svg-icons";
-import { faStar as faStarSolid, faStarHalfAlt } from "@fortawesome/free-solid-svg-icons";
+import { faStar as faStarSolid } from "@fortawesome/free-solid-svg-icons";
 
 
 function App() {
@@ -49,6 +52,35 @@ function App() {
     const dd = String(d.getDate()).padStart(2, "0");
     return `${yyyy}-${mm}-${dd}`;
   };
+
+  // Helper to format dates as DD/MM/YYYY for display
+  const formatDMY = (input) => {
+    if (!input) return "-";
+    const d = input instanceof Date ? input : new Date(input);
+    if (isNaN(d.getTime())) return "-";
+    const dd = String(d.getDate()).padStart(2, "0");
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const yyyy = d.getFullYear();
+    return `${dd}/${mm}/${yyyy}`;
+  };
+
+  // Build export filename
+  const buildFileName = (base = "analytics-report", ext = "pdf") => {
+    const now = new Date();
+    const stamp = `${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}-${String(now.getHours()).padStart(2,'0')}${String(now.getMinutes()).padStart(2,'0')}`;
+    return `${base}-${stamp}.${ext}`;
+  };
+
+  // Capture an ECharts instance by ref and return dataURL
+  const getChartImage = (chartRef) => {
+    try {
+      const inst = chartRef?.current && echarts.getInstanceByDom(chartRef.current);
+      if (inst) return inst.getDataURL({ type: 'png', pixelRatio: 2, backgroundColor: '#ffffff' });
+    } catch(e) {}
+    return null;
+  };
+
+
   
   // Compute default date range: 1 month before today to today
   const getDefaultDateRange = () => {
@@ -64,454 +96,7 @@ function App() {
   // ============================================================================
   
   // Force analytics to use local mock data (set to false to enable backend API)
-  const USE_MOCK_ANALYTICS = true;
-
-  // Development mock complaints data
-  const DEV_MOCK_COMPLAINTS = [
-    {
-      id: "019a926d-e235-710f-a590-735375474e5f",
-      displayId: "RPT-202511-1",
-      userId: "0199d751-fbb6-742e-b052-e4a05b2d57bc",
-      username: "Testing1.",
-      adminId: "68af04187c2e6f499854e2da",
-      adminName: "Teoh Zong Ming",
-      facultyid: "6915cd5e4297c05ff2598c55",
-      status: "Opened",
-      title: "Dirty Classroom Floor",
-      description: "The classroom floor has not been cleaned for days. There are food wrappers and dust everywhere.",
-      category: { name: "Cleanliness", priority: "Low" },
-      media: [
-        "https://images.unsplash.com/photo-1581578731548-c64695cc6952?w=800&q=80",
-        "https://images.unsplash.com/photo-1584622650111-993a426fbf0a?w=800&q=80",
-      ],
-      timelineHistory: [
-        {
-          id: "019a926d-e235-710f-a590-735375474e5f-evt-1",
-          reportId: "019a926d-e235-710f-a590-735375474e5f",
-          actionTitle: "Report Submitted",
-          actionDetails: "Complaint submitted by user Testing1.",
-          initiator: "Testing1.",
-          createdAt: "2025-10-23T15:59:35.599Z",
-          updatedAt: "2025-10-23T15:59:35.599Z",
-          version: 1,
-        },
-        {
-          id: "019a926d-e235-710f-a590-735375474e5f-evt-2",
-          reportId: "019a926d-e235-710f-a590-735375474e5f",
-          actionTitle: "Admin Assigned",
-          actionDetails: "Admin Teoh Zong Ming assigned to complaint.",
-          initiator: "System",
-          createdAt: "2025-10-23T16:05:00.000Z",
-          updatedAt: "2025-10-23T16:05:00.000Z",
-          version: 1,
-        },
-        {
-          id: "019a926d-e235-710f-a590-735375474e5f-evt-3",
-          reportId: "019a926d-e235-710f-a590-735375474e5f",
-          actionTitle: "Status Updated",
-          actionDetails: "Status changed to InProgress.",
-          initiator: "Teoh Zong Ming",
-          createdAt: "2025-10-23T16:05:01.000Z",
-          updatedAt: "2025-10-23T16:05:01.000Z",
-          version: 1,
-        },
-      ],
-      latitude: 3.1271268,
-      longitude: 101.6349605,
-      facultyLocation: {
-        faculty: "Faculty of Computer Science and Engineering",
-        facultyBlock: "Block A",
-        facultyBlockRoom: "Room 101",
-      },
-      isAnonymous: false,
-      isFeedbackProvided: false,
-      chatroomId: "FAKE-ROOM-1093",
-      createdAt: "2025-10-23T15:59:35.599Z",
-      updatedAt: "2025-10-23T15:59:35.599Z",
-      version: 1,
-    },
-    {
-      id: "019a926d-e235-710f-a590-735375474e60",
-      displayId: "RPT-202511-2",
-      userId: "0199d751-fbb6-742e-b052-e4a05b2d57bc",
-      adminId: null,
-      adminName: "Unassigned",
-      facultyid: "6915cd5e4297c05ff2598c55",
-      status: "Opened",
-      title: "Student Harassment Incident",
-      description: "Witnessed bullying behavior in the cafeteria during lunch hour. Multiple students involved.",
-      category: { name: "Bullying", priority: "High" },
-      media: [
-        "https://images.unsplash.com/photo-1523050854058-8df90110c9f1?w=800&q=80",
-      ],
-      timelineHistory: [
-        {
-          id: "019a926d-e235-710f-a590-735375474e60-evt-1",
-          reportId: "019a926d-e235-710f-a590-735375474e60",
-          actionTitle: "Report Submitted",
-          actionDetails: "Complaint submitted regarding bullying in cafeteria.",
-          initiator: "Testing1.",
-          createdAt: "2025-10-22T16:07:10.441Z",
-          updatedAt: "2025-10-22T16:07:10.441Z",
-          version: 1,
-        },
-        {
-          id: "019a926d-e235-710f-a590-735375474e60-evt-2",
-          reportId: "019a926d-e235-710f-a590-735375474e60",
-          actionTitle: "Status Updated",
-          actionDetails: "Status set to Opened.",
-          initiator: "System",
-          createdAt: "2025-10-22T16:07:11.000Z",
-          updatedAt: "2025-10-22T16:07:11.000Z",
-          version: 1,
-        },
-      ],
-      latitude: 3.12719,
-      longitude: 101.634895,
-      facultyLocation: {
-        faculty: "Faculty of Computer Science and Engineering",
-        facultyBlock: "Block B",
-        facultyBlockRoom: "Room 201",
-      },
-      isAnonymous: false,
-      isFeedbackProvided: false,
-      chatroomId: "FAKE-ROOM-1094",
-      createdAt: "2025-10-22T16:07:10.441Z",
-      updatedAt: "2025-10-23T14:57:36.534Z",
-      version: 2,
-    },
-    {
-      id: "019a926d-e235-710f-a590-735375474e61",
-      displayId: "RPT-202511-3",
-      userId: "0199d751-fbb6-742e-b052-e4a05b2d57bc",
-      adminId: null,
-      adminName: "Unassigned",
-      facultyid: "6915cd5e4297c05ff2598c55",
-      status: "Opened",
-      title: "Overflowing Trash Bins",
-      description: "Trash bins near the library entrance are overflowing. Bad smell and attracting flies.",
-      category: { name: "Cleanliness", priority: "Low" },
-      media: [
-        "https://images.unsplash.com/photo-1532996122724-e3c354a0b15b?w=800&q=80",
-        "https://images.unsplash.com/photo-1604187351574-c75ca79f5807?w=800&q=80",
-      ],
-      timelineHistory: [
-        {
-          id: "019a926d-e235-710f-a590-735375474e61-evt-1",
-          reportId: "019a926d-e235-710f-a590-735375474e61",
-          actionTitle: "Report Submitted",
-          actionDetails: "Overflowing trash bins reported near library entrance.",
-          initiator: "Testing1.",
-          createdAt: "2025-10-22T16:02:30.647Z",
-          updatedAt: "2025-10-22T16:02:30.647Z",
-          version: 1,
-        },
-        {
-          id: "019a926d-e235-710f-a590-735375474e61-evt-2",
-          reportId: "019a926d-e235-710f-a590-735375474e61",
-          actionTitle: "Status Updated",
-          actionDetails: "Status set to Opened.",
-          initiator: "System",
-          createdAt: "2025-10-22T16:02:31.000Z",
-          updatedAt: "2025-10-22T16:02:31.000Z",
-          version: 1,
-        },
-      ],
-      latitude: 3.12719,
-      longitude: 101.634895,
-      facultyLocation: {
-        faculty: "Faculty of Business and Economics",
-        facultyBlock: "Block E",
-        facultyBlockRoom: "Room 501",
-      },
-      isAnonymous: false,
-      isFeedbackProvided: false,
-      chatroomId: "",
-      createdAt: "2025-10-22T16:02:30.647Z",
-      updatedAt: "2025-10-22T16:02:30.647Z",
-      version: 1,
-    },
-    {
-      id: "019a926d-e235-710f-a590-735375474e62",
-      displayId: "RPT-202511-4",
-      userId: "testing",
-      adminId: null,
-      adminName: "Unassigned",
-      facultyid: "6915cd5e4297c05ff2598c55",
-      status: "Opened",
-      title: "Graffiti on Wall",
-      description: "Graffiti spotted near the main entrance of the lecture hall. Contains inappropriate content.",
-      category: { name: "Vandalism", priority: "Medium" },
-      media: [
-        "https://images.unsplash.com/photo-1604509988450-70f2e6827eb6?w=800&q=80",
-      ],
-      timelineHistory: [
-        {
-          id: "019a926d-e235-710f-a590-735375474e62-evt-1",
-          reportId: "019a926d-e235-710f-a590-735375474e62",
-          actionTitle: "Report Submitted",
-          actionDetails: "Graffiti reported at lecture hall entrance.",
-          initiator: "testing",
-          createdAt: "2025-06-14T12:15:00.000Z",
-          updatedAt: "2025-06-14T12:15:00.000Z",
-          version: 1,
-        },
-        {
-          id: "019a926d-e235-710f-a590-735375474e62-evt-2",
-          reportId: "019a926d-e235-710f-a590-735375474e62",
-          actionTitle: "Status Updated",
-          actionDetails: "Status set to Opened.",
-          initiator: "System",
-          createdAt: "2025-06-14T12:15:05.000Z",
-          updatedAt: "2025-06-14T12:15:05.000Z",
-          version: 1,
-        },
-      ],
-      latitude: 0,
-      longitude: 0,
-      facultyLocation: {
-        faculty: "Faculty of Law",
-        facultyBlock: "Block D",
-        facultyBlockRoom: "Room 101",
-      },
-      isAnonymous: false,
-      chatroomId: "",
-      createdAt: "2025-06-14T12:15:00.000Z",
-      updatedAt: "2025-06-23T12:15:00.000Z",
-      version: 1,
-    },
-    {
-      id: "019a926d-e235-710f-a590-735375474e63",
-      displayId: "RPT-202511-5",
-      userId: "0199d751-fbb6-742e-b052-e4a05b2d57bc",
-      adminId: "68af04187c2e6f499854e2da",
-      adminName: "Teoh Zong Ming",
-      facultyid: "6915cd5e4297c05ff2598c55",
-      status: "Resolved",
-      title: "Broken Window in Lecture Hall",
-      description: "Window on the third floor is cracked and poses safety risk. Needs immediate attention.",
-      category: { name: "Cleanliness", priority: "Low" },
-      media: [
-        "https://images.unsplash.com/photo-1497366754035-f200968a6e72?w=800&q=80",
-      ],
-      timelineHistory: [
-        {
-          id: "019a926d-e235-710f-a590-735375474e63-evt-1",
-          reportId: "019a926d-e235-710f-a590-735375474e63",
-          actionTitle: "Report Submitted",
-          actionDetails: "Broken window reported in lecture hall.",
-          initiator: "Testing1.",
-          createdAt: "2025-10-20T14:59:08.106Z",
-          updatedAt: "2025-10-20T14:59:08.106Z",
-          version: 1,
-        },
-        {
-          id: "019a926d-e235-710f-a590-735375474e63-evt-2",
-          reportId: "019a926d-e235-710f-a590-735375474e63",
-          actionTitle: "Admin Assigned",
-          actionDetails: "Admin Teoh Zong Ming assigned to complaint.",
-          initiator: "System",
-          createdAt: "2025-10-20T15:10:08.106Z",
-          updatedAt: "2025-10-20T15:10:08.106Z",
-          version: 1,
-        },
-        {
-          id: "019a926d-e235-710f-a590-735375474e63-evt-3",
-          reportId: "019a926d-e235-710f-a590-735375474e63",
-          actionTitle: "Status Updated",
-          actionDetails: "Status changed to InProgress.",
-          initiator: "Teoh Zong Ming",
-          createdAt: "2025-10-20T15:10:09.000Z",
-          updatedAt: "2025-10-20T15:10:09.000Z",
-          version: 1,
-        },
-        {
-          id: "019a926d-e235-710f-a590-735375474e63-evt-4",
-          reportId: "019a926d-e235-710f-a590-735375474e63",
-          actionTitle: "Status Updated",
-          actionDetails: "Status changed to Resolved.",
-          initiator: "Teoh Zong Ming",
-          createdAt: "2025-10-20T15:50:33.823Z",
-          updatedAt: "2025-10-20T15:50:33.823Z",
-          version: 1,
-        },
-      ],
-      latitude: 3.1271286,
-      longitude: 101.6349525,
-      facultyLocation: {
-        faculty: "Faculty of Business and Economics",
-        facultyBlock: "Block D",
-        facultyBlockRoom: "Room 401",
-      },
-      isAnonymous: false,
-      isFeedbackProvided: true,
-      chatroomId: "019a0236-cdb6-74dc-878a-b6e675995c1d",
-      createdAt: "2025-10-20T14:59:08.106Z",
-      updatedAt: "2025-10-20T15:50:33.823Z",
-      version: 9,
-      feedback: {
-        id: "019b0abc-aaaa-71f1-b100-123456789001",
-        reportId: "019a926d-e235-710f-a590-735375474e63",
-        q1Rating: 4,
-        q2Rating: 5,
-        overallComment: "Prompt fix. Window replaced quickly.",
-        createdAt: "2025-10-20T15:55:00.000Z",
-        updatedAt: "2025-10-20T15:55:00.000Z",
-        version: 1
-      },
-    },
-    {
-      id: "019a926d-e235-710f-a590-735375474e64",
-      displayId: "RPT-202511-6",
-      userId: "0199d751-fbb6-742e-b052-e4a05b2d57bc",
-      adminId: "68af04187c2e6f499854e2da",
-      adminName: "Teoh Zong Ming",
-      facultyid: "6915cd5e4297c05ff2598c55",
-      status: "Opened",
-      title: "Stained Carpet in Study Area",
-      description: "Large stain on carpet in the main study area. Looks like coffee spill that was never cleaned properly.",
-      category: { name: "Cleanliness", priority: "Low" },
-      media: [
-        "https://images.unsplash.com/photo-1497366811353-6870744d04b2?w=800&q=80",
-      ],
-      timelineHistory: [
-        {
-          id: "019a926d-e235-710f-a590-735375474e64-evt-1",
-          reportId: "019a926d-e235-710f-a590-735375474e64",
-          actionTitle: "Report Submitted",
-          actionDetails: "Carpet stain reported in study area.",
-          initiator: "Testing1.",
-          createdAt: "2025-10-18T13:52:48.107Z",
-          updatedAt: "2025-10-18T13:52:48.107Z",
-          version: 1,
-        },
-        {
-          id: "019a926d-e235-710f-a590-735375474e64-evt-2",
-          reportId: "019a926d-e235-710f-a590-735375474e64",
-          actionTitle: "Admin Assigned",
-          actionDetails: "Admin Teoh Zong Ming assigned to complaint.",
-          initiator: "System",
-          createdAt: "2025-10-18T14:00:00.000Z",
-          updatedAt: "2025-10-18T14:00:00.000Z",
-          version: 1,
-        },
-        {
-          id: "019a926d-e235-710f-a590-735375474e64-evt-3",
-          reportId: "019a926d-e235-710f-a590-735375474e64",
-          actionTitle: "Status Updated",
-          actionDetails: "Status changed to InProgress.",
-          initiator: "Teoh Zong Ming",
-          createdAt: "2025-10-18T14:00:01.000Z",
-          updatedAt: "2025-10-18T14:00:01.000Z",
-          version: 1,
-        },
-      ],
-      latitude: 3.1271274,
-      longitude: 101.6349593,
-      facultyLocation: {
-        faculty: "Faculty of Business and Economics",
-        facultyBlock: "Block E",
-        facultyBlockRoom: "Room 501",
-      },
-      isAnonymous: false,
-      isFeedbackProvided: false,
-      chatroomId: "",
-      createdAt: "2025-10-18T13:52:48.107Z",
-      updatedAt: "2025-10-18T13:52:48.107Z",
-      version: 1,
-    },
-    {
-      id: "019a926d-e235-710f-a590-735375474e65",
-      displayId: "RPT-202511-7",
-      userId: "0199d751-fbb6-742e-b052-e4a05b2d57bc",
-      adminId: "68af04187c2e6f499854e2da",
-      adminName: "Teoh Zong Ming",
-      facultyid: "6915cd5e4297c05ff2598c55",
-      status: "Resolved",
-      title: "Cheating During Exam",
-      description: "Witnessed student using unauthorized materials during final examination. Multiple instances observed.",
-      category: { name: "Academic Misconduct", priority: "High" },
-      media: [
-        "https://images.unsplash.com/photo-1434030216411-0b793f4b4173?w=800&q=80",
-        "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?w=800&q=80",
-      ],
-      timelineHistory: [
-        {
-          id: "019a926d-e235-710f-a590-735375474e65-evt-1",
-          reportId: "019a926d-e235-710f-a590-735375474e65",
-          actionTitle: "Report Submitted",
-          actionDetails: "Academic misconduct reported during exam.",
-          initiator: "Testing1.",
-          createdAt: "2025-10-12T13:28:06.371Z",
-          updatedAt: "2025-10-12T13:28:06.371Z",
-          version: 1,
-        },
-        {
-          id: "019a926d-e235-710f-a590-735375474e65-evt-2",
-          reportId: "019a926d-e235-710f-a590-735375474e65",
-          actionTitle: "Admin Assigned",
-          actionDetails: "Admin Teoh Zong Ming assigned to complaint.",
-          initiator: "System",
-          createdAt: "2025-10-12T14:00:06.371Z",
-          updatedAt: "2025-10-12T14:00:06.371Z",
-          version: 1,
-        },
-        {
-          id: "019a926d-e235-710f-a590-735375474e65-evt-3",
-          reportId: "019a926d-e235-710f-a590-735375474e65",
-          actionTitle: "Status Updated",
-          actionDetails: "Status changed to InProgress.",
-          initiator: "Teoh Zong Ming",
-          createdAt: "2025-10-12T14:00:07.000Z",
-          updatedAt: "2025-10-12T14:00:07.000Z",
-          version: 1,
-        },
-        {
-          id: "019a926d-e235-710f-a590-735375474e65-evt-4",
-          reportId: "019a926d-e235-710f-a590-735375474e65",
-          actionTitle: "Status Updated",
-          actionDetails: "Status changed to Resolved.",
-          initiator: "Teoh Zong Ming",
-          createdAt: "2025-10-13T16:59:48.850Z",
-          updatedAt: "2025-10-13T16:59:48.850Z",
-          version: 1,
-        },
-        {
-          id: "019a926d-e235-710f-a590-735375474e65-evt-5",
-          reportId: "019a926d-e235-710f-a590-735375474e65",
-          actionTitle: "Feedback Provided",
-          actionDetails: "User submitted feedback after resolution.",
-          initiator: "Testing1.",
-          createdAt: "2025-10-13T17:10:00.000Z",
-          updatedAt: "2025-10-13T17:10:00.000Z",
-          version: 1,
-        },
-      ],
-      latitude: 3.1271261,
-      longitude: 101.6349792,
-      facultyLocation: {
-        faculty: "Faculty of Computer Science and Engineering",
-        facultyBlock: "Block A",
-        facultyBlockRoom: "Room 101",
-      },
-      isAnonymous: false,
-      isFeedbackProvided: true,
-      chatroomId: "0199de07-70b5-72a8-b62c-27bceb8d0289",
-      createdAt: "2025-10-12T13:28:06.371Z",
-      updatedAt: "2025-10-13T16:59:48.850Z",
-      version: 15,
-      feedback: {
-        id: "019b0abc-bbbb-71f1-b100-123456789002",
-        reportId: "019a926d-e235-710f-a590-735375474e65",
-        q1Rating: 3,
-        q2Rating: 4,
-        overallComment: "Investigation handled well, appreciate transparency.",
-        createdAt: "2025-10-13T17:12:00.000Z",
-        updatedAt: "2025-10-13T17:12:00.000Z",
-        version: 1
-      },
-    },
-  ];;
+  const USE_MOCK_ANALYTICS = false;
 
   // ============================================================================
   // STATE MANAGEMENT
@@ -583,7 +168,7 @@ function App() {
         const base =
           (initialDataRef.current && initialDataRef.current.length
             ? initialDataRef.current
-            : DEV_MOCK_COMPLAINTS) || [];
+            : MOCK_COMPLAINTS) || [];
         const pairs = [];
         base.forEach((c) => {
           const id = String(c.adminId || c.assignedTo || c.assigned_to || "").trim();
@@ -612,7 +197,7 @@ function App() {
         const base =
           (initialDataRef.current && initialDataRef.current.length
             ? initialDataRef.current
-            : DEV_MOCK_COMPLAINTS) || [];
+            : MOCK_COMPLAINTS) || [];
         const pairs = [];
         base.forEach((c) => {
           const id = String(c.adminId || c.assignedTo || c.assigned_to || "").trim();
@@ -640,7 +225,7 @@ function App() {
         const base =
           (initialDataRef.current && initialDataRef.current.length
             ? initialDataRef.current
-            : DEV_MOCK_COMPLAINTS) || [];
+            : MOCK_COMPLAINTS) || [];
         const blocks = Array.from(
           new Set(
             base
@@ -703,7 +288,7 @@ function App() {
         const base =
           (initialDataRef.current && initialDataRef.current.length
             ? initialDataRef.current
-            : DEV_MOCK_COMPLAINTS) || [];
+            : MOCK_COMPLAINTS) || [];
         const rooms = Array.from(
           new Set(
             base
@@ -743,7 +328,7 @@ function App() {
         const base =
           (initialDataRef.current && initialDataRef.current.length
             ? initialDataRef.current
-            : DEV_MOCK_COMPLAINTS) || [];
+            : MOCK_COMPLAINTS) || [];
         const derived = Array.from(
           new Set(
             base
@@ -779,7 +364,7 @@ function App() {
       const base =
         (initialDataRef.current && initialDataRef.current.length
           ? initialDataRef.current
-          : DEV_MOCK_COMPLAINTS) || [];
+          : MOCK_COMPLAINTS) || [];
       const derived = Array.from(
         new Set(
           base
@@ -1304,7 +889,7 @@ function App() {
       const base =
         initialDataRef.current && initialDataRef.current.length
           ? initialDataRef.current
-          : DEV_MOCK_COMPLAINTS;
+          : MOCK_COMPLAINTS;
       console.log(
         "[Analytics] fetchComplaints using local base (router/mock). base count:",
         Array.isArray(base) ? base.length : 0,
@@ -1324,8 +909,9 @@ function App() {
       return;
     }
     try {
-      const res = await api.get("/complaints");
-      const data = res.data || [];
+      const res = await fetchReports();
+      const data = res.data?.reports || res.data?.data || res.data || [];
+      console.log("[Analytics] Fetched reports from API:", data.length);
 
       const filtered = filterData(data);
 
@@ -1336,7 +922,7 @@ function App() {
     } catch (err) {
       console.error("Failed to load complaints for analytics, using local demo data:", err);
       setFetchError(err.message || "Failed to fetch (using local demo data)");
-      const fallback = filterData(DEV_MOCK_COMPLAINTS);
+      const fallback = filterData(MOCK_COMPLAINTS);
       setComplaints(fallback);
       setHasData(fallback.length > 0);
       if (fallback.length > 0) {
@@ -1385,12 +971,12 @@ function App() {
     fetchComplaints(true, "Filters have been reset to default values");
   };
 
-  // Seed from router state if available (preferred). If none, fall back to DEV_MOCK_COMPLAINTS so the summary cards show data.
+  // Seed from router state if available (preferred). If none, fall back to MOCK_COMPLAINTS so the summary cards show data.
   useEffect(() => {
     if (USE_MOCK_ANALYTICS) {
       // Always seed from local mock data
-      initialDataRef.current = DEV_MOCK_COMPLAINTS;
-      console.log("[Analytics] Seed complaints from DEV_MOCK_COMPLAINTS. count:", initialDataRef.current.length);
+      initialDataRef.current = MOCK_COMPLAINTS;
+      console.log("[Analytics] Seed complaints from MOCK_COMPLAINTS. count:", initialDataRef.current.length);
       const filtered = filterData(initialDataRef.current);
       console.log("[Analytics] Seed filtered complaints (count):", filtered.length, "dateRange:", dateRange);
       setComplaints(filtered);
@@ -1415,7 +1001,7 @@ function App() {
         (state.complaint ? [state.complaint] : null);
     }
     const hasRouterData = Array.isArray(locComplaints);
-    initialDataRef.current = hasRouterData ? locComplaints : DEV_MOCK_COMPLAINTS;
+    initialDataRef.current = hasRouterData ? locComplaints : MOCK_COMPLAINTS;
     console.log(
       "[Analytics] Seed complaints (router?",
       hasRouterData,
@@ -1730,44 +1316,379 @@ function App() {
     dateRange.from !== defaultDateRange.from || dateRange.to !== defaultDateRange.to;
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [exportSettings, setExportSettings] = useState({
-    overview: true,
-    trends: true,
-    students: true,
+    summary: true,
+    statusDistribution: true,
+    charts: true,
     performance: true,
     filename: `Analytics_Report_${new Date().toISOString().split("T")[0]}`,
-    orientation: "portrait",
-    quality: "high",
+    orientation: "landscape",
   });
   const [isExporting, setIsExporting] = useState(false);
-  const [exportedFileUrl, setExportedFileUrl] = useState("");
   const exportToPDF = () => {
     setIsExportModalOpen(true);
   };
-  const handleExport = () => {
-    setIsExporting(true);
-    setExportedFileUrl("");
-    // Create export notification
-    const notification = {
-      id: notifications.length + 1,
-      message:
-        "Analytics report is being generated. You'll be notified when ready.",
-      time: "Just now",
-      read: false,
-    };
-    setNotifications([notification, ...notifications]);
-    // Simulate PDF generation delay
-    setTimeout(() => {
-      setIsExporting(false);
-      setExportedFileUrl("example-report.pdf");
-      const downloadNotification = {
-        id: notifications.length + 2,
-        message: "Analytics report is ready for download",
-        time: "Just now",
-        read: false,
+  
+  // Export Analytics PDF - Professional analyst-style report
+  const exportAnalyticsPDF = ({
+    orientation = 'portrait',
+    include = {
+      summary: true,
+      statusDistribution: true,
+      charts: true,
+      performance: true
+    },
+    filename = buildFileName('analytics-report')
+  } = {}) => {
+    try {
+      const doc = new jsPDF({ orientation, unit: 'pt', format: 'a4' });
+      const page = { w: doc.internal.pageSize.getWidth(), h: doc.internal.pageSize.getHeight(), margin: 40 };
+      const colors = { 
+        primary: [37, 99, 235], 
+        success: [16, 185, 129], 
+        warning: [245, 158, 11],
+        danger: [239, 68, 68],
+        gray: [107, 114, 128],
+        lightGray: [229, 231, 235]
       };
-      setNotifications([downloadNotification, ...notifications]);
-    }, 2000);
+      let y = page.margin;
+
+      const checkSpace = (needed) => {
+        if (y + needed > page.h - page.margin) { doc.addPage(); y = page.margin; }
+      };
+
+      const drawLine = (y1, color = colors.lightGray) => {
+        doc.setDrawColor(...color);
+        doc.setLineWidth(0.5);
+        doc.line(page.margin, y1, page.w - page.margin, y1);
+      };
+
+      // Calculate totals for use throughout the report
+      const totalComplaints = (complaints || []).length;
+
+      // ===== HEADER =====
+      doc.setFillColor(...colors.primary);
+      doc.rect(0, 0, page.w, 80, 'F');
+      doc.setTextColor(255);
+      doc.setFontSize(24);
+      doc.setFont(undefined, 'bold');
+      doc.text('UMSAFE ANALYTICS REPORT', page.margin, 45);
+      doc.setFontSize(10);
+      doc.setFont(undefined, 'normal');
+      doc.text(`Report Generated: ${formatDMY(new Date())} at ${new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}`, page.margin, 65);
+      doc.setTextColor(0);
+      y = 100;
+
+      // ===== REPORT PERIOD & FILTERS =====
+      doc.setFontSize(14);
+      doc.setFont(undefined, 'bold');
+      doc.text('REPORT PERIOD', page.margin, y);
+      y += 18;
+      drawLine(y);
+      y += 15;
+      
+      doc.setFontSize(10);
+      doc.setFont(undefined, 'normal');
+      doc.text(`Analysis Period: ${formatDMY(dateRange.from)} to ${formatDMY(dateRange.to)}`, page.margin + 10, y);
+      y += 20;
+
+      doc.setFontSize(12);
+      doc.setFont(undefined, 'bold');
+      doc.text('Applied Filters:', page.margin + 10, y);
+      y += 15;
+      
+      doc.setFontSize(9);
+      doc.setFont(undefined, 'normal');
+      const filters = [
+        ['Category', selectedCategory !== 'all' ? selectedCategory : 'All Categories'],
+        ['Block', selectedBlock !== 'all' ? selectedBlock : 'All Blocks'],
+        ['Room', selectedRoom !== 'all' ? selectedRoom : 'All Rooms'],
+        ['Status', selectedStatus || 'All Status'],
+        ['Priority', selectedPriority || 'All Priorities'],
+        ['Assigned To', selectedOfficer !== 'all' ? officerOptions.find(o => o.value === selectedOfficer)?.label || selectedOfficer : 'All Officers']
+      ];
+      
+      filters.forEach(([label, value]) => {
+        doc.setFont(undefined, 'bold');
+        doc.text(`${label}:`, page.margin + 20, y);
+        doc.setFont(undefined, 'normal');
+        doc.text(value, page.margin + 120, y);
+        y += 12;
+      });
+      y += 10;
+
+      // ===== EXECUTIVE SUMMARY =====
+      if (include.summary) {
+        checkSpace(120);
+        doc.setFontSize(14);
+        doc.setFont(undefined, 'bold');
+        doc.text('EXECUTIVE SUMMARY', page.margin, y);
+        y += 18;
+        drawLine(y);
+        y += 15;
+
+        doc.setFontSize(10);
+        doc.setFont(undefined, 'normal');
+        const resolvedPct = metrics.resolutionRate;
+        
+        // Key findings paragraph
+        doc.text(`This report analyzes ${totalComplaints} complaint cases recorded during the specified period.`, page.margin + 10, y);
+        y += 14;
+        doc.text(`The system achieved a resolution rate of ${resolvedPct}%, with ${metrics.resolved} cases successfully resolved,`, page.margin + 10, y);
+        y += 14;
+        doc.text(`${metrics.inProgress} cases currently in progress, and ${metrics.open} cases pending assignment.`, page.margin + 10, y);
+        y += 20;
+
+        // Key Metrics Table
+        doc.setFontSize(11);
+        doc.setFont(undefined, 'bold');
+        doc.text('Key Performance Indicators:', page.margin + 10, y);
+        y += 15;
+
+        const kpiData = [
+          ['Metric', 'Value', 'Status'],
+          ['Total Cases', String(totalComplaints), '—'],
+          ['Resolved Cases', String(metrics.resolved), `${resolvedPct}%`],
+          ['In Progress', String(metrics.inProgress), '—'],
+          ['Open/Pending', String(metrics.open), '—'],
+          ['Avg Response Time', `${isFinite(officerStats.teamAvg.avgResponseTime) ? officerStats.teamAvg.avgResponseTime.toFixed(1) : '0'} hours`, '—'],
+          ['Avg Resolution Time', `${isFinite(officerStats.teamAvg.avgResolutionTime) ? officerStats.teamAvg.avgResolutionTime.toFixed(1) : '0'} hours`, '—'],
+          ['Student Satisfaction', `${isFinite(feedbackMetrics.avgSatisfaction) ? feedbackMetrics.avgSatisfaction.toFixed(2) : 'N/A'}/5.0`, '—']
+        ];
+
+        const colWidths = [180, 120, 100];
+        const rowHeight = 18;
+        
+        // Table header
+        doc.setFillColor(240, 240, 240);
+        doc.rect(page.margin + 10, y, colWidths.reduce((a,b)=>a+b), rowHeight, 'F');
+        doc.setFontSize(9);
+        doc.setFont(undefined, 'bold');
+        let xPos = page.margin + 15;
+        kpiData[0].forEach((header, i) => {
+          doc.text(header, xPos, y + 12);
+          xPos += colWidths[i];
+        });
+        y += rowHeight;
+
+        // Table rows
+        doc.setFont(undefined, 'normal');
+        for (let i = 1; i < kpiData.length; i++) {
+          checkSpace(rowHeight + 5);
+          if (i % 2 === 0) {
+            doc.setFillColor(250, 250, 250);
+            doc.rect(page.margin + 10, y, colWidths.reduce((a,b)=>a+b), rowHeight, 'F');
+          }
+          xPos = page.margin + 15;
+          kpiData[i].forEach((cell, j) => {
+            doc.text(cell, xPos, y + 12);
+            xPos += colWidths[j];
+          });
+          y += rowHeight;
+        }
+        y += 20;
+      }
+
+      // ===== STATUS DISTRIBUTION =====
+      if (include.statusDistribution) {
+        checkSpace(100);
+        doc.setFontSize(14);
+        doc.setFont(undefined, 'bold');
+        doc.text('STATUS DISTRIBUTION ANALYSIS', page.margin, y);
+        y += 18;
+        drawLine(y);
+        y += 15;
+
+        doc.setFontSize(10);
+        doc.setFont(undefined, 'normal');
+        doc.text('Breakdown of cases by current status:', page.margin + 10, y);
+        y += 20;
+
+        const statusCounts = {};
+        (complaints || []).forEach(c => {
+          const status = (c.status || 'Unknown').toString();
+          statusCounts[status] = (statusCounts[status] || 0) + 1;
+        });
+
+        const sortedStatuses = Object.entries(statusCounts).sort((a, b) => b[1] - a[1]);
+        
+        sortedStatuses.forEach(([status, count]) => {
+          checkSpace(16);
+          const percentage = totalComplaints > 0 ? ((count / totalComplaints) * 100).toFixed(1) : 0;
+          
+          doc.setFont(undefined, 'bold');
+          doc.text('•', page.margin + 15, y);
+          doc.setFont(undefined, 'normal');
+          doc.text(`${status}:`, page.margin + 25, y);
+          doc.setFont(undefined, 'bold');
+          doc.text(`${count} cases`, page.margin + 150, y);
+          doc.setFont(undefined, 'normal');
+          doc.text(`(${percentage}%)`, page.margin + 220, y);
+          y += 14;
+        });
+        y += 15;
+      }
+
+      // ===== CHARTS =====
+      if (include.charts) {
+        const chartImages = [];
+        if (trendChartRef) {
+          const img = getChartImage(trendChartRef);
+          if (img) chartImages.push({ img, label: 'Trend Analysis', desc: 'Historical pattern of complaint submissions over time' });
+        }
+        if (performanceChartRef) {
+          const img = getChartImage(performanceChartRef);
+          if (img) chartImages.push({ img, label: 'Officer Performance Comparison', desc: 'Comparative analysis of officer workload and resolution metrics' });
+        }
+
+        chartImages.forEach(({ img, label, desc }) => {
+          checkSpace(200);
+          doc.setFontSize(14);
+          doc.setFont(undefined, 'bold');
+          doc.text(label.toUpperCase(), page.margin, y);
+          y += 18;
+          drawLine(y);
+          y += 10;
+          
+          doc.setFontSize(9);
+          doc.setFont(undefined, 'italic');
+          doc.text(desc, page.margin + 10, y);
+          y += 15;
+
+          const imgW = page.w - page.margin * 2;
+          const imgH = 180;
+          doc.addImage(img, 'PNG', page.margin, y, imgW, imgH);
+          y += imgH + 20;
+        });
+      }
+
+      // ===== OFFICER PERFORMANCE =====
+      if (include.performance && officerStats.list.length > 0) {
+        checkSpace(100);
+        doc.setFontSize(14);
+        doc.setFont(undefined, 'bold');
+        doc.text('OFFICER PERFORMANCE ANALYSIS', page.margin, y);
+        y += 18;
+        drawLine(y);
+        y += 15;
+
+        doc.setFontSize(10);
+        doc.setFont(undefined, 'normal');
+        doc.text('Top performing officers by case volume and resolution efficiency:', page.margin + 10, y);
+        y += 20;
+
+        const topOfficers = officerStats.list.filter(o => o.total > 0).slice(0, 10);
+        
+        if (topOfficers.length > 0) {
+          const tableData = [
+            ['Officer Name', 'Cases', 'Resolved', 'Rate', 'Resp.(h)', 'Resol.(h)', 'Sat.']
+          ];
+          
+          topOfficers.forEach(officer => {
+            const rate = officer.total > 0 ? ((officer.resolved / officer.total) * 100).toFixed(0) : '0';
+            tableData.push([
+              officer.name.length > 18 ? officer.name.substring(0, 16) + '..' : officer.name,
+              String(officer.total),
+              String(officer.resolved),
+              `${rate}%`,
+              (officer.avgResponseTime != null && isFinite(officer.avgResponseTime)) ? officer.avgResponseTime.toFixed(1) : '—',
+              (officer.avgResolutionTime != null && isFinite(officer.avgResolutionTime)) ? officer.avgResolutionTime.toFixed(1) : '—',
+              (officer.avgSat != null && isFinite(officer.avgSat)) ? officer.avgSat.toFixed(1) : '—'
+            ]);
+          });
+
+          const perfColWidths = [130, 45, 55, 45, 55, 55, 35];
+          const perfRowHeight = 16;
+
+          // Table header
+          doc.setFillColor(240, 240, 240);
+          doc.rect(page.margin + 10, y, perfColWidths.reduce((a,b)=>a+b), perfRowHeight, 'F');
+          doc.setFontSize(8);
+          doc.setFont(undefined, 'bold');
+          let xPos = page.margin + 13;
+          tableData[0].forEach((header, i) => {
+            doc.text(header, xPos, y + 11);
+            xPos += perfColWidths[i];
+          });
+          y += perfRowHeight;
+
+          // Table rows
+          doc.setFont(undefined, 'normal');
+          for (let i = 1; i < tableData.length; i++) {
+            checkSpace(perfRowHeight + 5);
+            if (i % 2 === 0) {
+              doc.setFillColor(250, 250, 250);
+              doc.rect(page.margin + 10, y, perfColWidths.reduce((a,b)=>a+b), perfRowHeight, 'F');
+            }
+            xPos = page.margin + 13;
+            tableData[i].forEach((cell, j) => {
+              doc.text(cell, xPos, y + 11);
+              xPos += perfColWidths[j];
+            });
+            y += perfRowHeight;
+          }
+          y += 20;
+        }
+      }
+
+      // ===== CONCLUSION =====
+      checkSpace(80);
+      doc.setFontSize(14);
+      doc.setFont(undefined, 'bold');
+      doc.text('CONCLUSION', page.margin, y);
+      y += 18;
+      drawLine(y);
+      y += 15;
+
+      doc.setFontSize(10);
+      doc.setFont(undefined, 'normal');
+      doc.text('This report provides a comprehensive overview of the UMSafe complaint management system', page.margin + 10, y);
+      y += 14;
+      doc.text('performance. The data reflects operational efficiency and areas for continuous improvement.', page.margin + 10, y);
+      y += 20;
+
+      // Footer on all pages
+      const totalPages = doc.internal.pages.length - 1;
+      for (let i = 1; i <= totalPages; i++) {
+        doc.setPage(i);
+        doc.setDrawColor(...colors.lightGray);
+        doc.setLineWidth(0.5);
+        doc.line(page.margin, page.h - 30, page.w - page.margin, page.h - 30);
+        doc.setFontSize(8);
+        doc.setTextColor(...colors.gray);
+        doc.setFont(undefined, 'normal');
+        doc.text('UMSafe - Confidential Report', page.margin, page.h - 18);
+        doc.text(`Page ${i} of ${totalPages}`, page.w - page.margin - 50, page.h - 18);
+      }
+
+      doc.save(filename);
+    } catch (error) {
+      console.error('PDF generation error:', error);
+      throw error;
+    }
   };
+  
+  const handleConfirmExport = () => {
+    try {
+      setIsExporting(true);
+      setIsExportModalOpen(false);
+      exportAnalyticsPDF({
+        orientation: exportSettings.orientation,
+        include: {
+          summary: exportSettings.summary,
+          statusDistribution: exportSettings.statusDistribution,
+          charts: exportSettings.charts,
+          performance: exportSettings.performance,
+        },
+        filename: buildFileName(exportSettings.filename || 'analytics-report')
+      });
+    } catch (e) {
+      console.error('PDF export failed', e);
+      alert('Failed to generate PDF: ' + e.message);
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
 
   // ============================================================================
   // COMPUTED METRICS (useMemo)
@@ -2007,7 +1928,16 @@ function App() {
       .map(k => ({ phrase: k, count: freq[k] }))
       .sort((a,b)=> b.count - a.count)
       .slice(0,5);
-    return { positive, improvement, recent, topPhrases };
+    // Normalize casing to Title Case for consistent presentation (keep numeric parts intact)
+    const titleCase = (s) => s.split(' ').map(part => part ? part.charAt(0).toUpperCase() + part.slice(1) : part).join(' ');
+    const normalizeThemes = (arr) => arr.map(obj => ({ ...obj, theme: titleCase(obj.theme) }));
+    const normalizePhrases = (arr) => arr.map(obj => ({ ...obj, phrase: titleCase(obj.phrase) }));
+    return { 
+      positive: normalizeThemes(positive), 
+      improvement: normalizeThemes(improvement), 
+      recent: normalizeThemes(recent), 
+      topPhrases: normalizePhrases(topPhrases) 
+    };
   }, [feedbackComplaints]);
 
   // Compute feedback-derived metrics strictly from feedbackComplaints
@@ -2134,7 +2064,7 @@ function App() {
     
     const teamAvg = {
       total: totals.total && officersWithCases.length ? Math.round((totals.total / officersWithCases.length) * 10) / 10 : 0,
-      resolved: totals.resolved && officersWithCases.length ? Math.round((totals.resolved / officersWithCases.length) * 10) / 10 : 0,
+      resolved: Math.round(totals.resolved),
       resolutionRate: totals.total ? Math.round((totals.resolved / totals.total) * 1000) / 10 : 0,
       avgResponseTime: totals.total ? Math.round((totals.responseTimeSum / totals.total) * 10) / 10 : 0,
       avgResolutionTime: totals.total ? Math.round((totals.resolutionTimeSum / totals.total) * 10) / 10 : 0,
@@ -2142,6 +2072,72 @@ function App() {
     };
     return { list, teamAvg };
   }, [complaints, officerOptions]);
+
+  // Location statistics - faculties, blocks, and rooms with complaint counts
+  const locationStats = useMemo(() => {
+    const facultyMap = {};
+    const blockMap = {};
+    const roomMap = {};
+
+    // Get user's faculty
+    const userFaculty = user?.facultyLocation?.faculty || user?.facultyLocation?.facultyName || null;
+
+    complaints.forEach((c) => {
+      const faculty = c.facultyLocation?.faculty || c.facultyLocation?.facultyName || 'Unknown';
+      const block = c.facultyLocation?.facultyBlock || c.facultyLocation?.block || 'Unknown';
+      const room = c.facultyLocation?.facultyBlockRoom || c.facultyLocation?.room || 'Unknown';
+      const status = String(c.status || '').toLowerCase();
+
+      // Filter: only process complaints from user's faculty
+      if (userFaculty && faculty !== userFaculty) {
+        return;
+      }
+
+      // Normalize status to handle variations (Opened/Open, InProgress/In Progress, etc.)
+      const isOpen = status === 'open' || status === 'opened' || status === 'pending';
+      const isInProgress = status === 'in progress' || status === 'inprogress' || status === 'in-progress';
+      const isResolved = status === 'resolved' || status === 'completed';
+      const isClosed = status === 'closed';
+
+      // Faculty stats
+      if (!facultyMap[faculty]) {
+        facultyMap[faculty] = { name: faculty, total: 0, open: 0, inProgress: 0, resolved: 0, closed: 0 };
+      }
+      facultyMap[faculty].total += 1;
+      if (isOpen) facultyMap[faculty].open += 1;
+      else if (isInProgress) facultyMap[faculty].inProgress += 1;
+      else if (isResolved) facultyMap[faculty].resolved += 1;
+      else if (isClosed) facultyMap[faculty].closed += 1;
+
+      // Block stats
+      const blockKey = `${faculty}|${block}`;
+      if (!blockMap[blockKey]) {
+        blockMap[blockKey] = { faculty, block, total: 0, open: 0, inProgress: 0, resolved: 0, closed: 0 };
+      }
+      blockMap[blockKey].total += 1;
+      if (isOpen) blockMap[blockKey].open += 1;
+      else if (isInProgress) blockMap[blockKey].inProgress += 1;
+      else if (isResolved) blockMap[blockKey].resolved += 1;
+      else if (isClosed) blockMap[blockKey].closed += 1;
+
+      // Room stats
+      const roomKey = `${faculty}|${block}|${room}`;
+      if (!roomMap[roomKey]) {
+        roomMap[roomKey] = { faculty, block, room, total: 0, open: 0, inProgress: 0, resolved: 0, closed: 0 };
+      }
+      roomMap[roomKey].total += 1;
+      if (isOpen) roomMap[roomKey].open += 1;
+      else if (isInProgress) roomMap[roomKey].inProgress += 1;
+      else if (isResolved) roomMap[roomKey].resolved += 1;
+      else if (isClosed) roomMap[roomKey].closed += 1;
+    });
+
+    return {
+      faculties: Object.values(facultyMap).sort((a, b) => b.total - a.total),
+      blocks: Object.values(blockMap).sort((a, b) => b.total - a.total),
+      rooms: Object.values(roomMap).sort((a, b) => b.total - a.total),
+    };
+  }, [complaints, user]);
 
   // Small helper to render star icons for a 1-5 integer rating (may be null)
   const renderStars = (rating) => {
@@ -2173,8 +2169,7 @@ function App() {
   }, [complaints]);
 
   const formatFriendlyDate = (iso) => {
-    const d = iso ? new Date(iso) : null;
-    return d && !isNaN(d.getTime()) ? d.toLocaleDateString() : "-";
+    return formatDMY(iso);
   };
 
   // derive priority metrics for summary cards
@@ -2359,12 +2354,7 @@ function App() {
                   Analytics Dashboard
                 </h1>
                 <p className="mt-1 text-sm text-gray-500">
-                  Visualize and analyze complaint data - {new Date().toLocaleDateString(undefined, {
-                    weekday: "long",
-                    month: "long",
-                    day: "numeric",
-                    year: "numeric",
-                  })}
+                  Visualize and analyze complaint data - {formatDMY(new Date())}
                 </p>
               </div>
               <div className="mt-4 md:mt-0">
@@ -2449,7 +2439,7 @@ function App() {
                       <div className="flex flex-wrap gap-2 mb-4">
                         {hasCustomDateRange && (
                           <span className="inline-flex items-center text-xs bg-blue-50 text-blue-700 px-2 py-1 rounded-full">
-                            Date: {dateRange.from} → {dateRange.to}
+                            Date: {formatDMY(dateRange.from)} → {formatDMY(dateRange.to)}
                               <button className="ml-2 text-blue-600 hover:text-blue-800" onClick={() => clearFilter("date")} aria-label="Clear date filter">
                                 <FontAwesomeIcon icon={faTimes} />
                               </button>
@@ -2767,6 +2757,17 @@ function App() {
                         : "bg-white text-gray-700 border border-gray-300 hover:bg-gray-50"
                     }`}
                   >
+                    <FontAwesomeIcon icon={faMapMarkerAlt} className="mr-1" />
+                    Locations
+                  </button>
+                  <button
+                    onClick={() => setActiveTab("students")}
+                    className={`!rounded-button whitespace-nowrap px-3 py-1 rounded-full text-sm font-medium cursor-pointer ${
+                      activeTab === "students"
+                        ? "bg-blue-100 text-blue-800"
+                        : "bg-white text-gray-700 border border-gray-300 hover:bg-gray-50"
+                    }`}
+                  >
                     <FontAwesomeIcon icon={faUsers} className="mr-1" />
                     Students
                   </button>
@@ -3060,6 +3061,111 @@ function App() {
               </div>
             )}
             {activeTab === "locations" && (
+              <>
+                {/* Location Analysis Header */}
+                <div className="bg-white shadow rounded-lg p-6 mb-6">
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">Location-Based Complaint Analysis</h3>
+                  <p className="text-sm text-gray-600">Analysis of complaints by block and room locations in your faculty</p>
+                </div>
+
+                {/* Top Blocks */}
+                <div className="bg-white shadow rounded-lg p-6 mb-6">
+                  <h4 className="text-md font-semibold text-gray-900 mb-4 flex items-center">
+                    <FontAwesomeIcon icon={faLayerGroup} className="mr-2 text-purple-600" />
+                    Top 10 Blocks by Complaint Volume
+                  </h4>
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Rank</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Faculty</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Block</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total Cases</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status Distribution</th>
+                        </tr>
+                      </thead>
+                      <tbody className="bg-white divide-y divide-gray-200">
+                        {locationStats.blocks.slice(0, 10).map((block, index) => (
+                          <tr key={index} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-600">#{index + 1}</td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{block.faculty}</td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{block.block}</td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-semibold">{block.total}</td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm">
+                              <div className="flex space-x-2">
+                                {block.open > 0 && <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs">Open: {block.open}</span>}
+                                {block.inProgress > 0 && <span className="px-2 py-1 bg-yellow-100 text-yellow-800 rounded text-xs">Progress: {block.inProgress}</span>}
+                                {block.resolved > 0 && <span className="px-2 py-1 bg-green-100 text-green-800 rounded text-xs">Resolved: {block.resolved}</span>}
+                                {block.closed > 0 && <span className="px-2 py-1 bg-gray-100 text-gray-800 rounded text-xs">Closed: {block.closed}</span>}
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Top Rooms */}
+                <div className="bg-white shadow rounded-lg p-6 mb-6">
+                  <h4 className="text-md font-semibold text-gray-900 mb-4 flex items-center">
+                    <FontAwesomeIcon icon={faDoorClosed} className="mr-2 text-red-600" />
+                    Top 15 Rooms by Complaint Volume
+                  </h4>
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Rank</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Location</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total Cases</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status Breakdown</th>
+                        </tr>
+                      </thead>
+                      <tbody className="bg-white divide-y divide-gray-200">
+                        {locationStats.rooms.slice(0, 15).map((room, index) => (
+                          <tr key={index} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-600">#{index + 1}</td>
+                            <td className="px-6 py-4 text-sm text-gray-900">
+                              <div className="font-medium">{room.room}</div>
+                              <div className="text-xs text-gray-500">{room.block}, {room.faculty}</div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-semibold">{room.total}</td>
+                            <td className="px-6 py-4 text-sm">
+                              <div className="flex flex-col space-y-1">
+                                <div className="flex items-center space-x-2">
+                                  <span className="text-xs text-gray-600 w-20">Open:</span>
+                                  <div className="flex-1 bg-gray-200 rounded h-1.5">
+                                    <div className="bg-blue-500 h-1.5 rounded" style={{ width: `${room.total > 0 ? (room.open / room.total) * 100 : 0}%` }}></div>
+                                  </div>
+                                  <span className="text-xs font-medium text-gray-900 w-8">{room.open}</span>
+                                </div>
+                                <div className="flex items-center space-x-2">
+                                  <span className="text-xs text-gray-600 w-20">Progress:</span>
+                                  <div className="flex-1 bg-gray-200 rounded h-1.5">
+                                    <div className="bg-yellow-500 h-1.5 rounded" style={{ width: `${room.total > 0 ? (room.inProgress / room.total) * 100 : 0}%` }}></div>
+                                  </div>
+                                  <span className="text-xs font-medium text-gray-900 w-8">{room.inProgress}</span>
+                                </div>
+                                <div className="flex items-center space-x-2">
+                                  <span className="text-xs text-gray-600 w-20">Resolved:</span>
+                                  <div className="flex-1 bg-gray-200 rounded h-1.5">
+                                    <div className="bg-green-500 h-1.5 rounded" style={{ width: `${room.total > 0 ? (room.resolved / room.total) * 100 : 0}%` }}></div>
+                                  </div>
+                                  <span className="text-xs font-medium text-gray-900 w-8">{room.resolved}</span>
+                                </div>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </>
+            )}
+            {activeTab === "students" && (
               <div className="bg-white shadow rounded-lg p-6 mb-6">
                 <h3 className="text-lg font-medium text-gray-900 mb-6">Student Feedback Analysis</h3>
                 {feedbackMetrics.count === 0 && (
@@ -3102,9 +3208,9 @@ function App() {
                 {feedbackMetrics.count > 0 && (
                 <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
                   <div className="px-6 py-4 border-b border-gray-200"><h4 className="text-lg font-medium text-gray-900">Recent Student Feedback</h4></div>
-                  <div className="overflow-x-auto">
+                  <div className="overflow-x-auto max-h-[600px] overflow-y-auto">
                     <table className="min-w-full divide-y divide-gray-200">
-                      <thead className="bg-gray-50">
+                      <thead className="bg-gray-50 sticky top-0 z-10">
                         <tr>
                           <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Complaint ID</th>
                           <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
@@ -3255,57 +3361,79 @@ function App() {
                     </div>
                   )}
                 </div>
+                {/* Performance Benchmarks */}
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                  <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-4 border border-blue-200">
+                    <div className="flex items-center justify-between mb-2">
+                      <h4 className="text-sm font-semibold text-blue-900">SLA Target</h4>
+                      <FontAwesomeIcon icon={faCheckCircle} className="text-blue-600" />
+                    </div>
+                    <p className="text-2xl font-bold text-blue-900">24h</p>
+                    <p className="text-xs text-blue-700 mt-1">Response Time Goal</p>
+                  </div>
+                  <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-lg p-4 border border-green-200">
+                    <div className="flex items-center justify-between mb-2">
+                      <h4 className="text-sm font-semibold text-green-900">Team Avg Response</h4>
+                      <FontAwesomeIcon icon={faClock} className="text-green-600" />
+                    </div>
+                    <p className="text-2xl font-bold text-green-900">{officerStats.teamAvg.avgResponseTime ? `${officerStats.teamAvg.avgResponseTime.toFixed(1)}h` : '—'}</p>
+                    <p className="text-xs text-green-700 mt-1">
+                      {officerStats.teamAvg.avgResponseTime > 24 ? (
+                        <span className="text-red-600 font-medium">⚠️ {(officerStats.teamAvg.avgResponseTime - 24).toFixed(1)}h over SLA</span>
+                      ) : (
+                        <span className="text-green-700 font-medium">✓ {(24 - officerStats.teamAvg.avgResponseTime).toFixed(1)}h under SLA</span>
+                      )}
+                    </p>
+                  </div>
+                  <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg p-4 border border-purple-200">
+                    <div className="flex items-center justify-between mb-2">
+                      <h4 className="text-sm font-semibold text-purple-900">Avg Resolution</h4>
+                      <FontAwesomeIcon icon={faHourglassHalf} className="text-purple-600" />
+                    </div>
+                    <p className="text-2xl font-bold text-purple-900">{officerStats.teamAvg.avgResolutionTime ? `${(officerStats.teamAvg.avgResolutionTime / 24).toFixed(1)}d` : '—'}</p>
+                    <p className="text-xs text-purple-700 mt-1">{officerStats.teamAvg.avgResolutionTime ? `${officerStats.teamAvg.avgResolutionTime.toFixed(1)} hours total` : 'No data'}</p>
+                  </div>
+                  <div className="bg-gradient-to-br from-yellow-50 to-yellow-100 rounded-lg p-4 border border-yellow-200">
+                    <div className="flex items-center justify-between mb-2">
+                      <h4 className="text-sm font-semibold text-yellow-900">Team Resolution</h4>
+                      <FontAwesomeIcon icon={faChartLine} className="text-yellow-600" />
+                    </div>
+                    <p className="text-2xl font-bold text-yellow-900">{officerStats.teamAvg.resolutionRate.toFixed(2)}%</p>
+                    <p className="text-xs text-yellow-700 mt-1">{officerStats.teamAvg.resolved} of {Math.round(officerStats.teamAvg.total * officerStats.list.filter(o => o.total > 0).length)} cases</p>
+                  </div>
+                </div>
+
                 <div className="bg-white shadow rounded-lg overflow-hidden mb-6">
                   <div className="px-6 py-4 border-b border-gray-200">
                     <h3 className="text-lg font-medium text-gray-900">
                       Detailed Performance Metrics
                     </h3>
+                    <p className="text-sm text-gray-600 mt-1">Individual officer performance with SLA compliance indicators</p>
                   </div>
                   <div className="overflow-x-auto">
                     <table className="min-w-full divide-y divide-gray-200">
                       <thead className="bg-gray-50">
                         <tr>
-                          <th
-                            scope="col"
-                            className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                          >
+                          <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                             Officer
                           </th>
-                          <th
-                            scope="col"
-                            className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                          >
-                            Total Cases
+                          <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Workload
                           </th>
-                          <th
-                            scope="col"
-                            className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                          >
-                            Resolved
-                          </th>
-                          <th
-                            scope="col"
-                            className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                          >
+                          <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                             Resolution Rate
                           </th>
-                          <th
-                            scope="col"
-                            className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                          >
-                            Avg. Response Time
+                          <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Response Time
                           </th>
-                          <th
-                            scope="col"
-                            className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                          >
-                            Avg. Resolution Time
+                          <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Resolution Time
                           </th>
-                          <th
-                            scope="col"
-                            className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                          >
+                          <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                             Satisfaction
+                          </th>
+                          <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Performance
                           </th>
                         </tr>
                       </thead>
@@ -3317,59 +3445,172 @@ function App() {
                             </td>
                           </tr>
                         )}
-                        {officerStats.list.map((officer) => (
-                          <tr key={officer.id}>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                              {officer.name}
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                              {officer.total}
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                              {officer.resolved}
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                              {officer.resolutionRate}%
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                              {officer.avgResponseTime ? `${officer.avgResponseTime}h` : '—'}
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                              {officer.avgResolutionTime ? `${officer.avgResolutionTime}h` : '—'}
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                              {officer.avgSat ? `${officer.avgSat}/5` : '—'}
-                            </td>
-                          </tr>
-                        ))}
+                        {officerStats.list.map((officer) => {
+                          const responseStatus = officer.avgResponseTime <= 24 ? 'excellent' : officer.avgResponseTime <= 48 ? 'good' : 'needs-improvement';
+                          const resolutionStatus = officer.resolutionRate >= 80 ? 'excellent' : officer.resolutionRate >= 60 ? 'good' : 'needs-improvement';
+                          const workloadPercent = officerStats.list.length > 0 ? (officer.total / Math.max(...officerStats.list.map(o => o.total))) * 100 : 0;
+                          
+                          return (
+                            <tr key={officer.id} className="hover:bg-gray-50">
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <div className="text-sm font-medium text-gray-900">{officer.name}</div>
+                                <div className="text-xs text-gray-500">{officer.total > 0 ? 'Active' : 'No cases'}</div>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <div className="text-sm font-medium text-gray-900">{officer.total} cases</div>
+                                <div className="w-24 bg-gray-200 rounded-full h-2 mt-1">
+                                  <div className="bg-blue-600 h-2 rounded-full" style={{ width: `${workloadPercent}%` }}></div>
+                                </div>
+                                <div className="text-xs text-gray-500 mt-1">{officer.resolved} resolved / {officer.total - officer.resolved} active</div>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <div className="flex items-center">
+                                  <span className={`text-sm font-semibold ${resolutionStatus === 'excellent' ? 'text-green-700' : resolutionStatus === 'good' ? 'text-yellow-700' : 'text-red-700'}`}>
+                                    {officer.resolutionRate}%
+                                  </span>
+                                  {resolutionStatus === 'excellent' && <span className="ml-2 text-green-600">✓</span>}
+                                  {resolutionStatus === 'needs-improvement' && <span className="ml-2 text-red-600">⚠</span>}
+                                </div>
+                                <div className="text-xs text-gray-500 mt-1">
+                                  {resolutionStatus === 'excellent' ? 'Excellent' : resolutionStatus === 'good' ? 'Good' : 'Below Target'}
+                                </div>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <div className={`text-sm font-medium ${responseStatus === 'excellent' ? 'text-green-700' : responseStatus === 'good' ? 'text-yellow-700' : 'text-red-700'}`}>
+                                  {officer.avgResponseTime ? `${officer.avgResponseTime.toFixed(1)}h` : '—'}
+                                </div>
+                                {officer.avgResponseTime && (
+                                  <div className="text-xs text-gray-500 mt-1">
+                                    {officer.avgResponseTime <= 24 ? (
+                                      <span className="text-green-600">✓ Within SLA</span>
+                                    ) : (
+                                      <span className="text-red-600">⚠ {(officer.avgResponseTime - 24).toFixed(1)}h over</span>
+                                    )}
+                                  </div>
+                                )}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <div className="text-sm font-medium text-gray-900">
+                                  {officer.avgResolutionTime ? `${(officer.avgResolutionTime / 24).toFixed(1)}d` : '—'}
+                                </div>
+                                {officer.avgResolutionTime && (
+                                  <div className="text-xs text-gray-500 mt-1">{officer.avgResolutionTime.toFixed(1)} hours</div>
+                                )}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                {officer.avgSat ? (
+                                  <div>
+                                    <div className="flex items-center text-yellow-400">
+                                      {[1, 2, 3, 4, 5].map((star) => (
+                                        <FontAwesomeIcon 
+                                          key={star} 
+                                          icon={star <= Math.round(officer.avgSat) ? faStarSolid : faStarRegular} 
+                                          className="text-xs"
+                                        />
+                                      ))}
+                                    </div>
+                                    <div className="text-xs text-gray-500 mt-1">{officer.avgSat.toFixed(1)}/5.0</div>
+                                  </div>
+                                ) : (
+                                  <span className="text-sm text-gray-400">—</span>
+                                )}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                {officer.total > 0 ? (
+                                  <div>
+                                    {responseStatus === 'excellent' && resolutionStatus === 'excellent' ? (
+                                      <span className="px-2 py-1 text-xs font-medium bg-green-100 text-green-800 rounded-full">⭐ Excellent</span>
+                                    ) : responseStatus === 'needs-improvement' || resolutionStatus === 'needs-improvement' ? (
+                                      <span className="px-2 py-1 text-xs font-medium bg-red-100 text-red-800 rounded-full">⚠ Action Needed</span>
+                                    ) : (
+                                      <span className="px-2 py-1 text-xs font-medium bg-yellow-100 text-yellow-800 rounded-full">✓ Good</span>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <span className="text-xs text-gray-400">No data</span>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
                         {officerStats.list.length > 0 && (
-                          <tr>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                          <tr className="bg-gray-100 font-medium">
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                               Team Average
                             </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                              {officerStats.teamAvg.total}
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                              {officerStats.teamAvg.total.toFixed(1)} cases/officer
                             </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                              {officerStats.teamAvg.resolved}
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                               {officerStats.teamAvg.resolutionRate}%
                             </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                              {officerStats.teamAvg.avgResponseTime ? `${officerStats.teamAvg.avgResponseTime}h` : '—'}
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                              {officerStats.teamAvg.avgResponseTime ? `${officerStats.teamAvg.avgResponseTime.toFixed(1)}h` : '—'}
                             </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                              {officerStats.teamAvg.avgResolutionTime ? `${officerStats.teamAvg.avgResolutionTime}h` : '—'}
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                              {officerStats.teamAvg.avgResolutionTime ? `${(officerStats.teamAvg.avgResolutionTime / 24).toFixed(1)}d` : '—'}
                             </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                              {officerStats.teamAvg.avgSat ? `${officerStats.teamAvg.avgSat}/5` : '—'}
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                              {officerStats.teamAvg.avgSat ? `${officerStats.teamAvg.avgSat.toFixed(1)}/5` : '—'}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                              Benchmark
                             </td>
                           </tr>
                         )}
                       </tbody>
                     </table>
                   </div>
+                  
+                  {/* Performance Insights */}
+                  {officerStats.list.length > 0 && (
+                    <div className="px-6 py-4 bg-gray-50 border-t border-gray-200">
+                      <h4 className="text-sm font-semibold text-gray-900 mb-3">Performance Insights</h4>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div className="flex items-start space-x-3">
+                          <div className="flex-shrink-0">
+                            <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
+                              <FontAwesomeIcon icon={faCheckCircle} className="text-green-600 text-sm" />
+                            </div>
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium text-gray-900">Top Performer</p>
+                            <p className="text-xs text-gray-600 mt-1">
+                              {officerStats.list.filter(o => o.total > 0).sort((a, b) => b.resolutionRate - a.resolutionRate)[0]?.name || 'N/A'} 
+                              {' '}with {officerStats.list.filter(o => o.total > 0).sort((a, b) => b.resolutionRate - a.resolutionRate)[0]?.resolutionRate || 0}% resolution rate
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-start space-x-3">
+                          <div className="flex-shrink-0">
+                            <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+                              <FontAwesomeIcon icon={faClock} className="text-blue-600 text-sm" />
+                            </div>
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium text-gray-900">Fastest Response</p>
+                            <p className="text-xs text-gray-600 mt-1">
+                              {officerStats.list.filter(o => o.avgResponseTime > 0).sort((a, b) => a.avgResponseTime - b.avgResponseTime)[0]?.name || 'N/A'}
+                              {' '}at {officerStats.list.filter(o => o.avgResponseTime > 0).sort((a, b) => a.avgResponseTime - b.avgResponseTime)[0]?.avgResponseTime?.toFixed(1) || 0}h avg
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-start space-x-3">
+                          <div className="flex-shrink-0">
+                            <div className="w-8 h-8 bg-yellow-100 rounded-full flex items-center justify-center">
+                              <FontAwesomeIcon icon={faExclamationCircle} className="text-yellow-600 text-sm" />
+                            </div>
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium text-gray-900">Needs Support</p>
+                            <p className="text-xs text-gray-600 mt-1">
+                              {officerStats.list.filter(o => o.avgResponseTime > 48).length} officer(s) exceeding 48h response time
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </>
             )}
@@ -3415,56 +3656,54 @@ function App() {
                     <label className="flex items-center">
                       <input
                         type="checkbox"
-                        id="export-overview"
                         className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                        checked={exportSettings.overview}
+                        checked={exportSettings.summary}
                         onChange={(e) =>
                           setExportSettings({
                             ...exportSettings,
-                            overview: e.target.checked,
+                            summary: e.target.checked,
                           })
                         }
                       />
                       <span className="ml-2 text-sm text-gray-700">
-                        Overview
+                        Summary Overview
                       </span>
                     </label>
                     <label className="flex items-center">
                       <input
                         type="checkbox"
-                        id="export-trends"
                         className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                        checked={exportSettings.trends}
+                        checked={exportSettings.statusDistribution}
                         onChange={(e) =>
                           setExportSettings({
                             ...exportSettings,
-                            trends: e.target.checked,
-                          })
-                        }
-                      />
-                      <span className="ml-2 text-sm text-gray-700">Trends</span>
-                    </label>
-                    <label className="flex items-center">
-                      <input
-                        type="checkbox"
-                        id="export-students"
-                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                        checked={exportSettings.students}
-                        onChange={(e) =>
-                          setExportSettings({
-                            ...exportSettings,
-                            students: e.target.checked,
+                            statusDistribution: e.target.checked,
                           })
                         }
                       />
                       <span className="ml-2 text-sm text-gray-700">
-                        Students
+                        Status Distribution
                       </span>
                     </label>
                     <label className="flex items-center">
                       <input
                         type="checkbox"
-                        id="export-performance"
+                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                        checked={exportSettings.charts}
+                        onChange={(e) =>
+                          setExportSettings({
+                            ...exportSettings,
+                            charts: e.target.checked,
+                          })
+                        }
+                      />
+                      <span className="ml-2 text-sm text-gray-700">
+                        Charts & Visualizations
+                      </span>
+                    </label>
+                    <label className="flex items-center">
+                      <input
+                        type="checkbox"
                         className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                         checked={exportSettings.performance}
                         onChange={(e) =>
@@ -3475,7 +3714,7 @@ function App() {
                         }
                       />
                       <span className="ml-2 text-sm text-gray-700">
-                        Performance
+                        Officer Performance
                       </span>
                     </label>
                   </div>
@@ -3499,30 +3738,7 @@ function App() {
                     }
                   >
                     <option value="portrait">Portrait</option>
-                    <option value="landscape">Landscape</option>
-                  </select>
-                </div>
-                <div>
-                  <label
-                    htmlFor="export-quality"
-                    className="block text-sm font-medium text-gray-700 mb-1"
-                  >
-                    Quality
-                  </label>
-                  <select
-                    id="export-quality"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
-                    value={exportSettings.quality}
-                    onChange={(e) =>
-                      setExportSettings({
-                        ...exportSettings,
-                        quality: e.target.value,
-                      })
-                    }
-                  >
-                    <option value="high">High</option>
-                    <option value="medium">Medium</option>
-                    <option value="low">Low</option>
+                    <option value="landscape">Landscape (Recommended)</option>
                   </select>
                 </div>
               </div>
@@ -3535,41 +3751,23 @@ function App() {
                 Cancel
               </button>
               <button
-                onClick={handleExport}
+                onClick={handleConfirmExport}
                 disabled={isExporting}
                 className="!rounded-button whitespace-nowrap inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isExporting ? (
                   <>
                     <FontAwesomeIcon icon={faSpinner} spin className="mr-2" />
-                    Exporting...
+                    Generating...
                   </>
                 ) : (
                   <>
                     <FontAwesomeIcon icon={faFileExport} className="mr-2" />
-                    Export
+                    Generate PDF
                   </>
                 )}
               </button>
             </div>
-            {exportedFileUrl && (
-              <div className="px-6 py-4 bg-green-50 border-t border-green-100">
-                <div className="flex items-center">
-                  <FontAwesomeIcon icon={faCheckCircle} className="text-green-500 mr-2" />
-                  <span className="text-green-700">
-                    Report generated successfully!
-                  </span>
-                </div>
-                <a
-                  href={exportedFileUrl}
-                  download
-                  className="!rounded-button whitespace-nowrap mt-2 inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none"
-                >
-                  <FontAwesomeIcon icon={faDownload} className="mr-2" />
-                  Download Report
-                </a>
-              </div>
-            )}
           </div>
         </div>
       )}

@@ -17,8 +17,9 @@ import CreateChatroomModal from "../components/CreateChatroomModal";
 import { useLocation, useParams, useNavigate } from "react-router-dom";
 import jsPDF from "jspdf";
 import UMSafeLogo from "../assets/UMSafeLogo.png";
-import { initiateChatroom, assignAdmin, revokeReport, resolveReport, closeReport } from "../services/api";
+import api, { getReport, initiateChatroom, assignAdmin, revokeReport, resolveReport, closeReport } from "../services/api";
 import { toast } from "react-hot-toast";
+import { useComplaintUpdates } from "../hooks/useComplaintUpdates";
 
 const ComplaintDetails = () => {
   const [currentStatus, setCurrentStatus] = useState("Open");
@@ -43,6 +44,39 @@ const ComplaintDetails = () => {
   const [allComplaints, setAllComplaints] = useState(location.state?.allComplaints || []);
   const isAnonymous = complaint?.isAnonymous || false;
 
+  // Real-time updates for current complaint
+  useComplaintUpdates({
+    onStatusChange: (payload) => {
+      // Update current complaint if IDs match
+      if (complaint && (complaint.id === payload.complaintId || complaint.displayId === payload.complaintId)) {
+        setComplaint((prev) => ({ ...prev, status: payload.status }));
+        const statusMap = {
+          'open': 'Open',
+          'in progress': 'In Progress',
+          'inprogress': 'In Progress',
+          'resolved': 'Resolved',
+          'closed': 'Closed'
+        };
+        const mappedStatus = statusMap[payload.status.toLowerCase()] || payload.status;
+        setCurrentStatus(mappedStatus);
+      }
+    },
+    onAssignment: (payload) => {
+      // Update current complaint assignment if IDs match
+      if (complaint && (complaint.id === payload.complaintId || complaint.displayId === payload.complaintId)) {
+        setComplaint((prev) => ({ ...prev, adminId: payload.adminId, adminName: payload.adminName }));
+        if (payload.adminId) {
+          setAssignedToId(payload.adminId);
+          setAssignedToName(payload.adminName || 'Assigned');
+        } else {
+          setAssignedToId('');
+          setAssignedToName('Unassigned');
+          setAssignedToEmail('');
+        }
+      }
+    },
+  });
+
   // Scroll to top when component mounts or complaint changes
   useEffect(() => {
     window.scrollTo(0, 0);
@@ -50,21 +84,44 @@ const ComplaintDetails = () => {
 
   // Update complaint when navigating from sidebar or direct URL
   useEffect(() => {
-    // If complaint is provided in navigation state, use it
-    if (location.state?.complaint) {
-      setComplaint(location.state.complaint);
-      if (location.state.allComplaints) {
-        setAllComplaints(location.state.allComplaints);
-      }
-    } 
-    // Otherwise fetch from server
-    else if (params?.id) {
+    // Always fetch fresh data from server when params?.id changes to ensure latest chatroom status
+    if (params?.id) {
       const load = async () => {
         try {
-          const res = await fetch(`http://localhost:5000/admin/complaints/${params.id}`, { credentials: "include" });
-          if (!res.ok) throw new Error(`HTTP ${res.status}`);
-          const data = await res.json();
-          setComplaint(data);
+          const res = await getReport(params.id);
+          const report = res.data?.report || res.data?.data || res.data;
+          if (!report) throw new Error("No report returned");
+
+          // Normalize report shape for the detail page
+          const mapped = {
+            id: report.id,
+            displayId: report.displayId || report.id,
+            backendId: report.id,
+            userId: report.userId,
+            username: report.username,
+            adminId: report.adminId,
+            adminName: report.adminName || "Unassigned",
+            status: report.status,
+            title: report.title,
+            description: report.description,
+            category: report.category || {},
+            media: report.media || [],
+            latitude: report.latitude,
+            longitude: report.longitude,
+            facultyLocation: report.facultyLocation || {},
+            isAnonymous: report.isAnonymous,
+            isFeedbackProvided: report.isFeedbackProvided,
+            chatroomId: report.chatroomId || "",
+            createdAt: report.createdAt,
+            updatedAt: report.updatedAt,
+            timelineHistory: report.timelineHistory || [],
+          };
+
+          setComplaint(mapped);
+          // Also load allComplaints if provided in location.state
+          if (location.state?.allComplaints) {
+            setAllComplaints(location.state.allComplaints);
+          }
         } catch (err) {
           console.error("Failed to fetch complaint:", err);
           try { toast.error("Failed to load complaint."); } catch (e) {}
@@ -74,7 +131,30 @@ const ComplaintDetails = () => {
       };
       load();
     }
-  }, [params?.id, location.state, navigate]);
+  }, [params?.id, navigate]);
+
+  // Sync currentStatus with complaint status (including mock data)
+  useEffect(() => {
+    if (complaint?.status) {
+      // Map complaint status to display status - handle all case variations
+      const statusMap = {
+        'opened': 'Open',
+        'open': 'Open',
+        'inprogress': 'In Progress',
+        'in progress': 'In Progress',
+        'Opened': 'Open',
+        'Open': 'Open',
+        'InProgress': 'In Progress',
+        'In Progress': 'In Progress',
+        'resolved': 'Resolved',
+        'Resolved': 'Resolved',
+        'closed': 'Closed',
+        'Closed': 'Closed'
+      };
+      const mappedStatus = statusMap[complaint.status] || complaint.status;
+      setCurrentStatus(mappedStatus);
+    }
+  }, [complaint]);
 
   const statusOptions = ["Resolved", "Closed"];
 
@@ -86,6 +166,11 @@ const ComplaintDetails = () => {
     "In Progress": "bg-blue-100 text-blue-800 border-blue-200",
     Resolved: "bg-green-100 text-green-800 border-green-200",
     Closed: "bg-gray-100 text-gray-800 border-gray-200",
+  };
+
+  // Helper to get status color with fallback
+  const getStatusColor = (status) => {
+    return statusColors[status] || "bg-gray-100 text-gray-800 border-gray-200";
   };
   const priorityColor = {
     High: "text-red-600 bg-red-50 border-red-100",
@@ -140,7 +225,14 @@ const ComplaintDetails = () => {
     setShowChatroomModal(false);
     
     try {
-      const reportId = complaint.id;
+      // Prefer backend id if provided; fall back to displayed id
+      const reportId = complaint.backendId || complaint.id;
+
+      // Prevent empty/undefined IDs; live backend IDs can include prefixes like RPT-
+      if (!reportId) {
+        toast.error("Chatroom can only be created for live reports.");
+        return;
+      }
       
       // 🔄 Call backend to create chatroom
       console.log("🆕 Creating new chatroom for report:", reportId);
@@ -205,15 +297,9 @@ const ComplaintDetails = () => {
         const currentUser = userDataStr ? JSON.parse(userDataStr) : null;
         const currentUserFacultyId = currentUser?.facultyid;
 
-        // Fetch all users
-        const res = await fetch("http://localhost:5000/admin/usersMobile/users", {
-          credentials: "include",
-        });
-        
-        if (!res.ok) throw new Error(`HTTP Error: ${res.status}`);
-        
-        const data = await res.json();
-        const allAdmins = data.data || [];
+        // Fetch all users from main API (localhost) to avoid ngrok CORS issues
+        const res = await api.get("/usersMobile/users");
+        const allAdmins = res.data?.data || res.data || [];
         
         console.log("📋 Fetched all admins from database:", allAdmins);
         console.log("🔍 Looking for adminId:", complaintAdminId);
@@ -281,7 +367,8 @@ const ComplaintDetails = () => {
 
   const refreshComplaintFromPartner = async (id) => {
     try {
-      const res = await fetch(`http://localhost:5000/admin/reports/${id}`, { credentials: 'include' });
+      const base = (process.env.REACT_APP_API_BASE_URL).replace(/\/$/, "");
+      const res = await fetch(`${base}/reports/${id}`, { credentials: 'include' });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       // Normalize to same shape as initial mapping in list view (minimal fields used here)
@@ -338,7 +425,7 @@ const ComplaintDetails = () => {
       } else {
         // Local MongoDB complaint fallback
         const res = await fetch(
-          `http://localhost:5000/admin/complaints/${complaintId}/status`,
+          `${(process.env.REACT_APP_API_BASE_URL ).replace(/\/$/, "")}/complaints/${complaintId}/status`,
           {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
@@ -398,14 +485,12 @@ const ComplaintDetails = () => {
       const formatDate = (date) => {
         if (!date) return "N/A";
         const d = new Date(date);
-        const options = { 
-          year: 'numeric', 
-          month: 'long', 
-          day: 'numeric',
-          hour: '2-digit',
-          minute: '2-digit'
-        };
-        return d.toLocaleDateString('en-US', options);
+        const day = String(d.getDate()).padStart(2, '0');
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const year = d.getFullYear();
+        const hours = String(d.getHours()).padStart(2, '0');
+        const minutes = String(d.getMinutes()).padStart(2, '0');
+        return `${day}/${month}/${year} ${hours}:${minutes}`;
       };
 
       // ====== Color Palette ======
@@ -446,7 +531,7 @@ const ComplaintDetails = () => {
       doc.text("COMPLAINT REPORT", pageWidth / 2, 18, { align: "center" });
 
       doc.setFontSize(10);
-      doc.setTextColor(255, 255, 255);
+      doc.setTextColor(...colors.white);
       doc.text("UMSafe Complaint Management System", pageWidth / 2, 25, { align: "center" });
 
       // ====== Report Metadata Bar ======
@@ -460,11 +545,50 @@ const ComplaintDetails = () => {
       // ====== Main Content Starts ======
       let y = 50;
 
-      // ====== Complaint ID & Status Header Card ======
-      doc.setFillColor(...colors.light);
-      doc.roundedRect(margin, y, contentWidth, 22, 2, 2, "F");
+      // ====== OVERVIEW SECTION - Key Information at a Glance ======
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(14);
+      doc.setTextColor(...colors.dark);
+      doc.text("COMPLAINT OVERVIEW", margin, y);
+      y += 8;
 
-      // Status Badge
+      // Overview Box
+      doc.setFillColor(248, 250, 252);
+      doc.roundedRect(margin, y, contentWidth, 42, 2, 2, "F");
+      doc.setDrawColor(203, 213, 225);
+      doc.setLineWidth(0.5);
+      doc.roundedRect(margin, y, contentWidth, 42, 2, 2, "S");
+
+      // Left Column - ID and Category
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(11);
+      doc.setTextColor(...colors.dark);
+      doc.text("Complaint ID:", margin + 5, y + 7);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(14);
+      doc.setTextColor(...colors.primary);
+      doc.text(`#${complaint.displayId || complaint.id || "N/A"}`, margin + 5, y + 14);
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(9);
+      doc.setTextColor(...colors.textLight);
+      doc.text("CATEGORY", margin + 5, y + 21);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(10);
+      doc.setTextColor(...colors.text);
+      doc.text(complaint.category?.name || "N/A", margin + 5, y + 26);
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(9);
+      doc.setTextColor(...colors.textLight);
+      doc.text("PRIORITY", margin + 5, y + 32);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(10);
+      doc.setTextColor(...colors.text);
+      const priorityText = complaint.category?.priority || "N/A";
+      doc.text(priorityText, margin + 5, y + 37);
+
+      // Right Column - Status and Dates
       const statusColorMap = {
         "Open": colors.success,
         "Opened": colors.success,
@@ -476,167 +600,193 @@ const ComplaintDetails = () => {
         "Pending": colors.warning
       };
       const statusColor = statusColorMap[complaint.status] || [107, 114, 128];
+      
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(9);
+      doc.setTextColor(...colors.textLight);
+      doc.text("STATUS", pageWidth - margin - 60, y + 7);
+      
       doc.setFillColor(...statusColor);
-      doc.roundedRect(pageWidth - margin - 50, y + 5, 48, 12, 6, 6, "F");
+      doc.roundedRect(pageWidth - margin - 60, y + 9, 56, 10, 5, 5, "F");
       doc.setFont("helvetica", "bold");
       doc.setFontSize(10);
       doc.setTextColor(...colors.white);
-      doc.text((complaint.status || "N/A").toUpperCase(), pageWidth - margin - 26, y + 12.5, { align: "center" });
+      doc.text((complaint.status || "N/A").toUpperCase(), pageWidth - margin - 32, y + 16, { align: "center" });
 
-      // Complaint ID
       doc.setFont("helvetica", "bold");
-      doc.setFontSize(16);
-      doc.setTextColor(...colors.dark);
-      doc.text(`Complaint #${complaint.displayId || complaint.id || "N/A"}`, margin + 5, y + 10);
-
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(10);
+      doc.setFontSize(9);
       doc.setTextColor(...colors.textLight);
-      doc.text(`Category: ${complaint.category?.name || "N/A"} • Priority: ${complaint.category?.priority || "N/A"}`, margin + 5, y + 17);
+      doc.text("SUBMITTED", pageWidth - margin - 60, y + 24);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(9);
+      doc.setTextColor(...colors.text);
+      doc.text(formatDate(complaint.createdAt), pageWidth - margin - 60, y + 29);
 
-      y += 30;
-
-      // ====== Reporter Information Section ======
       doc.setFont("helvetica", "bold");
-      doc.setFontSize(13);
+      doc.setFontSize(9);
+      doc.setTextColor(...colors.textLight);
+      doc.text("LAST UPDATED", pageWidth - margin - 60, y + 36);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(9);
+      doc.setTextColor(...colors.text);
+      doc.text(formatDate(complaint.updatedAt || complaint.createdAt), pageWidth - margin - 60, y + 41);
+
+      y += 50;
+
+      // ====== REPORTER & LOCATION - Two Column Layout ======
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(14);
       doc.setTextColor(...colors.dark);
-      doc.text("REPORTER INFORMATION", margin, y);
+      doc.text("REPORTER & LOCATION INFORMATION", margin, y);
       y += 8;
 
+      const halfWidth = (contentWidth - 5) / 2;
+
+      // Left Box - Reporter Information
       doc.setFillColor(...colors.white);
-      doc.roundedRect(margin, y, contentWidth, 20, 2, 2, "F");
+      doc.roundedRect(margin, y, halfWidth, 28, 2, 2, "F");
       doc.setDrawColor(...colors.light);
       doc.setLineWidth(0.5);
-      doc.roundedRect(margin, y, contentWidth, 20, 2, 2, "S");
+      doc.roundedRect(margin, y, halfWidth, 28, 2, 2, "S");
 
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(10);
-      doc.setTextColor(...colors.text);
-      
-      const reporterInfo = [
-        { label: "Reported By", value: complaint.isAnonymous ? "Anonymous User" : (complaint.username || "Unknown") },
-        { label: "User ID", value: complaint.isAnonymous ? "Hidden for Privacy" : (complaint.userId || "N/A") },
-        { label: "Date Submitted", value: formatDate(complaint.createdAt) }
-      ];
-
-      reporterInfo.forEach((info, index) => {
-        doc.setFont("helvetica", "bold");
-        doc.text(info.label + ":", margin + 5, y + 7 + (index * 6));
-        doc.setFont("helvetica", "normal");
-        doc.text(info.value, margin + 45, y + 7 + (index * 6));
-      });
-
-      y += 28;
-
-      // ====== Location Information Section ======
       doc.setFont("helvetica", "bold");
-      doc.setFontSize(13);
-      doc.setTextColor(...colors.dark);
-      doc.text("LOCATION DETAILS", margin, y);
-      y += 8;
-
-      doc.setFillColor(...colors.white);
-      doc.roundedRect(margin, y, contentWidth, 20, 2, 2, "F");
-      doc.setDrawColor(...colors.light);
-      doc.setLineWidth(0.5);
-      doc.roundedRect(margin, y, contentWidth, 20, 2, 2, "S");
-
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(10);
-      doc.setTextColor(...colors.text);
-
-      const locationInfo = [
-        { label: "Faculty", value: complaint.facultyLocation?.faculty || "N/A" },
-        { label: "Block", value: complaint.facultyLocation?.facultyBlock || "N/A" },
-        { label: "Room", value: complaint.facultyLocation?.facultyBlockRoom || "N/A" }
-      ];
-
-      locationInfo.forEach((info, index) => {
-        doc.setFont("helvetica", "bold");
-        doc.text(info.label + ":", margin + 5, y + 7 + (index * 6));
-        doc.setFont("helvetica", "normal");
-        doc.text(info.value, margin + 45, y + 7 + (index * 6));
-      });
-
-      y += 28;
-
-      // ====== Complaint Title Section ======
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(13);
-      doc.setTextColor(...colors.dark);
-      doc.text("COMPLAINT TITLE", margin, y);
-      y += 8;
-
-      doc.setFillColor(254, 252, 232); // Light yellow tint
-      doc.roundedRect(margin, y, contentWidth, 15, 2, 2, "F");
-      doc.setDrawColor(250, 204, 21);
-      doc.setLineWidth(0.3);
-      doc.roundedRect(margin, y, contentWidth, 15, 2, 2, "S");
+      doc.setFontSize(9);
+      doc.setTextColor(...colors.textLight);
+      doc.text("REPORTED BY", margin + 4, y + 5);
 
       doc.setFont("helvetica", "bold");
       doc.setFontSize(11);
       doc.setTextColor(...colors.dark);
+      const reporterName = complaint.isAnonymous ? "Anonymous User" : (complaint.username || "Unknown");
+      doc.text(reporterName, margin + 4, y + 12);
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(9);
+      doc.setTextColor(...colors.text);
+      const userId = complaint.isAnonymous ? "Hidden for Privacy" : (complaint.userId || "N/A");
+      doc.text(`User ID: ${userId}`, margin + 4, y + 18);
+
+      if (!complaint.isAnonymous && complaint.email) {
+        doc.setFontSize(8);
+        doc.setTextColor(...colors.textLight);
+        doc.text(complaint.email, margin + 4, y + 23);
+      }
+
+      // Right Box - Location Information
+      doc.setFillColor(...colors.white);
+      doc.roundedRect(margin + halfWidth + 5, y, halfWidth, 28, 2, 2, "F");
+      doc.setDrawColor(...colors.light);
+      doc.setLineWidth(0.5);
+      doc.roundedRect(margin + halfWidth + 5, y, halfWidth, 28, 2, 2, "S");
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(9);
+      doc.setTextColor(...colors.textLight);
+      doc.text("INCIDENT LOCATION", margin + halfWidth + 9, y + 5);
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(11);
+      doc.setTextColor(...colors.dark);
+      const faculty = complaint.facultyLocation?.faculty || "N/A";
+      doc.text(faculty.length > 20 ? faculty.substring(0, 18) + "..." : faculty, margin + halfWidth + 9, y + 12);
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(9);
+      doc.setTextColor(...colors.text);
+      const block = complaint.facultyLocation?.facultyBlock || "N/A";
+      const room = complaint.facultyLocation?.facultyBlockRoom || "N/A";
+      doc.text(`Block: ${block}`, margin + halfWidth + 9, y + 18);
+      doc.text(`Room: ${room}`, margin + halfWidth + 9, y + 23);
+
+      y += 36;
+
+      // ====== COMPLAINT DETAILS ======
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(14);
+      doc.setTextColor(...colors.dark);
+      doc.text("COMPLAINT DETAILS", margin, y);
+      y += 8;
+
+      // Title Box
+      doc.setFillColor(254, 252, 232);
+      doc.setDrawColor(250, 204, 21);
+      doc.setLineWidth(0.5);
       const title = complaint.title || "No Title Provided";
       const splitTitle = doc.splitTextToSize(title, contentWidth - 10);
-      doc.text(splitTitle, margin + 5, y + 9);
+      const titleHeight = Math.max(12, splitTitle.length * 5 + 8);
+      doc.roundedRect(margin, y, contentWidth, titleHeight, 2, 2, "FD");
 
-      y += Math.max(15, splitTitle.length * 5 + 10);
-
-      // ====== Description Section ======
       doc.setFont("helvetica", "bold");
-      doc.setFontSize(13);
-      doc.setTextColor(...colors.dark);
-      doc.text("DESCRIPTION", margin, y);
-      y += 8;
+      doc.setFontSize(9);
+      doc.setTextColor(146, 64, 14);
+      doc.text("SUBJECT", margin + 4, y + 4);
 
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(11);
+      doc.setTextColor(...colors.dark);
+      doc.text(splitTitle, margin + 4, y + 10);
+
+      y += titleHeight + 6;
+
+      // Description Box
       doc.setFillColor(...colors.white);
-      const description = complaint.description || "No description provided";
+      doc.setDrawColor(...colors.light);
+      doc.setLineWidth(0.5);
+      const description = complaint.description || "No description provided.";
       const splitDescription = doc.splitTextToSize(description, contentWidth - 10);
-      const descHeight = Math.max(30, splitDescription.length * 5 + 10);
-      
-      doc.roundedRect(margin, y, contentWidth, descHeight, 2, 2, "F");
-      doc.setDrawColor(...colors.light);
-      doc.setLineWidth(0.5);
-      doc.roundedRect(margin, y, contentWidth, descHeight, 2, 2, "S");
+      const descHeight = Math.max(25, splitDescription.length * 5 + 12);
+      doc.roundedRect(margin, y, contentWidth, descHeight, 2, 2, "FD");
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(9);
+      doc.setTextColor(...colors.textLight);
+      doc.text("DETAILED DESCRIPTION", margin + 4, y + 5);
 
       doc.setFont("helvetica", "normal");
       doc.setFontSize(10);
       doc.setTextColor(...colors.text);
-      doc.text(splitDescription, margin + 5, y + 8);
+      doc.text(splitDescription, margin + 4, y + 12);
 
-      y += descHeight + 8;
+      y += descHeight + 6;
 
-      // ====== Assignment Information ======
+      // ====== ASSIGNMENT & HANDLING INFORMATION ======
       doc.setFont("helvetica", "bold");
-      doc.setFontSize(13);
+      doc.setFontSize(14);
       doc.setTextColor(...colors.dark);
-      doc.text("ASSIGNMENT STATUS", margin, y);
+      doc.text("ASSIGNMENT & HANDLING", margin, y);
       y += 8;
 
-      doc.setFillColor(...colors.white);
-      doc.roundedRect(margin, y, contentWidth, 14, 2, 2, "F");
-      doc.setDrawColor(...colors.light);
+      doc.setFillColor(240, 249, 255);
+      doc.setDrawColor(147, 197, 253);
       doc.setLineWidth(0.5);
-      doc.roundedRect(margin, y, contentWidth, 14, 2, 2, "S");
+      doc.roundedRect(margin, y, contentWidth, 20, 2, 2, "FD");
 
       doc.setFont("helvetica", "bold");
-      doc.setFontSize(10);
-      doc.setTextColor(...colors.text);
-      doc.text("Assigned To:", margin + 5, y + 7);
-      doc.setFont("helvetica", "normal");
+      doc.setFontSize(9);
+      doc.setTextColor(30, 64, 175);
+      doc.text("ASSIGNED OFFICER", margin + 4, y + 5);
+
       const assignedName = complaint.adminName || assignedToName || "Unassigned";
-      doc.text(assignedName, margin + 35, y + 7);
-      
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(11);
+      doc.setTextColor(...colors.dark);
+      doc.text(assignedName, margin + 4, y + 12);
+
       if (assignedToEmail && assignedToEmail !== "N/A") {
         doc.setFont("helvetica", "normal");
         doc.setFontSize(9);
+        doc.setTextColor(...colors.text);
+        doc.text(`Email: ${assignedToEmail}`, margin + 4, y + 17);
+      } else if (assignedName === "Unassigned") {
+        doc.setFont("helvetica", "italic");
+        doc.setFontSize(9);
         doc.setTextColor(...colors.textLight);
-        doc.text(`(${assignedToEmail})`, margin + 35, y + 11);
+        doc.text("Note: This complaint is pending assignment", margin + 4, y + 17);
       }
 
-      y += 22;
+      y += 28;
 
-      // ====== Timeline History (if available) ======
+      // ====== ACTIVITY TIMELINE (if available) ======
       if (complaintHistory && complaintHistory.length > 0) {
         // Check if we need a new page
         if (y > 240) {
@@ -645,44 +795,86 @@ const ComplaintDetails = () => {
         }
 
         doc.setFont("helvetica", "bold");
-        doc.setFontSize(13);
+        doc.setFontSize(14);
         doc.setTextColor(...colors.dark);
         doc.text("ACTIVITY TIMELINE", margin, y);
         y += 8;
 
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(9);
+        doc.setTextColor(...colors.textLight);
+        doc.text(`${complaintHistory.length} recorded activities (showing most recent ${Math.min(5, complaintHistory.length)})`, margin, y);
+        y += 8;
+
         complaintHistory.slice(0, 5).forEach((event, index) => {
-          if (y > 270) {
+          if (y > 265) {
             doc.addPage();
             y = 20;
           }
 
-          // Timeline item
+          // Timeline item background
           doc.setFillColor(249, 250, 251);
-          doc.roundedRect(margin, y, contentWidth, 12, 1, 1, "F");
+          doc.roundedRect(margin, y, contentWidth, 16, 2, 2, "F");
+
+          // Timeline connector line (except first)
+          if (index > 0) {
+            doc.setDrawColor(203, 213, 225);
+            doc.setLineWidth(1);
+            doc.line(margin + 5, y - 4, margin + 5, y);
+          }
 
           // Timeline dot
           doc.setFillColor(...colors.primary);
-          doc.circle(margin + 3, y + 6, 1.5, "F");
+          doc.circle(margin + 5, y + 8, 2, "F");
+          doc.setDrawColor(...colors.primary);
+          doc.setLineWidth(0.5);
+          doc.circle(margin + 5, y + 8, 3, "S");
 
+          // Event title and time
           doc.setFont("helvetica", "bold");
-          doc.setFontSize(9);
+          doc.setFontSize(10);
           doc.setTextColor(...colors.dark);
-          doc.text(event.actionTitle || "Action", margin + 8, y + 5);
+          const eventTitle = event.actionTitle || "Action Taken";
+          doc.text(eventTitle, margin + 12, y + 6);
 
           doc.setFont("helvetica", "normal");
           doc.setFontSize(8);
           doc.setTextColor(...colors.textLight);
-          doc.text(formatDate(event.createdAt), margin + 8, y + 9);
+          doc.text(formatDate(event.createdAt), margin + 12, y + 11);
 
+          // Event details (right aligned)
           if (event.actionDetails) {
-            const details = doc.splitTextToSize(event.actionDetails, contentWidth - 20);
-            doc.setFontSize(8);
+            const details = doc.splitTextToSize(event.actionDetails, 60);
+            doc.setFontSize(9);
             doc.setTextColor(...colors.text);
-            doc.text(details[0], pageWidth - margin - 5, y + 7, { align: "right" });
+            doc.text(details[0], pageWidth - margin - 4, y + 9, { align: "right" });
           }
 
-          y += 14;
+          y += 18;
         });
+
+        y += 5;
+      } else {
+        // No activity recorded
+        if (y > 260) {
+          doc.addPage();
+          y = 20;
+        }
+
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(14);
+        doc.setTextColor(...colors.dark);
+        doc.text("ACTIVITY TIMELINE", margin, y);
+        y += 8;
+
+        doc.setFillColor(254, 243, 199);
+        doc.roundedRect(margin, y, contentWidth, 15, 2, 2, "F");
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(9);
+        doc.setTextColor(146, 64, 14);
+        doc.text("Note: No activity has been recorded for this complaint yet.", margin + 5, y + 9);
+
+        y += 20;
       }
 
       // ====== Footer ======

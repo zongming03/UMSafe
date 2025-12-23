@@ -4,22 +4,147 @@ import jwt from "jsonwebtoken";
 import nodemailer from "nodemailer";
 import crypto from "crypto";
 import { HOSTNAME, ADMIN_PREFIX } from "../config/urlConfig.js";
+import { blacklistToken } from "../utils/tokenBlacklist.js";
+import sendEmail from "../utils/sendEmail.js";
+
+// POST /api/auth/verify-email/:token
+export const verifyEmail = async (req, res) => {
+  try {
+    const { token } = req.params;
+    
+    // Find user with valid verification token
+    const user = await User.findOne({
+      emailVerificationToken: token,
+      emailVerificationExpiry: { $gt: Date.now() },
+    });
+
+    if (!user) {
+      return res.status(400).json({
+        msg: "Invalid or expired verification token",
+        success: false,
+      });
+    }
+
+    // Mark email as verified
+    user.emailVerified = true;
+    user.emailVerificationToken = undefined;
+    user.emailVerificationExpiry = undefined;
+    await user.save();
+
+    console.log(`✅ Email verified for user: ${user.email}`);
+
+    // Send welcome email with credentials
+    try {
+      const loginUrl = `${HOSTNAME || 'http://localhost:3000'}/login`;
+      const emailHtml = `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #ddd; border-radius: 5px;">
+          <h2 style="color: #333;">Welcome to UMSafe! 🎉</h2>
+          <p>Hello <strong>${user.name}</strong>,</p>
+          <p>Your email has been successfully verified. Your account is now active and ready to use.</p>
+          
+          <div style="background-color: #f0f0f0; padding: 15px; margin: 20px 0; border-radius: 5px;">
+            <p style="margin: 10px 0;"><strong>Your Login Credentials:</strong></p>
+            <p style="margin: 10px 0;">📧 <strong>Email:</strong> ${user.email}</p>
+            <p style="margin: 10px 0;">🔐 <strong>Temporary Password:</strong> ${user.temporaryPassword || 'Contact your administrator'}</p>
+          </div>
+
+          <p><strong>Next Steps:</strong></p>
+          <ol>
+            <li>Go to <a href="${loginUrl}" style="color: #0066cc;">Login Page</a></li>
+            <li>Enter your email and temporary password</li>
+            <li>You will be prompted to change your password on first login</li>
+          </ol>
+
+          <p style="margin-top: 30px; color: #666; font-size: 12px; border-top: 1px solid #ddd; padding-top: 20px;">
+            If you did not create this account, please contact the administrator immediately.<br>
+            <strong>UMSafe Security Team</strong>
+          </p>
+        </div>
+      `;
+
+      const emailText = `
+Welcome to UMSafe!
+
+Hello ${user.name},
+
+Your email has been successfully verified. Your account is now active and ready to use.
+
+Your Login Credentials:
+Email: ${user.email}
+Temporary Password: ${user.temporaryPassword || 'Contact your administrator'}
+
+Next Steps:
+1. Go to the Login Page
+2. Enter your email and temporary password
+3. You will be prompted to change your password on first login
+
+If you did not create this account, please contact the administrator immediately.
+
+UMSafe Security Team
+      `;
+
+      await sendEmail({
+        to: user.email,
+        subject: "Email Verified - Your Account is Active! 🎉",
+        text: emailText,
+        html: emailHtml,
+      });
+
+      console.log(`✅ Verification email sent to: ${user.email}`);
+    } catch (emailErr) {
+      console.warn("⚠️ Failed to send verification email:", emailErr.message);
+      // Don't fail the verification if email fails to send
+    }
+
+    res.json({
+      msg: "Email verified successfully! You can now login.",
+      success: true,
+      user: {
+        id: user._id,
+        email: user.email,
+        name: user.name,
+      },
+    });
+  } catch (err) {
+    console.error("Email verification error:", err);
+    res.status(500).json({ msg: "Server error during verification" });
+  }
+};
 
 // POST /api/auth/login
 export const handlelogin = async (req, res) => {
   try {
     const { email, password } = req.body;
-    if (!email || !password) {
+    const emailInput = email?.toLowerCase().trim();
+    const passwordInput = password?.trim();
+
+    if (!emailInput || !passwordInput) {
       return res.status(400).json({ msg: "Email and password are required" });
     }
 
-    const user = await User.findOne({ email: email.toLowerCase().trim() });
-    if (!user) return res.status(404).json({ msg: "User not found" });
-    console.log("User found:", user);
+    // Case-insensitive lookup to handle mixed-case emails stored in DB
+    const user = await User.findOne({ email: { $regex: `^${emailInput}$`, $options: 'i' } });
+    if (!user) return res.status(404).json({ msg: "Invalid username or password." });
+    console.log("User found:", user.email);
+    console.log("Email verified status:", user.emailVerified);
 
-    const isMatch = await bcrypt.compare(password, user.hashedpassword);
+    // Check if email is verified
+    if (!user.emailVerified) {
+      return res.status(403).json({
+        msg: "Please verify your email first. Check your inbox for the verification link.",
+        requiresEmailVerification: true,
+      });
+    }
+
+    console.log("Attempting password comparison...");
+    console.log("Password from request (trimmed):", passwordInput);
+    console.log("Hashed password from DB:", user.hashedpassword);
+    
+    const isMatch = await bcrypt.compare(passwordInput, user.hashedpassword);
+    console.log("Password match result:", isMatch);
+    
     if (!isMatch)
-      return res.status(401).json({ msg: "WRONG USER NAME OR PASSWORD" });
+      return res.status(401).json({ msg: "Login failed. Please check your credentials and try again." });
 
     const token = jwt.sign(
       { id: user._id, email: user.email, role: user.role },
@@ -193,5 +318,41 @@ export const refreshToken = async (req, res) => {
   } catch (err) {
     console.error("Refresh token error:", err);
     res.status(500).json({ msg: "Server error" });
+  }
+};
+
+// POST /api/auth/logout
+// Blacklist the current token and log out the user
+export const handleLogout = async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(400).json({ msg: "No token provided" });
+    }
+
+    const token = authHeader.split(" ")[1];
+    
+    // Verify token is valid before blacklisting
+    try {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      
+      // Blacklist the token (add to blacklist until expiry)
+      blacklistToken(token, decoded.exp);
+      
+      console.log(`🚪 User ${decoded.email} logged out successfully`);
+      
+      res.status(200).json({ msg: "Logged out successfully" });
+    } catch (err) {
+      if (err.name === "TokenExpiredError") {
+        // Token already expired, but still process logout
+        console.log("⚠️ Token already expired but logging out anyway");
+        res.status(200).json({ msg: "Logged out successfully (token was expired)" });
+      } else {
+        return res.status(401).json({ msg: "Invalid token" });
+      }
+    }
+  } catch (err) {
+    console.error("Logout error:", err);
+    res.status(500).json({ msg: "Server error during logout" });
   }
 };

@@ -1,18 +1,36 @@
 import axios from "axios";
 
-// Main API instance for auth, rooms, categories, users, profile (localhost)
+// ==================== API Configuration ====================
+// Main API Base URL (Auth, Rooms, Categories, Users, Profile) - localhost
+const API_BASE = (
+  process.env.REACT_APP_API_BASE_URL || 
+  "http://localhost:5000/admin"
+).replace(/\/$/, "");
+
+// Reports API Base URL (Complaints, Reports, Chatrooms)
+// CRITICAL: Must set explicit ngrok URL with /admin path
+// axios does NOT use package.json proxy - it requires full baseURL
+// ngrok base is https://639bc5d3aec7.ngrok-free.app/admin so endpoints start with /reports
+const REPORTS_API_BASE = (
+  process.env.REACT_APP_REPORTS_API_BASE_URL || 
+  "https://639bc5d3aec7.ngrok-free.app"
+).replace(/\/$/, "");
+
+// ============================================================
+
+// Main API instance for auth, rooms, categories, users, profile
 const api = axios.create({
-  baseURL: "http://localhost:5000/admin",
+  baseURL: API_BASE,
   withCredentials: true,
 });
 
 // Reports API instance for complaint/report management
-// Now using localhost backend instead of ngrok
 const reportsApi = axios.create({
-  baseURL: "http://localhost:5000/admin",
+  baseURL: REPORTS_API_BASE,
   withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
+    'ngrok-skip-browser-warning': 'true', // Ensure ngrok header is always present
   }
 });
 
@@ -26,13 +44,15 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// Add auth token to reports API requests
+// Add auth token and ngrok header to reports API requests
 reportsApi.interceptors.request.use((config) => {
   const token =
     localStorage.getItem("token") || sessionStorage.getItem("token");
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
+  // Ensure ngrok header is always present
+  config.headers['ngrok-skip-browser-warning'] = 'true';
   return config;
 });
 
@@ -87,21 +107,21 @@ export const changePassword = (data) =>
   api.post("/profile/change-password", data);
 
 // ==================== Reports/Complaints Management APIs (using ngrok) ====================
-// 1) GET admin/reports - Fetch all reports/complaints
+// 1) GET /reports - Fetch all reports/complaints (baseURL already has /admin)
 export const fetchReports = () => reportsApi.get("/reports");
 
-// 2) GET admin/reports/{id} - Get single report/complaint details
+// 2) GET /reports/{id} - Get single report/complaint details
 export const getReport = (reportId) => reportsApi.get(`/reports/${reportId}`);
 
-// 3) PATCH admin/reports/{reportId}/assign-admin - Assign admin to report
+// 3) PATCH /reports/{reportId}/assign-admin - Assign admin to report
 export const assignAdmin = (reportId, data) => 
   reportsApi.patch(`/reports/${reportId}/assign-admin`, data);
 
-// 4) PATCH /reports/:id/revoke - Revoke report assignment
+// 4) PATCH /reports/:id/revoke - Revoke report assignment  
 export const revokeReport = (reportId) => 
   reportsApi.patch(`/reports/${reportId}/revoke`);
 
-// 5) PATCH admin/reports/:id/close - Close report
+// 5) PATCH /reports/:id/close - Close report
 export const closeReport = (reportId, data) => 
   reportsApi.patch(`/reports/${reportId}/close`, data);
 
@@ -112,18 +132,18 @@ export const resolveReport = (reportId, data) =>
 // ==================== Chatroom Management APIs (using ngrok) ====================
 export const fetchChatrooms = () => api.get("/chatrooms");
 
-// 7) POST admin/reports/{reportId}/chatrooms/initiate - Initiate chatroom
+// 7) POST /reports/{reportId}/chatrooms/initiate - Initiate chatroom
 export const initiateChatroom = async (reportId) => {
   const response = await reportsApi.post(`/reports/${reportId}/chatrooms/initiate`);
   return response.data;
 };
 
-// 8) GET reports/:reportId/chatrooms/:chatroomId/chats - Get chat messages
+// 8) GET /reports/:reportId/chatrooms/:chatroomId/chats - Get chat messages
 export const getChatMessages = (reportId, chatroomId) =>
   reportsApi.get(`/reports/${reportId}/chatrooms/${chatroomId}/chats`)
      .then((res) => res.data);
 
-// 8) POST /reports/:reportId/chatrooms/:chatroomId/chats - Send message
+// 9) POST /reports/:reportId/chatrooms/:chatroomId/chats - Send message
 export const sendMessage = async (reportId, chatroomId, messageData) => {
   // If caller passed a FormData (file uploads), let axios send multipart/form-data
   if (messageData instanceof FormData) {

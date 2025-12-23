@@ -1,11 +1,16 @@
 import express from 'express';
-import { handlelogin, requestPasswordReset, resetPassword, refreshToken } from '../controllers/authController.js';
+import { handlelogin, requestPasswordReset, resetPassword, refreshToken, handleLogout, verifyEmail } from '../controllers/authController.js';
+import { authMiddleware } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
 
 router.post('/login', handlelogin);
+router.post('/logout', authMiddleware, handleLogout);
 router.post('/forgot-password', requestPasswordReset);
 router.post('/reset-password/:token', resetPassword);
+// Allow both POST and GET for verification links
+router.post('/verify-email/:token', verifyEmail);
+router.get('/verify-email/:token', verifyEmail);
 router.post('/refresh', refreshToken);
 
 export default router;

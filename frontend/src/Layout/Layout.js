@@ -4,6 +4,8 @@ import Footer from "../components/footer";
 import Sidebar from "../components/Sidebar";
 import { Outlet, useLocation } from "react-router-dom";
 import SessionExpiryBanner from "../components/SessionExpiryBanner";
+import SocketListener from "../components/SocketListener";
+import SocketTestPanel from "../components/SocketTestPanel";
 
 export default function Layout({ userRole }) {
   const location = useLocation();
@@ -59,10 +61,10 @@ export default function Layout({ userRole }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh" }}>
       <SessionExpiryBanner />
+      <SocketListener />
       <Header />
 
       <div style={{ display: "flex", flex: 1, position: 'relative' }}>
-        {/* Hide sidebar on complaint detail pages */}
         {!isComplaintDetailPage && (
           <div 
             ref={sidebarRef}
@@ -103,6 +105,7 @@ export default function Layout({ userRole }) {
       </div>
 
       <Footer />
+      <SocketTestPanel />
     </div>
   );
 }

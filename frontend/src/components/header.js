@@ -72,9 +72,17 @@ const Header = () => {
                     </button>
 
                     <button
-                      onClick={() => {
-                        logout();
-                        window.location.href = "/login";
+                      onClick={async () => {
+                        setIsProfileOpen(false);
+                        try {
+                          await logout();
+                          // Use hard redirect to avoid any router race
+                          window.location.replace("/login");
+                        } catch (err) {
+                          console.error("Logout error:", err);
+                          // Still redirect even if logout API fails
+                          window.location.replace("/login");
+                        }
                       }}
                       className="w-full text-left block px-4 py-2 text-sm text-red-600 hover:bg-gray-100"
                     >

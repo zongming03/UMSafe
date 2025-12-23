@@ -20,9 +20,16 @@ export default function SessionExpiryBanner() {
     if (!ok) setError('Failed to extend session. Please re-login soon.');
   };
 
-  const handleLogout = () => {
-    logout();
-    navigate('/login');
+  const handleLogout = async () => {
+    try {
+      console.log("🔐 Session expiry logout initiated...");
+      await logout();
+      console.log("✅ Logout complete, redirecting to login...");
+      navigate('/login', { replace: true });
+    } catch (err) {
+      console.error("❌ Logout error:", err);
+      navigate('/login', { replace: true });
+    }
   };
 
   return (

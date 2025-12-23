@@ -2,26 +2,14 @@ import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 dotenv.config();
 
-const connectDBAndStartServer = (app) => {
-  mongoose
-    .connect(process.env.MONGO_URI)
-    .then(() => {
-      app.listen(process.env.PORT, () => {
-        console.log(
-          "✅ Connected to db and server listening at port",
-          process.env.PORT
-        );
-      });
-
-    })
-    .catch((error) => {
-      console.error("❌ Error connecting to the database:", error.message);
-      app.get("/", (req, res) => {
-        res
-          .status(500)
-          .send("Internal Server Error. Unable to connect to the database.");
-      });
-    });
+const connectDB = async () => {
+  try {
+    await mongoose.connect(process.env.MONGO_URI);
+    console.log('✅ Connected to database');
+  } catch (error) {
+    console.error('❌ Error connecting to the database:', error.message);
+    throw error;
+  }
 };
 
-export default connectDBAndStartServer;
+export default connectDB;

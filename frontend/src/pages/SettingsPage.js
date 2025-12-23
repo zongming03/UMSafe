@@ -406,7 +406,7 @@ const SettingsPage = () => {
                                 ? formData.profileImage
                                 : formData.profileImage.startsWith("http")
                                 ? formData.profileImage
-                                : `http://localhost:5000${formData.profileImage}`
+                                : `${((process.env.REACT_APP_API_BASE_URL || "https://ac47f6e223f4.ngrok-free.app/admin").replace(/\/$/, "")).replace(/\/admin$/, "")}${formData.profileImage}`
                               : DefaultBackground
                           })`,
                         }}

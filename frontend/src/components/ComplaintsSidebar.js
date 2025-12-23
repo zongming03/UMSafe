@@ -150,7 +150,7 @@ const ComplaintsSidebar = ({ allComplaints, currentComplaintId }) => {
                         isActive ? "text-blue-700" : "text-gray-900"
                       }`}
                     >
-                      #{complaint.id}
+                      #{complaint.displayId || complaint.id}
                     </span>
                     {isActive && (
                       <span className="text-xs bg-blue-600 text-white px-2 py-0.5 rounded-full">

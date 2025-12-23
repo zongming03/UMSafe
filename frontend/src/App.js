@@ -15,6 +15,7 @@ import LoadingOverlay from "./components/LoadingOverlay";
 import NotFoundPages from "./components/NotFoundPages";
 import ForgotPasswordPage from "./components/ForgotPasswordPage";
 import ResetPasswordPage from "./components/ResetPasswordPage";
+import VerifyEmailPage from "./pages/VerifyEmailPage";
 import SettingsPage from "./pages/SettingsPage";
 import { AuthContext } from "./context/AuthContext";
 
@@ -58,6 +59,10 @@ const { user, loading } = useContext(AuthContext);
     {
       path: "/reset-password/:token",
       element: <ResetPasswordPage />,
+    },
+    {
+      path: "/verify-email/:token",
+      element: <VerifyEmailPage />,
     },
     {
       // Fallback for older emails that used /admin/reset-password/:token

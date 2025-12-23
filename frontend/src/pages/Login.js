@@ -9,7 +9,7 @@ import {
   faChartBar,
   faTasks,
 } from "@fortawesome/free-solid-svg-icons";
-import UMSafeLogo from "../assets/UMSafeLogo.png";
+import UMSafeLogo from "../assets/UMSafeLogoWithName.png";
 import umcampus from "../assets/um-campus5.jpg";
 import "../styles/Login.css";
 import Footer from "../components/footer";
@@ -46,16 +46,22 @@ const LoginPage = () => {
 
       const { token, user } = res.data;
 
-      console.log("🔄 Starting login process...");
       await login(user, token, rememberMe);
-      console.log("✅ Login complete, user state updated");
       
       // Force a full page reload to ensure router sees the updated user state
       window.location.href = "/dashboard";
     } catch (err) {
-      setLoginError(
-        err.response?.data?.msg || "Login failed. Please try again."
-      );
+      const apiMsg = err?.response?.data?.msg;
+      const requiresVerification = err?.response?.data?.requiresEmailVerification;
+
+      if (requiresVerification) {
+        setLoginError(
+          apiMsg ||
+            "Email not verified yet. Please check your inbox for the verification link and complete verification before logging in."
+        );
+      } else {
+        setLoginError(apiMsg || "Login failed. Please try again.");
+      }
     } finally {
       setIsLoading(false);
     }
@@ -68,11 +74,11 @@ const LoginPage = () => {
         <div className="login-left-side">
           <div className="login-backdrop">
             <div className="text-center mb-4">
-              <div className="mb-2">
+              <div className="m-0 p-0">
                 <img
                   src={UMSafeLogo}
                   alt="UMSafeLogo"
-                  className="h-28 w-auto mx-auto"
+                  className="h-40 w-auto mx-auto m-0 p-0"
                 />
               </div>
               <h1 className="text-2xl font-semibold text-gray-800 mb-1">

@@ -137,7 +137,6 @@ const RoomManagement = () => {
   };
 
   const handleEditRoomClick = (room) => {
-    console.log("Edit clicked:", room);
     setCurrentRoom(room);
     setIsEditModalOpen(true);
   };
@@ -178,14 +177,9 @@ const RoomManagement = () => {
   const fetchAndSetRooms = async () => {
     setIsLoading(true);
     try {
-      const res = await fetchRooms(); // This fetches ALL faculty data
+      const res = await fetchRooms(); 
       const faculties = res.data;
       
-      console.log("📚 All faculties:", faculties);
-      console.log("🔍 Looking for faculty with ID:", userFacultyId);
-      
-      // Find user faculty by facultyid from authenticated user
-      // Handle both string and ObjectId comparisons
       const userFaculty = faculties.find((fac) => {
         const facultyId = fac._id?.toString() || fac._id;
         const userId = userFacultyId?.toString() || userFacultyId;
@@ -193,8 +187,7 @@ const RoomManagement = () => {
       });
 
       if (!userFaculty) {
-        console.warn("⚠️ User faculty not found with ID:", userFacultyId);
-        console.warn("Available faculty IDs:", faculties.map(f => f._id));
+
         setRooms([]);
         setIsLoading(false);
         return;
@@ -238,7 +231,6 @@ const RoomManagement = () => {
         });
       });
       
-      console.log(`✅ Total rooms loaded: ${allRooms.length}`);
       setRooms(allRooms);
     } catch (err) {
       setError("Failed to fetch rooms. Please try again.");

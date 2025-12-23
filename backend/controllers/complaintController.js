@@ -4,6 +4,7 @@ import User from '../models/User.js';
 import sendEmail from '../utils/sendEmail.js';
 import { HOSTNAME } from '../config/urlConfig.js';
 import axios from 'axios';
+import { emitEvent, emitToUser } from '../realtime/socket.js';
 
 // Helper function to notify all admins about new complaints
 const notifyAdminsNewComplaint = async (complaintId, complaintTitle, facultyId = null) => {
@@ -58,8 +59,8 @@ const getComplaintById = async (req, res) => {
 
 const updateComplaintStatus = async (req, res) => {
   try {
-    // Check if this is a partner API report (has display ID like CMP-XXXX)
-    const isPartnerReport = /^CMP-/.test(req.params.id);
+    // Check if this is a partner API report (has display ID like RPT-2XXX-XX)
+    const isPartnerReport = /^RPT-/.test(req.params.id);
     
     if (isPartnerReport) {
       const newStatus = req.body.status?.toLowerCase();
@@ -117,6 +118,22 @@ const updateComplaintStatus = async (req, res) => {
           });
           
           console.log(`✅ Partner API: ${newStatus} status updated for ${reportId}`);
+
+          emitEvent('complaint:status', {
+            complaintId: reportId,
+            status: newStatus,
+            previousStatus,
+            updatedBy: req.user?.id,
+            updatedByRole: req.user?.role,
+            isPartner: true,
+          });
+          if (assignedAdmin?._id) {
+            emitToUser(assignedAdmin._id, 'complaint:status', {
+              complaintId: reportId,
+              status: newStatus,
+              previousStatus,
+            });
+          }
           
           // Send email notification to assigned admin if they have notifications enabled
           if (assignedAdmin && assignedAdmin.notifications?.emailNotifications) {
@@ -183,8 +200,7 @@ const updateComplaintStatus = async (req, res) => {
       });
     }
 
-    // Original MongoDB-based logic for local complaints
-    // Get previous status before update
+   
     const oldComplaint = await Report.findById(req.params.id);
     const previousStatus = oldComplaint?.status?.toLowerCase();
     
@@ -250,6 +266,28 @@ const updateComplaintStatus = async (req, res) => {
     await notifyUser(complaint.admin_id || complaint.assignedTo || complaint.assignedToId || complaint.admin);
     // Notify the reporter / submitter
     await notifyUser(complaint.user_id || complaint.submittedBy || complaint.submitted_by || complaint.user || complaint.reporter, 'reporter');
+    emitEvent('complaint:status', {
+      complaintId: complaint._id?.toString(),
+      status: complaint.status,
+      previousStatus,
+      updatedBy: req.user?.id,
+      updatedByRole: req.user?.role,
+      isPartner: false,
+    });
+    if (complaint.admin_id) {
+      emitToUser(complaint.admin_id, 'complaint:status', {
+        complaintId: complaint._id?.toString(),
+        status: complaint.status,
+        previousStatus,
+      });
+    }
+    if (complaint.user_id) {
+      emitToUser(complaint.user_id, 'complaint:status', {
+        complaintId: complaint._id?.toString(),
+        status: complaint.status,
+        previousStatus,
+      });
+    }
     res.json(complaint);
   } catch (error) {
     console.error('Error in updateComplaintStatus:', error);
@@ -261,7 +299,7 @@ const assignComplaint = async (req, res) => {
   try {
     const reportId = req.params.id;
     const adminId = req.body.admin_id;
-    const isPartnerReport = /^CMP-/.test(reportId);
+    const isPartnerReport = /^RPT-/.test(reportId);
     
     if (isPartnerReport) {
       // Check if this is revoking admin (unassigning)
@@ -292,6 +330,22 @@ const assignComplaint = async (req, res) => {
           });
           
           console.log(`✅ Partner API: Admin revoked for ${reportId}`);
+
+          emitEvent('complaint:assignment', {
+            complaintId: reportId,
+            adminId: null,
+            adminName: previousAdmin?.name || 'Unassigned',
+            updatedBy: req.user?.id,
+            updatedByName: req.user?.name,
+            isPartner: true,
+          });
+          if (previousAdmin?._id) {
+            emitToUser(previousAdmin._id, 'complaint:assignment', {
+              complaintId: reportId,
+              adminId: null,
+              adminName: 'Unassigned',
+            });
+          }
           
           // Send email notification to revoked admin if they have notifications enabled
           if (previousAdmin && previousAdmin.notifications?.emailNotifications) {
@@ -344,9 +398,26 @@ const assignComplaint = async (req, res) => {
           );
           
           console.log(`✅ Partner API: Admin assigned for ${reportId}`);
-          
+
           // Send email notification to newly assigned admin if they have notifications enabled
           const assignedUser = await User.findById(adminId);
+
+          emitEvent('complaint:assignment', {
+            complaintId: reportId,
+            adminId,
+            adminName: assignedUser?.name || 'Assigned',
+            updatedBy: req.user?.id,
+            updatedByName: req.user?.name,
+            isPartner: true,
+          });
+          if (adminId) {
+            emitToUser(adminId, 'complaint:assignment', {
+              complaintId: reportId,
+              adminId,
+              adminName: assignedUser?.name || 'You',
+            });
+          }
+          
           if (assignedUser && assignedUser.notifications?.emailNotifications) {
             const complaintUrl = `${HOSTNAME}/complaints/${reportId}`;
             const subject = `New complaint assigned to you: ${reportId}`;
@@ -383,21 +454,42 @@ const assignComplaint = async (req, res) => {
       { admin_id: req.body.admin_id },
       { new: true }
     );
+
+    let assignedUser = null;
+    if (complaint?.admin_id) {
+      assignedUser = await User.findById(complaint.admin_id).catch(() => null);
+    }
+
+    if (complaint) {
+      emitEvent('complaint:assignment', {
+        complaintId: complaint._id?.toString(),
+        adminId: complaint.admin_id || null,
+        adminName: assignedUser?.name || 'Unassigned',
+        updatedBy: req.user?.id,
+        updatedByName: req.user?.name,
+        isPartner: false,
+      });
+      if (complaint.admin_id) {
+        emitToUser(complaint.admin_id, 'complaint:assignment', {
+          complaintId: complaint._id?.toString(),
+          adminId: complaint.admin_id,
+          adminName: assignedUser?.name || 'You',
+        });
+      }
+    }
+
     // Send email notification to assigned user if enabled
-    if (complaint && complaint.admin_id) {
-      const user = await User.findById(complaint.admin_id);
-      if (user && user.notifications?.emailNotifications) {
-        const complaintUrl = `${HOSTNAME}/complaints/${complaint._id}`;
-        const subject = `New complaint assigned to you: ${complaint._id}`;
-        const text = `Hello ${user.name},\n\nYou have been assigned to complaint #${complaint._id}.\n\nYou can view the complaint here: ${complaintUrl}\n\nRegards,\nUMSafe`;
-        const html = `<p>Hello ${user.name},</p><p>You have been <strong>assigned</strong> to complaint <strong>#${complaint._id}</strong>.</p><p><a href="${complaintUrl}">View complaint</a></p><p>Regards,<br/>UMSafe</p>`;
-        
-        try {
-          await sendEmail({ to: user.email, subject, text, html });
-          console.log(`📧 Assignment email sent to ${user.email}`);
-        } catch (emailErr) {
-          console.warn('Failed to send assignment email:', emailErr.message);
-        }
+    if (complaint && assignedUser && assignedUser.notifications?.emailNotifications) {
+      const complaintUrl = `${HOSTNAME}/complaints/${complaint._id}`;
+      const subject = `New complaint assigned to you: ${complaint._id}`;
+      const text = `Hello ${assignedUser.name},\n\nYou have been assigned to complaint #${complaint._id}.\n\nYou can view the complaint here: ${complaintUrl}\n\nRegards,\nUMSafe`;
+      const html = `<p>Hello ${assignedUser.name},</p><p>You have been <strong>assigned</strong> to complaint <strong>#${complaint._id}</strong>.</p><p><a href="${complaintUrl}">View complaint</a></p><p>Regards,<br/>UMSafe</p>`;
+      
+      try {
+        await sendEmail({ to: assignedUser.email, subject, text, html });
+        console.log(`📧 Assignment email sent to ${assignedUser.email}`);
+      } catch (emailErr) {
+        console.warn('Failed to send assignment email:', emailErr.message);
       }
     }
     res.json(complaint);
@@ -419,6 +511,13 @@ const handleNewComplaintWebhook = async (req, res) => {
     
     // Notify all admins
     await notifyAdminsNewComplaint(complaintId, title, facultyId);
+
+    emitEvent('complaint:new', {
+      complaintId,
+      title,
+      facultyId,
+      createdAt: new Date().toISOString(),
+    });
     
     res.status(200).json({ message: 'Notification sent successfully' });
   } catch (error) {

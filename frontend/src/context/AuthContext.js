@@ -1,5 +1,8 @@
 import React, { createContext, useState, useEffect, useRef } from "react";
+import { flushSync } from "react-dom";
 import { jwtDecode } from "jwt-decode";
+import { logout as apiLogout } from "../services/api.js";
+import { disconnectSocket } from "../services/socket";
 
 export const AuthContext = createContext();
 
@@ -57,21 +60,27 @@ export const AuthProvider = ({ children }) => {
 
           const timer = setTimeout(() => {
             console.log("⏰ Token expired. Logging out...");
-            logout();
+                logout().then(redirectToLogin);
           }, remainingTime);
           localStorage.setItem("logoutTimerId", timer);
           startSessionCountdown(decoded.exp);
         } else {
           console.log("❌ Token already expired. Logging out...");
-          logout();
+              logout().then(redirectToLogin);
         }
       } catch (err) {
         console.error("⚠️ Token decode error:", err);
-        logout();
+            logout().then(redirectToLogin);
       }
     }
     setLoading(false);
   }, []);
+
+  const redirectToLogin = () => {
+    try {
+      window.location.replace("/login");
+    } catch {}
+  };
 
   const login = async (userData, token, rememberMe) => {
     const storage = rememberMe ? localStorage : sessionStorage;
@@ -87,10 +96,10 @@ export const AuthProvider = ({ children }) => {
 
       setExpiryTimestamp(decoded.exp);
       startSessionCountdown(decoded.exp);
-      const timer = setTimeout(() => {
-        console.log("⏰ Token expired. Logging out...");
-        logout();
-      }, remainingTime);
+          const timer = setTimeout(() => {
+            console.log("⏰ Token expired. Logging out...");
+        logout().then(redirectToLogin);
+          }, remainingTime);
       localStorage.setItem("logoutTimerId", timer);
     } catch (err) {
       console.error("⚠️ Invalid token:", err);
@@ -109,8 +118,27 @@ export const AuthProvider = ({ children }) => {
     });
   };
 
-  const logout = () => {
+  const logout = async () => {
     console.log("🚪 Logging out user...");
+    
+    // Call backend logout endpoint to blacklist the token (ignore errors - token may already be expired)
+    const token = localStorage.getItem("token") || sessionStorage.getItem("token");
+    if (token) {
+      try {
+        await apiLogout();
+        console.log("✅ Token blacklisted on backend");
+      } catch (err) {
+        // Gracefully handle 404 and other errors - token may already be expired
+        console.warn("⚠️ Backend logout failed (this is OK if token expired):", err.message);
+      }
+    }
+    
+    // Ensure any active socket connection is closed immediately
+    try {
+      disconnectSocket();
+    } catch {}
+
+    // Clear local storage immediately
     localStorage.removeItem("token");
     localStorage.removeItem("user");
     sessionStorage.removeItem("token");
@@ -123,15 +151,18 @@ export const AuthProvider = ({ children }) => {
 
     const timerId = localStorage.getItem("logoutTimerId");
     if (timerId) {
-      clearTimeout(timerId);
-      console.log("🧹 Cleared logout timer");
-    }
+      clearTimeout(Number(timerId));    }
     localStorage.removeItem("logoutTimerId");
 
-    setUser(null);
-    setExpiryTimestamp(null);
-    setTimeLeft(null);
-    setSessionExpiring(false);
+    flushSync(() => {
+      setUser(null);
+      setExpiryTimestamp(null);
+      setTimeLeft(null);
+      setSessionExpiring(false);
+    });
+
+    
+    return Promise.resolve();
   };
 
   const startSessionCountdown = (expSeconds) => {
@@ -154,7 +185,8 @@ export const AuthProvider = ({ children }) => {
     try {
       const token = localStorage.getItem("token") || sessionStorage.getItem("token");
       if (!token) return logout();
-      const response = await fetch("http://localhost:5000/admin/auth/refresh", {
+      const base = (process.env.REACT_APP_API_BASE_URL || "http://localhost:5000/admin").replace(/\/$/, "");
+      const response = await fetch(`${base}/auth/refresh`, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -179,10 +211,10 @@ export const AuthProvider = ({ children }) => {
       const decoded = jwtDecode(data.token);
       const currentTime = Date.now() / 1000;
       const remainingTime = (decoded.exp - currentTime) * 1000;
-      const timer = setTimeout(() => {
-        console.log("⏰ Token expired. Logging out...");
-        logout();
-      }, remainingTime);
+          const timer = setTimeout(() => {
+            console.log("⏰ Token expired. Logging out...");
+            logout().then(redirectToLogin);
+          }, remainingTime);
       localStorage.setItem("logoutTimerId", timer);
       return true;
     } catch (err) {

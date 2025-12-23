@@ -16,7 +16,7 @@ export const MOCK_CHATROOMS = {
         id: "chat-1093-001",
         senderId: "system",
         receiverId: null,
-        message: "Conversation started regarding complaint #CMP-1093",
+        message: "Conversation started regarding complaint #RPT-202510-99",
         system: true,
         createdAt: "2025-10-23T16:00:00.000Z",
         updatedAt: "2025-10-23T16:00:00.000Z",

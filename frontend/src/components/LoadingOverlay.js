@@ -1,5 +1,5 @@
 import UMSafeLogo from "../assets/UMSafeLogo.png";
-
+import "../styles/LoadingOverlay.css";
 
 const LoadingOverlay = () => (
     <div className="fixed inset-0 bg-gradient-to-br from-gray-100 to-white z-50 flex items-center justify-center">

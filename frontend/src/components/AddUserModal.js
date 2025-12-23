@@ -11,7 +11,8 @@ const AddUserModal = ({
   userForm,
   onFormChange,
 }) => {
-  const EMAIL_REGEX = /^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$/i;
+  // Escape hyphens inside character classes for broad browser compatibility
+  const EMAIL_REGEX = /^[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}$/i;
   const PHONE_REGEX = /^\d{3}-\d{7,8}$/;
   if (!isOpen) return null;
   return (

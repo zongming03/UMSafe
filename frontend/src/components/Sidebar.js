@@ -79,24 +79,47 @@ const Sidebar = ({ userRole }) => {
             Analytics
           </button>
 
-          <button
-            onClick={() => navigate("/categories")}
-            className={`sidebar-btn ${
-              currentPath === "/categories"
-                ? "bg-blue-100 text-blue-800"
-                : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
-            }`}
-          >
-            <FontAwesomeIcon
-              icon={faThLarge}
-              className={`mr-3 text-lg ${
-                currentPath === "/categories"
-                  ? "text-blue-600"
-                  : "text-gray-400 group-hover:text-gray-500"
-              }`}
-            />
-            Categories
-          </button>
+          {userRole === "admin" && (
+            <>
+              <button
+                onClick={() => navigate("/categories")}
+                className={`sidebar-btn ${
+                  currentPath === "/categories"
+                    ? "bg-blue-100 text-blue-800"
+                    : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+                }`}
+              >
+                <FontAwesomeIcon
+                  icon={faThLarge}
+                  className={`mr-3 text-lg ${
+                    currentPath === "/categories"
+                      ? "text-blue-600"
+                      : "text-gray-400 group-hover:text-gray-500"
+                  }`}
+                />
+                Categories
+              </button>
+
+              <button
+                onClick={() => navigate("/rooms")}
+                className={`sidebar-btn ${
+                  currentPath === "/rooms"
+                    ? "bg-blue-100 text-blue-800"
+                    : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+                }`}
+              >
+                <FontAwesomeIcon
+                  icon={faDoorOpen}
+                  className={`mr-3 text-lg ${
+                    currentPath === "/rooms"
+                      ? "text-blue-600"
+                      : "text-gray-400 group-hover:text-gray-500"
+                  }`}
+                />
+                Room Management
+              </button>
+            </>
+          )}
 
           {userRole === "admin" && (
             <button
@@ -115,28 +138,9 @@ const Sidebar = ({ userRole }) => {
                     : "text-gray-400 group-hover:text-gray-500"
               }`}
             />
-            User Management
-          </button>
+              User Management
+            </button>
           )}
-
-          <button
-            onClick={() => navigate("/rooms")}
-            className={`sidebar-btn ${
-              currentPath === "/rooms"
-                ? "bg-blue-100 text-blue-800"
-                : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
-            }`}
-          >
-            <FontAwesomeIcon
-              icon={faDoorOpen}
-              className={`mr-3 text-lg ${
-                currentPath === "/rooms"
-                  ? "text-blue-600"
-                  : "text-gray-400 group-hover:text-gray-500"
-              }`}
-            />
-            Room Management
-          </button>
 
         </div>
       </nav>

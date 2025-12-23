@@ -16,10 +16,10 @@ import man from "../assets/man.png";
 import ComplaintChatHeader from "../components/ComplaintChatHeader";
 import { useParams, useLocation, useNavigate } from "react-router-dom";
 import { getChatMessages, sendMessage, initiateChatroom } from "../services/api.js";
+import api from "../services/api.js"; 
 import { AuthContext } from "../context/AuthContext";
 import LoadingOverlay from "../components/LoadingOverlay";
-import partnerSample from "../mock/partnerChatSample";
-import { getMockChatroomData } from "../mock/mockChatData";
+import { useChatUpdates } from "../hooks/useChatUpdates";
 
 const ComplaintChat = () => {
   const { reportId, chatroomId } = useParams();
@@ -68,25 +68,22 @@ const ComplaintChat = () => {
   useEffect(() => {
     const loadAdmins = async () => {
       try {
-        const res = await fetch("http://localhost:5000/admin/usersMobile/users", {
-          credentials: "include",
-        });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
-        const admins = data.data || [];
+        // Fetch all users from main API (localhost) to avoid ngrok CORS issues
+        const res = await api.get("/usersMobile/users");
+        const admins = res.data?.data || res.data || [];
         const ids = new Set(admins.map((a) => a._id || a.id));
         const profileMap = new Map(admins.map((a) => [a._id || a.id, a]));
         setAdminIds(ids);
         setAdminProfiles(profileMap);
         
-              // Find current user's profile data from the fetched admins
-              const currentUserId = currentUser?.id || currentUser?._id;
-              if (currentUserId) {
-                const currentProfile = admins.find((a) => (a._id || a.id) === currentUserId);
-                if (currentProfile) {
-                  setCurrentUserProfile(currentProfile);
-                }
-              }
+        // Find current user's profile data from the fetched admins
+        const currentUserId = currentUser?.id || currentUser?._id;
+        if (currentUserId) {
+          const currentProfile = admins.find((a) => (a._id || a.id) === currentUserId);
+          if (currentProfile) {
+            setCurrentUserProfile(currentProfile);
+          }
+        }
       } catch (err) {
         console.warn("Could not load admin list:", err);
       }
@@ -106,39 +103,31 @@ const ComplaintChat = () => {
               // Check if it's a Cloudinary URL (starts with http) or local path
               return adminProfile.profileImage.startsWith('http') 
                 ? adminProfile.profileImage 
-                : `http://localhost:5000${adminProfile.profileImage}`;
+                : `${((process.env.REACT_APP_NGROK_BASE_URL || "https://ac47f6e223f4.ngrok-free.app/admin").replace(/\/$/, "")).replace(/\/admin$/, "")}${adminProfile.profileImage}`;
             }
             return man; // fallback to default admin avatar
           }
           return profile; // student avatar
         };
 
-        // Development mode: no ids at all -> show full partner sample for UI review
-        if (!reportId && !chatroomId) {
-          const mapped = partnerSample.chats.map((c) => ({
-            ...c,
-            timestamp: c.createdAt,
-            content: c.message,
-            isAdmin: adminIds.has(c.senderId),
-            avatar: getAvatar(c.senderId),
-          }));
-          setMessages(mapped);
-          setLoading(false);
-          return;
-        }
-
-        // If we have a reportId but no chatroomId the chat hasn't started yet.
-        // Show the initial system starter message so the UI indicates the conversation context.
+        // If we have a reportId but no chatroomId the chat has just been initiated.
+        // Show an empty chatroom with a system starter message.
         if (!chatroomId) {
-          const systemMsg =
-            partnerSample.chats.find((c) => c.system) || partnerSample.chats[0];
+          const now = new Date().toISOString();
+          const systemMsg = {
+            id: "system-starter",
+            senderId: "system",
+            message: `Conversation started regarding complaint #${reportId}`,
+            createdAt: now,
+            system: true,
+          };
           const mapped = [
             {
               ...systemMsg,
-              timestamp: systemMsg?.createdAt,
-              content: systemMsg?.message,
-              isAdmin: adminIds.has(systemMsg?.senderId),
-              avatar: getAvatar(systemMsg?.senderId),
+              timestamp: formatDateTimeYYYYMMDD_HHMMSS(systemMsg.createdAt),
+              content: systemMsg.message,
+              isAdmin: false,
+              avatar: profile,
             },
           ];
           setMessages(mapped);
@@ -146,37 +135,20 @@ const ComplaintChat = () => {
           return;
         }
 
-        // Check if this is a mock chatroom (FAKE-ROOM-*)
-        console.log("🔍 Checking chatroomId:", chatroomId, "Type:", typeof chatroomId);
-        console.log("🔍 Does it start with FAKE-ROOM-?", chatroomId && chatroomId.startsWith("FAKE-ROOM-"));
-        
-        if (chatroomId && chatroomId.startsWith("FAKE-ROOM-")) {
-          console.log("📦 Using mock chat data for:", chatroomId);
-          const mockData = getMockChatroomData(chatroomId);
-          console.log("📋 Mock data retrieved:", mockData);
-          
-          if (mockData && mockData.chats) {
-            const mapped = mockData.chats.map((c) => ({
-              ...c,
-              timestamp: c.createdAt || c.updatedAt,
-              content: c.message || c.content,
-              isAdmin: adminIds.has(c.senderId),
-              avatar: getAvatar(c.senderId),
-            }));
-            console.log("✅ Loaded", mapped.length, "mock messages");
-            setMessages(mapped);
-            setLoading(false);
-            return;
-          } else {
-            console.log("⚠️ No mock data found for:", chatroomId);
-          }
-        }
-
-        // Real chatroom - fetch from API
+        // Fetch live chatroom messages from API
         const response = await getChatMessages(reportId, chatroomId);
-        const chats =
-          response?.chats ||
-          (response?.chat ? (Array.isArray(response.chat) ? response.chat : [response.chat]) : []);
+        console.log("📨 Chat API response:", response);
+        
+        // Handle response structure: { chat, chatroom, report }
+        let chats = [];
+        if (response?.chat) {
+          chats = Array.isArray(response.chat) ? response.chat : [response.chat];
+        } else if (response?.chats) {
+          chats = Array.isArray(response.chats) ? response.chats : [response.chats];
+        } else if (Array.isArray(response)) {
+          chats = response;
+        }
+        
         const mapped = chats.map((c) => ({
           ...c,
           timestamp: c.createdAt || c.updatedAt,
@@ -184,49 +156,11 @@ const ComplaintChat = () => {
           isAdmin: adminIds.has(c.senderId),
           avatar: getAvatar(c.senderId),
         }));
+        console.log("✅ Mapped", mapped.length, "chat messages");
         setMessages(mapped);
       } catch (error) {
         console.error("Failed to load messages:", error);
-        
-        // Try mock data first if it's a FAKE-ROOM
-        const getAvatar = (senderId) => {
-          if (adminIds.has(senderId)) {
-            const adminProfile = adminProfiles.get(senderId);
-            if (adminProfile?.profileImage) {
-              return adminProfile.profileImage.startsWith('http') 
-                ? adminProfile.profileImage 
-                : `http://localhost:5000${adminProfile.profileImage}`;
-            }
-            return man;
-          }
-          return profile;
-        };
-
-        if (chatroomId && chatroomId.startsWith("FAKE-ROOM-")) {
-          const mockData = getMockChatroomData(chatroomId);
-          if (mockData && mockData.chats) {
-            const mapped = mockData.chats.map((c) => ({
-              ...c,
-              timestamp: c.createdAt,
-              content: c.message,
-              isAdmin: adminIds.has(c.senderId),
-              avatar: getAvatar(c.senderId),
-            }));
-            setMessages(mapped);
-            setLoading(false);
-            return;
-          }
-        }
-
-        // Final fallback to partner sample
-        const mapped = partnerSample.chats.map((c) => ({
-          ...c,
-          timestamp: c.createdAt,
-          content: c.message,
-          isAdmin: adminIds.has(c.senderId),
-          avatar: getAvatar(c.senderId),
-        }));
-        setMessages(mapped);
+        setMessages([]);
       } finally {
         setLoading(false);
       }
@@ -239,7 +173,35 @@ const ComplaintChat = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // cleanup local object URLs when component unmounts or attachments change
+  // Send system message when chatroom is first opened (has chatroomId and no existing messages except system starter)
+  useEffect(() => {
+    const sendSystemMessage = async () => {
+      if (!reportId || !chatroomId) return; // Only send if both are present
+      
+      // Check if we should send the system message (only one message and it's the starter)
+      const isNewChatroom = messages.length === 1 && messages[0]?.senderId === "system" && messages[0]?.id === "system-starter";
+      
+      if (!isNewChatroom) return; // Already sent or has other messages
+      
+      try {
+        console.log("📢 Sending system message for chatroom:", chatroomId);
+        const systemMessageData = {
+          message: `Chatroom opened for complaint #${reportId}. Both parties are now connected.`,
+          senderId: "system",
+          system: true,
+        };
+        
+        await sendMessage(reportId, chatroomId, systemMessageData);
+        console.log("✅ System message sent successfully");
+      } catch (error) {
+        console.warn("⚠️ Failed to send system message:", error);
+        // Don't fail the chat if system message fails
+      }
+    };
+
+    sendSystemMessage();
+  }, [reportId, chatroomId, messages]);
+
   useEffect(() => {
     return () => {
       if (localObjectUrlsRef.current && localObjectUrlsRef.current.length) {
@@ -270,6 +232,37 @@ const ComplaintChat = () => {
       document.removeEventListener("mousedown", handleClickOutside);
     };
   }, [showEmojiPicker]);
+
+  // Real-time chat updates
+  useChatUpdates({
+    reportId,
+    chatroomId,
+    onNewMessage: (payload) => {
+      // Add new message to the chat
+      const newMessage = {
+        id: payload.messageId || `msg-${Date.now()}`,
+        senderId: payload.senderId,
+        senderName: payload.senderName || "Unknown",
+        content: payload.content || payload.message,
+        message: payload.content || payload.message,
+        timestamp: payload.timestamp || new Date().toISOString(),
+        createdAt: payload.timestamp || new Date().toISOString(),
+        isAdmin: payload.isAdmin || adminIds.has(payload.senderId),
+        avatar: payload.avatar,
+        attachments: payload.attachments || [],
+        system: false,
+      };
+      setMessages((prev) => [...prev, newMessage]);
+    },
+    onMessageDelivered: (payload) => {
+      // Update message delivery status
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === payload.messageId ? { ...msg, delivered: true } : msg
+        )
+      );
+    },
+  });
 
   const handleSendMessage = async () => {
     if (!message.trim() && attachments.length === 0) return;
@@ -337,14 +330,50 @@ const ComplaintChat = () => {
           form.append("message", newMessage.message);
           // append files with key 'files' (backend should read from req.files.files or similar)
           attachmentsToSend.forEach((file) => form.append("files", file));
-          await sendMessage(reportId, roomId, form);
+          const response = await sendMessage(reportId, roomId, form);
+          console.log("✅ Message sent successfully - Response:", response);
+          
+          // Update the message with the actual chat ID from backend
+          if (response?.chat) {
+            setMessages((prev) => {
+              const updated = [...prev];
+              const lastIndex = updated.length - 1;
+              if (lastIndex >= 0 && updated[lastIndex].id === newMessage.id) {
+                updated[lastIndex] = {
+                  ...updated[lastIndex],
+                  id: response.chat.id,
+                  createdAt: response.chat.createdAt,
+                  updatedAt: response.chat.updatedAt,
+                };
+              }
+              return updated;
+            });
+          }
         } else {
           // Attachments are metadata only (no file objects)
           const payload = {
             message: newMessage.message,
             attachments: newMessage.attachments,
           };
-          await sendMessage(reportId, roomId, payload);
+          const response = await sendMessage(reportId, roomId, payload);
+          console.log("✅ Message sent successfully - Response:", response);
+          
+          // Update the message with the actual chat ID from backend
+          if (response?.chat) {
+            setMessages((prev) => {
+              const updated = [...prev];
+              const lastIndex = updated.length - 1;
+              if (lastIndex >= 0 && updated[lastIndex].id === newMessage.id) {
+                updated[lastIndex] = {
+                  ...updated[lastIndex],
+                  id: response.chat.id,
+                  createdAt: response.chat.createdAt,
+                  updatedAt: response.chat.updatedAt,
+                };
+              }
+              return updated;
+            });
+          }
         }
       } else {
         console.warn("No chatroomId available after initiation; message not persisted.");
@@ -388,7 +417,7 @@ const ComplaintChat = () => {
     <div className="min-h-screen bg-gray-50 flex flex-col">
       {/* Chat Header */}
       <ComplaintChatHeader
-        complaintId={complaint?.id || partnerSample.report?.id || "#CMP-1084"}
+        complaintId={complaint?.displayId || complaint?.id || "ID-Unknown"}
         studentName={
           complaint?.username || "Unknown"
         }
@@ -438,7 +467,7 @@ const ComplaintChat = () => {
                             ? (currentUserProfile?.profileImage 
                               ? (currentUserProfile.profileImage.startsWith('http') 
                                 ? currentUserProfile.profileImage 
-                                : `http://localhost:5000${currentUserProfile.profileImage}`)
+                                : `${(process.env.REACT_APP_API_BASE_URL).replace(/\/$/, "")}${currentUserProfile.profileImage}`)
                               : man)
                             : (msg.avatar || profile)
                         }

@@ -1,5 +1,6 @@
 import jwt from "jsonwebtoken";
 import User from "../models/User.js";
+import { isTokenBlacklisted } from "../utils/tokenBlacklist.js";
 
 export const authMiddleware = async (req, res, next) => {
   try {
@@ -8,11 +9,15 @@ export const authMiddleware = async (req, res, next) => {
       return res.status(401).json({ message: "No token provided" });
     }
     const token = authHeader.split(" ")[1];
+    
+    // Check if token is blacklisted (logged out)
+    if (isTokenBlacklisted(token)) {
+      return res.status(401).json({ message: "Token has been revoked. Please log in again." });
+    }
+    
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
     const user = await User.findById(decoded.id).select("-hashedpassword");
-
-    console.log("Decoded token:", decoded);
     if (!user) {
       return res.status(401).json({ message: "User not found" });
     }

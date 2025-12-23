@@ -4,6 +4,7 @@ import nodemailer from "nodemailer";
 import validator from "email-validator";
 import { HOSTNAME, ADMIN_PREFIX } from "../config/urlConfig.js";
 import { getDefaultProfileImageUrl } from "../utils/uploadDefaultImage.js";
+import { generatePassword, generateVerificationToken } from "../utils/passwordGenerator.js";
 
 const transporter = nodemailer.createTransport({
   service: "Gmail",
@@ -37,9 +38,14 @@ export const addOfficer = async (req, res) => {
       return res.status(400).json({ message: "Staff ID already exists" });
     }
 
-    const password = "loveum";
+    // Generate unique password for this user
+    const password = generatePassword();
     const hashed = await bcrypt.hash(password, 10);
-    console.log("[addOfficer] InputHash:", hashed);
+    console.log("[addOfficer] Generated unique password for user");
+
+    // Generate email verification token
+    const verificationToken = generateVerificationToken();
+    const tokenExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
 
     // Get default profile image from Cloudinary
     const defaultProfileImage = await getDefaultProfileImageUrl();
@@ -48,39 +54,46 @@ export const addOfficer = async (req, res) => {
       facultyid,
       name,
       staffid,
-      email,
+      email: email.toLowerCase().trim(),
       role,
       hashedpassword: hashed,
       phone,
       profileImage: defaultProfileImage,
+      emailVerified: false,
+      emailVerificationToken: verificationToken,
+      emailVerificationExpiry: tokenExpiry,
     });
 
     const savedUser = await newUser.save();
-    console.log("[addOfficer] User saved:", savedUser);
+    console.log("[addOfficer] User saved with verification pending");
+
+    const verificationLink = `${HOSTNAME}/verify-email/${verificationToken}`;
 
     const mailOptions = {
       from: `"UMSafe Admin" <${process.env.EMAIL_USER}>`,
       to: email,
-      subject: "Welcome to UMSafe 🎉",
+      subject: "Verify Your Email - UMSafe Account 📧",
       html: `
         <div style="font-family: Arial, sans-serif; line-height:1.6; color:#333; max-width:600px; margin:auto; border:1px solid #ddd; border-radius:10px; padding:20px;">
           <h2 style="color:#2c3e50; text-align:center;">Welcome to <span style="color:#3498db;">UMSafe</span> 🚀</h2>
           <p>Dear <b>${name}</b>,</p>
-          <p>Your account has been created successfully 🎉</p>
+          <p>Your account has been created successfully! 🎉 Please verify your email to activate your account.</p>
 
           <div style="background:#f8f9fa; padding:15px; border-left:4px solid #3498db; margin:20px 0; border-radius:6px;">
-            <p><b>Temporary Login Details:</b></p>
+            <p><b>Your Temporary Credentials:</b></p>
             <p><b>Email:</b> ${email}</p>
-            <p><b>Password:</b> <span style="color:#e74c3c;">${password}</span></p>
+            <p><b>Password:</b> <code style="background:#fff; padding:8px; border-radius:3px; font-family:monospace; color:#e74c3c;">${password}</code></p>
           </div>
-
-          <p style="color:#555;">Please change your password after your first login for security purposes 🔐.</p>
 
           <div style="text-align:center; margin:30px 0;">
-            <a href="${HOSTNAME}${ADMIN_PREFIX}/login" style="display:inline-block; background:#3498db; color:#fff; padding:12px 20px; text-decoration:none; border-radius:5px; font-weight:bold;">
-              Login to UMSafe
+            <a href="${verificationLink}" style="display:inline-block; background:#27ae60; color:#fff; padding:12px 20px; text-decoration:none; border-radius:5px; font-weight:bold;">
+              ✓ Verify Email Address
             </a>
           </div>
+
+          <p style="color:#555;">This verification link expires in <b>24 hours</b>. After verifying your email, you can login with the credentials above.</p>
+
+          <p style="color:#555;">For security, please change your password after your first login 🔐.</p>
 
           <p>Best regards,<br><b>UMSafe Team</b></p>
           <hr style="margin:20px 0; border:none; border-top:1px solid #ddd;">
@@ -92,10 +105,12 @@ export const addOfficer = async (req, res) => {
     };
 
     await transporter.sendMail(mailOptions);
-    console.log("[addOfficer] Email sent successfully");
+    console.log("[addOfficer] Verification email sent successfully");
 
     res.status(201).json({
-      message: "Officer created successfully",
+      message: "Officer created successfully. Verification email sent.",
+      email: email,
+      password: password, // Return password to admin so they can share it
     });
   } catch (err) {
     console.error("[addOfficer] ERROR:", err);
@@ -143,14 +158,15 @@ export const deleteOfficer = async (req, res) => {
 
 export const bulkDeleteOfficer = async (req, res) => {
   try {
-    const {} = req.body;
-    if (!Array.isArray(categories) || categories.length === 0) {
+    const { officers } = req.body;
+    if (!Array.isArray(officers) || officers.length === 0) {
       return res.status(400).json({ msg: "Invalid users array" });
     }
 
-    await Category.deleteMany({ _id: { $in: categories } });
+    await User.deleteMany({ _id: { $in: officers } });
     res.status(200).json({ msg: "Users deleted successfully" });
   } catch (err) {
+    console.error("Bulk delete error:", err);
     res.status(500).json({ msg: "Failed to delete users" });
   }
 };
