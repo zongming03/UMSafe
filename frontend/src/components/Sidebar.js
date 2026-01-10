@@ -79,7 +79,7 @@ const Sidebar = ({ userRole }) => {
             Analytics
           </button>
 
-          {userRole === "admin" && (
+          {(userRole === "admin" || userRole === "superadmin") && (
             <>
               <button
                 onClick={() => navigate("/categories")}
@@ -121,7 +121,7 @@ const Sidebar = ({ userRole }) => {
             </>
           )}
 
-          {userRole === "admin" && (
+          {(userRole === "admin" || userRole === "superadmin") && (
             <button
               onClick={() => navigate("/users")}
               className={`sidebar-btn ${

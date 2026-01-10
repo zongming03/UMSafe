@@ -2,7 +2,6 @@ import React from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faHistory } from "@fortawesome/free-solid-svg-icons";
 
-// Accepts history in partner timeline format:
 // [{ id, actionTitle, actionDetails, initiatorName, createdAt }]
 // Gracefully handles legacy format where fields are date/action/user.
 const ActivityHistory = ({ history = [] }) => {
@@ -20,11 +19,11 @@ const ActivityHistory = ({ history = [] }) => {
           <ul className="-mb-8">
             {safeItems.map((item, index) => {
               const id = item.id || index;
-              const createdAt = item.createdAt || item.date || "";
+              const createdAt = item.createdAt;
               const displayDate = createdAt
                 ? (() => {
                     const d = new Date(createdAt);
-                    if (isNaN(d.getTime())) return createdAt; // fallback if invalid
+                    if (isNaN(d.getTime())) return createdAt; 
                     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
                   })()
                 : "";

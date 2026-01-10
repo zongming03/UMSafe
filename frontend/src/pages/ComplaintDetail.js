@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import "../styles/ComplaintDetail.css";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { 
   faArrowLeft, 
-  faBars, 
+  faBars,
+  faUser,
 
 } from "@fortawesome/free-solid-svg-icons";
 import StatusBanner from "../components/StatusBanner";
@@ -14,12 +15,33 @@ import QuickActionsCard from "../components/QuickActionCard";
 import ComplaintsSidebar from "../components/ComplaintsSidebar";
 import CollapsibleMainMenu from "../components/CollapsibleMainMenu";
 import CreateChatroomModal from "../components/CreateChatroomModal";
+import ViewUserDetailsModal from "../components/ViewUserDetailsModal";
 import { useLocation, useParams, useNavigate } from "react-router-dom";
-import jsPDF from "jspdf";
-import UMSafeLogo from "../assets/UMSafeLogo.png";
-import api, { getReport, initiateChatroom, assignAdmin, revokeReport, resolveReport, closeReport } from "../services/api";
+import {getUsersByFacultyForMobile, getUserDetails} from "../services/api";
+import { getReport, getReportHistories, initiateChatroom } from "../services/reportsApi";
 import { toast } from "react-hot-toast";
 import { useComplaintUpdates } from "../hooks/useComplaintUpdates";
+
+
+import {
+  normalizeStatus,
+  getStatusColor,
+  mapReportToComplaintDetail,
+  normalizeStaffMembers,
+  findMatchedAdmin,
+  checkUserPermissions,
+  formatHistoryDate
+} from "../utils/complaintDetailHelpers";
+
+import {
+  refreshComplaintFromPartner,
+  updateAssignedStaff,
+  revokeAssignedStaff,
+  updateComplaintStatus
+} from "../utils/complaintApiHelpers";
+
+
+import { generateComplaintPDF } from "../utils/complaintPDFGenerator";
 
 const ComplaintDetails = () => {
   const [currentStatus, setCurrentStatus] = useState("Open");
@@ -33,38 +55,111 @@ const ComplaintDetails = () => {
   const [isAssignDropdownOpen, setIsAssignDropdownOpen] = useState(false);
   const [isComplaintsSidebarOpen, setIsComplaintsSidebarOpen] = useState(false);
   const [showChatroomModal, setShowChatroomModal] = useState(false);
+  const [showUserDetailsModal, setShowUserDetailsModal] = useState(false);
+  const [userDetails, setUserDetails] = useState(null);
+  const [isLoadingUserDetails, setIsLoadingUserDetails] = useState(false);
 
   const location = useLocation();
   const params = useParams();
   const navigate = useNavigate();
 
-  // complaint may be passed in via navigation state during client-only flows.
-  // If not provided (direct URL), fetch the complaint by :id from the server.
+
   const [complaint, setComplaint] = useState(location.state?.complaint || null);
   const [allComplaints, setAllComplaints] = useState(location.state?.allComplaints || []);
   const isAnonymous = complaint?.isAnonymous || false;
 
-  // Real-time updates for current complaint
-  useComplaintUpdates({
-    onStatusChange: (payload) => {
-      // Update current complaint if IDs match
-      if (complaint && (complaint.id === payload.complaintId || complaint.displayId === payload.complaintId)) {
-        setComplaint((prev) => ({ ...prev, status: payload.status }));
-        const statusMap = {
-          'open': 'Open',
-          'in progress': 'In Progress',
-          'inprogress': 'In Progress',
-          'resolved': 'Resolved',
-          'closed': 'Closed'
+  const fetchAndSetHistories = useCallback(async (id) => {
+    if (!id) return;
+    try {
+      const historiesRes = await getReportHistories(id);
+
+      const historiesData = historiesRes.data?.reportHistories || historiesRes.data?.histories || historiesRes.data || [];
+
+
+      const mappedHistories = historiesData.map(item => {
+        const mapped = {
+          id: item.id,
+          action: item.actionTitle || item.action || "Activity",
+          createdAt: item.createdAt || item.timestamp || item.date,
+          timestamp: item.createdAt || item.timestamp || item.date,
+          initiatorName: item.initiator || item.initiatorName || "System",
+          actionTitle: item.actionTitle || item.action || "Activity",
+          actionDetails: item.actionDetails || item.details || "",
+          details: item.actionDetails || item.details || ""
         };
-        const mappedStatus = statusMap[payload.status.toLowerCase()] || payload.status;
+
+        return mapped;
+      });
+
+      console.log("✅ Final mappedHistories:", mappedHistories);
+      setComplaintHistory(mappedHistories);
+    } catch (err) {
+      console.warn('❌ Failed to refresh histories:', err);
+      console.error('Error details:', err.message, err.response?.data);
+    }
+  }, []);
+
+  
+  useComplaintUpdates({
+    currentComplaintId: complaint?.id || complaint?.displayId || params?.id,
+    onStatusChange: (payload) => {
+      console.log("📡 Received status change event:", payload);
+      const matchesId = payload.complaintId === complaint?.id || 
+                        payload.complaintId === complaint?.displayId ||
+                        payload.complaintId === params?.id;
+      
+      if (matchesId) {
+        console.log("Status change applies to current complaint, updating...");
+        const mappedStatus = normalizeStatus(payload.status);
+        const targetId = complaint?.id || complaint?.displayId || params?.id;
+
+        setComplaint((prev) => {
+          if (!prev) return prev;
+          const updated = { ...prev, status: payload.status };
+          console.log("Updated complaint with new status:", payload.status);
+          return updated;
+        });
+
+        // Keep sidebar list in sync
+        if (targetId && allComplaints && allComplaints.length) {
+          setAllComplaints((prev) => prev.map((c) => {
+            const matches = c.id === targetId || c.displayId === targetId;
+            return matches ? { ...c, status: mappedStatus } : c;
+          }));
+        }
+
         setCurrentStatus(mappedStatus);
+
+        if (targetId) {
+          (async () => {
+            const refreshed = await refreshComplaintFromPartner(targetId, complaint || {});
+            if (refreshed) {
+              setComplaint(refreshed);
+            }
+            await fetchAndSetHistories(targetId);
+          })();
+        }
+      } else {
+        console.log("❌ Status change doesn't match current complaint. Event ID:", payload.complaintId, "Current ID:", complaint?.id || complaint?.displayId);
       }
     },
     onAssignment: (payload) => {
-      // Update current complaint assignment if IDs match
-      if (complaint && (complaint.id === payload.complaintId || complaint.displayId === payload.complaintId)) {
-        setComplaint((prev) => ({ ...prev, adminId: payload.adminId, adminName: payload.adminName }));
+      console.log("Received assignment change event:", payload);
+      const matchesId = payload.complaintId === complaint?.id || 
+                        payload.complaintId === complaint?.displayId ||
+                        payload.complaintId === params?.id;
+      
+      if (matchesId) {
+        console.log("Assignment change applies to current complaint, updating...");
+        setComplaint((prev) => {
+          if (!prev) return prev;
+          const updated = { ...prev, adminId: payload.adminId, adminName: payload.adminName };
+          if (payload.status) {
+            updated.status = payload.status;
+          }
+          console.log("Updated complaint with new assignment:", payload.adminName);
+          return updated;
+        });
         if (payload.adminId) {
           setAssignedToId(payload.adminId);
           setAssignedToName(payload.adminName || 'Assigned');
@@ -73,18 +168,27 @@ const ComplaintDetails = () => {
           setAssignedToName('Unassigned');
           setAssignedToEmail('');
         }
+
+        if (payload.status) {
+          const mappedStatus = normalizeStatus(payload.status);
+          setCurrentStatus(mappedStatus);
+        }
+
+        const targetId = complaint?.id || complaint?.displayId || params?.id;
+        if (targetId) {
+          fetchAndSetHistories(targetId);
+        }
+      } else {
+        console.log("❌ Assignment change doesn't match current complaint. Event ID:", payload.complaintId, "Current ID:", complaint?.id || complaint?.displayId);
       }
     },
   });
 
-  // Scroll to top when component mounts or complaint changes
   useEffect(() => {
     window.scrollTo(0, 0);
   }, [params?.id]);
 
-  // Update complaint when navigating from sidebar or direct URL
   useEffect(() => {
-    // Always fetch fresh data from server when params?.id changes to ensure latest chatroom status
     if (params?.id) {
       const load = async () => {
         try {
@@ -92,66 +196,27 @@ const ComplaintDetails = () => {
           const report = res.data?.report || res.data?.data || res.data;
           if (!report) throw new Error("No report returned");
 
-          // Normalize report shape for the detail page
-          const mapped = {
-            id: report.id,
-            displayId: report.displayId || report.id,
-            backendId: report.id,
-            userId: report.userId,
-            username: report.username,
-            adminId: report.adminId,
-            adminName: report.adminName || "Unassigned",
-            status: report.status,
-            title: report.title,
-            description: report.description,
-            category: report.category || {},
-            media: report.media || [],
-            latitude: report.latitude,
-            longitude: report.longitude,
-            facultyLocation: report.facultyLocation || {},
-            isAnonymous: report.isAnonymous,
-            isFeedbackProvided: report.isFeedbackProvided,
-            chatroomId: report.chatroomId || "",
-            createdAt: report.createdAt,
-            updatedAt: report.updatedAt,
-            timelineHistory: report.timelineHistory || [],
-          };
-
+          const mapped = mapReportToComplaintDetail(report);
           setComplaint(mapped);
-          // Also load allComplaints if provided in location.state
+          
           if (location.state?.allComplaints) {
             setAllComplaints(location.state.allComplaints);
           }
+
+          await fetchAndSetHistories(params.id);
         } catch (err) {
           console.error("Failed to fetch complaint:", err);
           try { toast.error("Failed to load complaint."); } catch (e) {}
-          // navigate back to list if fetch fails
           navigate("/complaints");
         }
       };
       load();
     }
-  }, [params?.id, navigate]);
+  }, [params?.id, location.state?.allComplaints]);
 
-  // Sync currentStatus with complaint status (including mock data)
   useEffect(() => {
     if (complaint?.status) {
-      // Map complaint status to display status - handle all case variations
-      const statusMap = {
-        'opened': 'Open',
-        'open': 'Open',
-        'inprogress': 'In Progress',
-        'in progress': 'In Progress',
-        'Opened': 'Open',
-        'Open': 'Open',
-        'InProgress': 'In Progress',
-        'In Progress': 'In Progress',
-        'resolved': 'Resolved',
-        'Resolved': 'Resolved',
-        'closed': 'Closed',
-        'Closed': 'Closed'
-      };
-      const mappedStatus = statusMap[complaint.status] || complaint.status;
+      const mappedStatus = normalizeStatus(complaint.status);
       setCurrentStatus(mappedStatus);
     }
   }, [complaint]);
@@ -161,17 +226,6 @@ const ComplaintDetails = () => {
   const [lastUpdated, setLastUpdated] = useState("");
   const [complaintHistory, setComplaintHistory] = useState([]);
 
-  const statusColors = {
-    Open: "bg-yellow-100 text-yellow-800 border-yellow-200",
-    "In Progress": "bg-blue-100 text-blue-800 border-blue-200",
-    Resolved: "bg-green-100 text-green-800 border-green-200",
-    Closed: "bg-gray-100 text-gray-800 border-gray-200",
-  };
-
-  // Helper to get status color with fallback
-  const getStatusColor = (status) => {
-    return statusColors[status] || "bg-gray-100 text-gray-800 border-gray-200";
-  };
   const priorityColor = {
     High: "text-red-600 bg-red-50 border-red-100",
     Medium: "text-orange-600 bg-orange-50 border-orange-100",
@@ -186,6 +240,8 @@ const ComplaintDetails = () => {
     attachments: false,
   });
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isCloseConfirmationOpen, setIsCloseConfirmationOpen] = useState(false);
+  const [statusPendingConfirmation, setStatusPendingConfirmation] = useState(null);
 
   const statusRef = useRef(null);
   const assignRef = useRef(null);
@@ -205,6 +261,12 @@ const ComplaintDetails = () => {
 
   const handleOpenChatroom = async () => {
     try {
+      // 🔒 VALIDATION: Prevent any chatroom operations for anonymous complaints
+      if (isAnonymous) {
+        toast.error("Chatroom is not available for anonymous complaints. The student must be identified first.");
+        return;
+      }
+
       const reportId = complaint.id;
 
       // ✅ If chatroom already exists, navigate directly
@@ -225,6 +287,12 @@ const ComplaintDetails = () => {
     setShowChatroomModal(false);
     
     try {
+      // 🔒 VALIDATION: Prevent chatroom creation for anonymous complaints
+      if (isAnonymous) {
+        toast.error("Chatroom cannot be created for anonymous complaints. The student must be identified first.");
+        return;
+      }
+
       // Prefer backend id if provided; fall back to displayed id
       const reportId = complaint.backendId || complaint.id;
 
@@ -270,6 +338,33 @@ const ComplaintDetails = () => {
     setShowChatroomModal(false);
   };
 
+  const handleViewUserDetails = async () => {
+    if (!complaint?.userId) {
+      toast.error("User ID not available");
+      return;
+    }
+
+    setIsLoadingUserDetails(true);
+    setShowUserDetailsModal(true);
+
+    try {
+      const response = await getUserDetails(complaint.userId);
+      const userData = response.data?.user || response.data;
+      setUserDetails(userData);
+    } catch (error) {
+      console.error("Failed to fetch user details:", error);
+      toast.error("Failed to load user details");
+      setShowUserDetailsModal(false);
+    } finally {
+      setIsLoadingUserDetails(false);
+    }
+  };
+
+  const handleCloseUserDetailsModal = () => {
+    setShowUserDetailsModal(false);
+    setUserDetails(null);
+  };
+
   useEffect(() => {
     document.addEventListener("mousedown", handleClickOutside);
     return () => {
@@ -278,66 +373,64 @@ const ComplaintDetails = () => {
   }, []);
 
   const complaintAdminId = complaint?.adminId || "";
-  // Determine current user (from storage) and role for permission logic
   const storedUserStr = localStorage.getItem("user") || sessionStorage.getItem("user");
   const storedUser = storedUserStr ? JSON.parse(storedUserStr) : null;
-  const currentUserRole = storedUser?.role || "";
-  const currentUserId = storedUser?.id || storedUser?._id || storedUser?.userId || "";
-  const isUserAssigned = complaintAdminId && currentUserId && complaintAdminId === currentUserId;
-  const isAdminUser = currentUserRole.toLowerCase() === "admin";
-  // Non-admin users: hide full quick actions if not assigned; if assigned but not admin hide reassignment only.
-  const shouldShowQuickActions = isAdminUser || isUserAssigned;
-  const shouldShowReassign = isAdminUser; // Only admin can reassign
+  
+  const {
+    isUserAssigned,
+    isAdminUser,
+    isSuperAdmin,
+    shouldShowQuickActions,
+    shouldShowReassign
+  } = checkUserPermissions(storedUser, complaintAdminId);
+
+  const canViewAnonymousDetails = !isAnonymous || isSuperAdmin;
+
+  const displayedTitle = complaint?.title || "No Title Provided";
+  const displayedDescription = canViewAnonymousDetails
+    ? (complaint?.description || "No Description Provided")
+    : "Details hidden for anonymous complaint. Super Admins can view full details.";
+  const displayedSubmittedBy = canViewAnonymousDetails
+    ? (complaint?.username || "Unknown")
+    : "Anonymous";
+  const displayedLocation = canViewAnonymousDetails
+    ? (complaint?.facultyLocation?.facultyBlockRoom || "Unknown")
+    : "Hidden (anonymous)";
+  const displayedAttachments = canViewAnonymousDetails ? (complaint?.media || []) : [];
 
   useEffect(() => {
     const fetchStaffMembers = async () => {
       try {
-        // Get current user's faculty
         const userDataStr = localStorage.getItem("user") || sessionStorage.getItem("user");
         const currentUser = userDataStr ? JSON.parse(userDataStr) : null;
         const currentUserFacultyId = currentUser?.facultyid;
 
-        // Fetch all users from main API (localhost) to avoid ngrok CORS issues
-        const res = await api.get("/usersMobile/users");
-        const allAdmins = res.data?.data || res.data || [];
+        const res = await getUsersByFacultyForMobile(currentUserFacultyId);
+        const thisFacultyAdmins = res.data?.data || res.data || [];
         
-        console.log("📋 Fetched all admins from database:", allAdmins);
+        console.log("📋 Fetched all admins from database:", thisFacultyAdmins);
         console.log("🔍 Looking for adminId:", complaintAdminId);
         
-        // Filter admins to show only those from the same faculty
         const sameFacultyAdmins = currentUserFacultyId 
-          ? allAdmins.filter(admin => admin.facultyid === currentUserFacultyId)
-          : allAdmins;
+          ? thisFacultyAdmins.filter(admin => admin.facultyid === currentUserFacultyId)
+          : thisFacultyAdmins;
 
-        // Normalize to the shape expected by QuickActionsCard (adminId, name, email)
-        const normalized = sameFacultyAdmins.map((u) => ({
-          adminId: u._id,
-          name: u.name,
-          email: u.email,
-        }));
+        const normalized = normalizeStaffMembers(sameFacultyAdmins);
         setStaffMembers(normalized);
 
-        // Match adminId from complaint with fetched admins
+        const matchedAdmin = findMatchedAdmin(complaintAdminId, thisFacultyAdmins, complaint?.adminName);
+        setAssignedToName(matchedAdmin.name);
+        setAssignedToEmail(matchedAdmin.email);
+        
         if (complaintAdminId) {
-          const matchedAdmin = allAdmins.find(
-            (admin) => admin._id === complaintAdminId
-          );
-          if (matchedAdmin) {
-            console.log("✅ Found matching admin:", matchedAdmin);
-            console.log("📧 Admin email:", matchedAdmin.email);
-            setAssignedToName(matchedAdmin.name);
-            setAssignedToEmail(matchedAdmin.email);
+          const found = thisFacultyAdmins.find((admin) => admin._id === complaintAdminId);
+          if (found) {
+            console.log("✅ Found matching admin:", found);
+            console.log("📧 Admin email:", found.email);
           } else {
             console.log("❌ No matching admin found in database for ID:", complaintAdminId);
             console.log("📝 Using fallback adminName from complaint:", complaint?.adminName);
-            // Use adminName from complaint object if admin not found in database (e.g., mock data)
-            setAssignedToName(complaint?.adminName || "Unknown");
-            setAssignedToEmail("N/A");
           }
-        } else {
-          // No adminId, check if adminName exists directly in complaint
-          setAssignedToName(complaint?.adminName || "Not Assigned");
-          setAssignedToEmail("N/A");
         }
       } catch (err) {
         console.error("Error fetching admin users:", err);
@@ -348,110 +441,58 @@ const ComplaintDetails = () => {
     fetchStaffMembers();
   }, [complaintAdminId]);
 
-  // Map partner timelineHistory directly for ActivityHistory (preserve fields)
-  useEffect(() => {
-    if (complaint && Array.isArray(complaint.timelineHistory) && complaint.timelineHistory.length > 0) {
-      const mapped = complaint.timelineHistory
-        .slice()
-        .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt)) // chronological ascending
-        .map(entry => ({
-          id: entry.id,
-          actionTitle: entry.actionTitle,
-          actionDetails: entry.actionDetails || null,
-          initiatorName: typeof entry.initiator === 'string' ? entry.initiator : (entry.initiator && entry.initiator.name) || 'System',
-          createdAt: entry.createdAt,
-        }));
-      setComplaintHistory(mapped);
-    }
-  }, [complaint]);
-
-  const refreshComplaintFromPartner = async (id) => {
-    try {
-      const base = (process.env.REACT_APP_API_BASE_URL).replace(/\/$/, "");
-      const res = await fetch(`${base}/reports/${id}`, { credentials: 'include' });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-      // Normalize to same shape as initial mapping in list view (minimal fields used here)
-      const normalized = {
-        ...complaint,
-        ...data,
-        timelineHistory: data.timelineHistory || data.timeline_history || complaint.timelineHistory || [],
-      };
-      setComplaint(normalized);
-    } catch (err) {
-      console.warn('⚠️ Failed to refresh complaint after assign/revoke', err);
-    }
-  };
-
-  const updateAssignedStaff = async (complaintId, staffId) => {
-    try {
-      const response = await assignAdmin(complaintId, { adminId: staffId });
-      console.log("✅ Partner assign-admin response:", response?.data || response);
-      try { toast.success("Admin assigned. Status may auto-update."); } catch (e) {}
-      await refreshComplaintFromPartner(complaintId);
-    } catch (err) {
-      console.error("Failed to update assigned staff via partner API:", err);
-      try { toast.error("Failed to reassign complaint"); } catch (e) {}
-    }
-  };
-
-  const revokeAssignedStaff = async (complaintId) => {
-    try {
-      const response = await revokeReport(complaintId);
-      console.log("✅ Partner revoke-admin response:", response?.data || response);
-      try { toast.success("Admin revoked successfully"); } catch (e) {}
-      await refreshComplaintFromPartner(complaintId);
-    } catch (err) {
-      console.error("Failed to revoke assigned staff via partner API:", err);
-      try { toast.error("Failed to revoke assignment"); } catch (e) {}
-    }
-  };
-
-  // Update complaint status (partner reports for CMP-* IDs, fallback to local for others)
-  const updateComplaintStatus = async (complaintId, newStatus) => {
-    const isPartnerReport = typeof complaintId === 'string' && complaintId.startsWith('CMP-');
-    try {
-      if (isPartnerReport) {
-        // Map statuses to partner endpoints
-        if (newStatus === 'Resolved') {
-          await resolveReport(complaintId, {});
-        } else if (newStatus === 'Closed') {
-          await closeReport(complaintId, {});
-        } else {
-          // No explicit endpoint for 'Open' or 'In Progress' in partner API (assumed)
-          console.log(`No partner endpoint for status '${newStatus}', skipping API call.`);
-        }
-        try { toast.success('Complaint status updated'); } catch (e) {}
-      } else {
-        // Local MongoDB complaint fallback
-        const res = await fetch(
-          `${(process.env.REACT_APP_API_BASE_URL ).replace(/\/$/, "")}/complaints/${complaintId}/status`,
-          {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            credentials: 'include',
-            body: JSON.stringify({ status: newStatus }),
-          }
-        );
-        if (!res.ok) throw new Error(`HTTP Error: ${res.status}`);
-        const data = await res.json();
-        console.log('✅ Local complaint status updated:', data);
-        try { toast.success('Complaint status updated'); } catch (e) {}
-      }
-    } catch (err) {
-      console.error('❌ Failed to update complaint status:', err);
-      try { toast.error('Failed to update complaint status'); } catch (e) {}
-    }
-  };
-
   const handleStatusChange = (status) => {
+    const hasAssigned = Boolean(complaintAdminId);
+    const isTerminalStatus = status === 'Resolved' || status === 'Closed';
+    if (isTerminalStatus && !hasAssigned) {
+      try { toast.error('Assign an officer before changing status to Resolved or Closed'); } catch (e) {}
+      setIsStatusDropdownOpen(false);
+      return;
+    }
+
+    // Require confirmation before closing (canceling) the case
+    if (status === 'Closed') {
+      setStatusPendingConfirmation(status);
+      setIsCloseConfirmationOpen(true);
+      setIsStatusDropdownOpen(false);
+      return;
+    }
+
     if (status !== currentStatus) {
       setCurrentStatus(status);
       updateHistory(`Status changed to "${status}"`);
-
-      updateComplaintStatus(complaint.id, status);
+      
+      const onSuccess = async () => {
+        const refreshed = await refreshComplaintFromPartner(complaint.id, complaint);
+        setComplaint(refreshed);
+        await fetchAndSetHistories(complaint.id);
+      };
+      
+      updateComplaintStatus(complaint.id, status, onSuccess);
     }
     setIsStatusDropdownOpen(false);
+  };
+
+  const handleConfirmClose = () => {
+    if (statusPendingConfirmation === 'Closed' && statusPendingConfirmation !== currentStatus) {
+      setCurrentStatus('Closed');
+      updateHistory('Case closed and cancelled');
+      
+      const onSuccess = async () => {
+        const refreshed = await refreshComplaintFromPartner(complaint.id, complaint);
+        setComplaint(refreshed);
+        await fetchAndSetHistories(complaint.id);
+      };
+      
+      updateComplaintStatus(complaint.id, 'Closed', onSuccess);
+    }
+    setIsCloseConfirmationOpen(false);
+    setStatusPendingConfirmation(null);
+  };
+
+  const handleCancelClose = () => {
+    setIsCloseConfirmationOpen(false);
+    setStatusPendingConfirmation(null);
   };
 
   const handleAssignChange = (staff) => {
@@ -460,454 +501,28 @@ const ComplaintDetails = () => {
       setAssignedToName(staff.name);
       setAssignedToEmail(staff.email);
 
-      updateAssignedStaff(complaint.id, staff.adminId);
+      const onSuccess = async () => {
+        const refreshed = await refreshComplaintFromPartner(complaint.id, complaint);
+        setComplaint(refreshed);
+        await fetchAndSetHistories(complaint.id);
+      };
+      
+      updateAssignedStaff(complaint.id, staff.adminId, onSuccess);
       updateHistory(`Assigned to ${staff.name}`);
     }
     setIsAssignDropdownOpen(false);
   };
 
-  // Legacy function retained but now only updates lastUpdated (timeline comes from partner)
   const updateHistory = (action) => {
-    const now = new Date();
-    const formattedDate = `${now.toLocaleString('default', { month: 'short' })} ${now.getDate()}, ${now.getFullYear()}, ${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}`;
+    const formattedDate = formatHistoryDate();
     setLastUpdated(formattedDate);
   };
 
   const handleGenerateReport = (complaint) => {
-    try {
-      const doc = new jsPDF("p", "mm", "a4");
-      const pageWidth = 210;
-      const pageHeight = 297;
-      const margin = 20;
-      const contentWidth = pageWidth - (2 * margin);
-
-      // ====== Helper: Format date ======
-      const formatDate = (date) => {
-        if (!date) return "N/A";
-        const d = new Date(date);
-        const day = String(d.getDate()).padStart(2, '0');
-        const month = String(d.getMonth() + 1).padStart(2, '0');
-        const year = d.getFullYear();
-        const hours = String(d.getHours()).padStart(2, '0');
-        const minutes = String(d.getMinutes()).padStart(2, '0');
-        return `${day}/${month}/${year} ${hours}:${minutes}`;
-      };
-
-      // ====== Color Palette ======
-      const colors = {
-        primary: [79, 70, 229],      // Indigo
-        primaryLight: [129, 140, 248], // Light Indigo
-        secondary: [59, 130, 246],    // Blue
-        success: [16, 185, 129],      // Green
-        warning: [245, 158, 11],      // Amber
-        danger: [239, 68, 68],        // Red
-        dark: [31, 41, 55],           // Gray 800
-        light: [243, 244, 246],       // Gray 100
-        white: [255, 255, 255],
-        text: [55, 65, 81],           // Gray 700
-        textLight: [107, 114, 128]    // Gray 500
-      };
-
-      // ====== Header Background with Modern Gradient ======
-      for (let i = 0; i < 35; i++) {
-        const ratio = i / 35;
-        const r = colors.primary[0] + (colors.primaryLight[0] - colors.primary[0]) * ratio;
-        const g = colors.primary[1] + (colors.primaryLight[1] - colors.primary[1]) * ratio;
-        const b = colors.primary[2] + (colors.primaryLight[2] - colors.primary[2]) * ratio;
-        doc.setFillColor(r, g, b);
-        doc.rect(0, i, pageWidth, 1, "F");
-      }
-
-      // ====== Logo and Header ======
-      try {
-        doc.addImage(UMSafeLogo, "PNG", margin, 8, 22, 22);
-      } catch (err) {
-        console.warn("Logo not found, skipping image.");
-      }
-
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(22);
-      doc.setTextColor(...colors.white);
-      doc.text("COMPLAINT REPORT", pageWidth / 2, 18, { align: "center" });
-
-      doc.setFontSize(10);
-      doc.setTextColor(...colors.white);
-      doc.text("UMSafe Complaint Management System", pageWidth / 2, 25, { align: "center" });
-
-      // ====== Report Metadata Bar ======
-      doc.setFillColor(255, 255, 255, 0.2);
-      doc.roundedRect(margin, 30, contentWidth, 8, 1, 1, "F");
-      doc.setFontSize(9);
-      doc.setTextColor(...colors.white);
-      doc.text(`Report Generated: ${formatDate(new Date())}`, margin + 3, 35);
-      doc.text(`Document ID: ${complaint.displayId || complaint.id || "N/A"}`, pageWidth - margin - 3, 35, { align: "right" });
-
-      // ====== Main Content Starts ======
-      let y = 50;
-
-      // ====== OVERVIEW SECTION - Key Information at a Glance ======
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(14);
-      doc.setTextColor(...colors.dark);
-      doc.text("COMPLAINT OVERVIEW", margin, y);
-      y += 8;
-
-      // Overview Box
-      doc.setFillColor(248, 250, 252);
-      doc.roundedRect(margin, y, contentWidth, 42, 2, 2, "F");
-      doc.setDrawColor(203, 213, 225);
-      doc.setLineWidth(0.5);
-      doc.roundedRect(margin, y, contentWidth, 42, 2, 2, "S");
-
-      // Left Column - ID and Category
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(11);
-      doc.setTextColor(...colors.dark);
-      doc.text("Complaint ID:", margin + 5, y + 7);
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(14);
-      doc.setTextColor(...colors.primary);
-      doc.text(`#${complaint.displayId || complaint.id || "N/A"}`, margin + 5, y + 14);
-
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(9);
-      doc.setTextColor(...colors.textLight);
-      doc.text("CATEGORY", margin + 5, y + 21);
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(10);
-      doc.setTextColor(...colors.text);
-      doc.text(complaint.category?.name || "N/A", margin + 5, y + 26);
-
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(9);
-      doc.setTextColor(...colors.textLight);
-      doc.text("PRIORITY", margin + 5, y + 32);
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(10);
-      doc.setTextColor(...colors.text);
-      const priorityText = complaint.category?.priority || "N/A";
-      doc.text(priorityText, margin + 5, y + 37);
-
-      // Right Column - Status and Dates
-      const statusColorMap = {
-        "Open": colors.success,
-        "Opened": colors.success,
-        "InProgress": colors.secondary,
-        "In Progress": colors.secondary,
-        "Resolved": colors.primary,
-        "Closed": [107, 114, 128],
-        "Rejected": colors.danger,
-        "Pending": colors.warning
-      };
-      const statusColor = statusColorMap[complaint.status] || [107, 114, 128];
-      
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(9);
-      doc.setTextColor(...colors.textLight);
-      doc.text("STATUS", pageWidth - margin - 60, y + 7);
-      
-      doc.setFillColor(...statusColor);
-      doc.roundedRect(pageWidth - margin - 60, y + 9, 56, 10, 5, 5, "F");
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(10);
-      doc.setTextColor(...colors.white);
-      doc.text((complaint.status || "N/A").toUpperCase(), pageWidth - margin - 32, y + 16, { align: "center" });
-
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(9);
-      doc.setTextColor(...colors.textLight);
-      doc.text("SUBMITTED", pageWidth - margin - 60, y + 24);
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(9);
-      doc.setTextColor(...colors.text);
-      doc.text(formatDate(complaint.createdAt), pageWidth - margin - 60, y + 29);
-
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(9);
-      doc.setTextColor(...colors.textLight);
-      doc.text("LAST UPDATED", pageWidth - margin - 60, y + 36);
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(9);
-      doc.setTextColor(...colors.text);
-      doc.text(formatDate(complaint.updatedAt || complaint.createdAt), pageWidth - margin - 60, y + 41);
-
-      y += 50;
-
-      // ====== REPORTER & LOCATION - Two Column Layout ======
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(14);
-      doc.setTextColor(...colors.dark);
-      doc.text("REPORTER & LOCATION INFORMATION", margin, y);
-      y += 8;
-
-      const halfWidth = (contentWidth - 5) / 2;
-
-      // Left Box - Reporter Information
-      doc.setFillColor(...colors.white);
-      doc.roundedRect(margin, y, halfWidth, 28, 2, 2, "F");
-      doc.setDrawColor(...colors.light);
-      doc.setLineWidth(0.5);
-      doc.roundedRect(margin, y, halfWidth, 28, 2, 2, "S");
-
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(9);
-      doc.setTextColor(...colors.textLight);
-      doc.text("REPORTED BY", margin + 4, y + 5);
-
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(11);
-      doc.setTextColor(...colors.dark);
-      const reporterName = complaint.isAnonymous ? "Anonymous User" : (complaint.username || "Unknown");
-      doc.text(reporterName, margin + 4, y + 12);
-
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(9);
-      doc.setTextColor(...colors.text);
-      const userId = complaint.isAnonymous ? "Hidden for Privacy" : (complaint.userId || "N/A");
-      doc.text(`User ID: ${userId}`, margin + 4, y + 18);
-
-      if (!complaint.isAnonymous && complaint.email) {
-        doc.setFontSize(8);
-        doc.setTextColor(...colors.textLight);
-        doc.text(complaint.email, margin + 4, y + 23);
-      }
-
-      // Right Box - Location Information
-      doc.setFillColor(...colors.white);
-      doc.roundedRect(margin + halfWidth + 5, y, halfWidth, 28, 2, 2, "F");
-      doc.setDrawColor(...colors.light);
-      doc.setLineWidth(0.5);
-      doc.roundedRect(margin + halfWidth + 5, y, halfWidth, 28, 2, 2, "S");
-
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(9);
-      doc.setTextColor(...colors.textLight);
-      doc.text("INCIDENT LOCATION", margin + halfWidth + 9, y + 5);
-
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(11);
-      doc.setTextColor(...colors.dark);
-      const faculty = complaint.facultyLocation?.faculty || "N/A";
-      doc.text(faculty.length > 20 ? faculty.substring(0, 18) + "..." : faculty, margin + halfWidth + 9, y + 12);
-
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(9);
-      doc.setTextColor(...colors.text);
-      const block = complaint.facultyLocation?.facultyBlock || "N/A";
-      const room = complaint.facultyLocation?.facultyBlockRoom || "N/A";
-      doc.text(`Block: ${block}`, margin + halfWidth + 9, y + 18);
-      doc.text(`Room: ${room}`, margin + halfWidth + 9, y + 23);
-
-      y += 36;
-
-      // ====== COMPLAINT DETAILS ======
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(14);
-      doc.setTextColor(...colors.dark);
-      doc.text("COMPLAINT DETAILS", margin, y);
-      y += 8;
-
-      // Title Box
-      doc.setFillColor(254, 252, 232);
-      doc.setDrawColor(250, 204, 21);
-      doc.setLineWidth(0.5);
-      const title = complaint.title || "No Title Provided";
-      const splitTitle = doc.splitTextToSize(title, contentWidth - 10);
-      const titleHeight = Math.max(12, splitTitle.length * 5 + 8);
-      doc.roundedRect(margin, y, contentWidth, titleHeight, 2, 2, "FD");
-
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(9);
-      doc.setTextColor(146, 64, 14);
-      doc.text("SUBJECT", margin + 4, y + 4);
-
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(11);
-      doc.setTextColor(...colors.dark);
-      doc.text(splitTitle, margin + 4, y + 10);
-
-      y += titleHeight + 6;
-
-      // Description Box
-      doc.setFillColor(...colors.white);
-      doc.setDrawColor(...colors.light);
-      doc.setLineWidth(0.5);
-      const description = complaint.description || "No description provided.";
-      const splitDescription = doc.splitTextToSize(description, contentWidth - 10);
-      const descHeight = Math.max(25, splitDescription.length * 5 + 12);
-      doc.roundedRect(margin, y, contentWidth, descHeight, 2, 2, "FD");
-
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(9);
-      doc.setTextColor(...colors.textLight);
-      doc.text("DETAILED DESCRIPTION", margin + 4, y + 5);
-
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(10);
-      doc.setTextColor(...colors.text);
-      doc.text(splitDescription, margin + 4, y + 12);
-
-      y += descHeight + 6;
-
-      // ====== ASSIGNMENT & HANDLING INFORMATION ======
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(14);
-      doc.setTextColor(...colors.dark);
-      doc.text("ASSIGNMENT & HANDLING", margin, y);
-      y += 8;
-
-      doc.setFillColor(240, 249, 255);
-      doc.setDrawColor(147, 197, 253);
-      doc.setLineWidth(0.5);
-      doc.roundedRect(margin, y, contentWidth, 20, 2, 2, "FD");
-
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(9);
-      doc.setTextColor(30, 64, 175);
-      doc.text("ASSIGNED OFFICER", margin + 4, y + 5);
-
-      const assignedName = complaint.adminName || assignedToName || "Unassigned";
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(11);
-      doc.setTextColor(...colors.dark);
-      doc.text(assignedName, margin + 4, y + 12);
-
-      if (assignedToEmail && assignedToEmail !== "N/A") {
-        doc.setFont("helvetica", "normal");
-        doc.setFontSize(9);
-        doc.setTextColor(...colors.text);
-        doc.text(`Email: ${assignedToEmail}`, margin + 4, y + 17);
-      } else if (assignedName === "Unassigned") {
-        doc.setFont("helvetica", "italic");
-        doc.setFontSize(9);
-        doc.setTextColor(...colors.textLight);
-        doc.text("Note: This complaint is pending assignment", margin + 4, y + 17);
-      }
-
-      y += 28;
-
-      // ====== ACTIVITY TIMELINE (if available) ======
-      if (complaintHistory && complaintHistory.length > 0) {
-        // Check if we need a new page
-        if (y > 240) {
-          doc.addPage();
-          y = 20;
-        }
-
-        doc.setFont("helvetica", "bold");
-        doc.setFontSize(14);
-        doc.setTextColor(...colors.dark);
-        doc.text("ACTIVITY TIMELINE", margin, y);
-        y += 8;
-
-        doc.setFont("helvetica", "normal");
-        doc.setFontSize(9);
-        doc.setTextColor(...colors.textLight);
-        doc.text(`${complaintHistory.length} recorded activities (showing most recent ${Math.min(5, complaintHistory.length)})`, margin, y);
-        y += 8;
-
-        complaintHistory.slice(0, 5).forEach((event, index) => {
-          if (y > 265) {
-            doc.addPage();
-            y = 20;
-          }
-
-          // Timeline item background
-          doc.setFillColor(249, 250, 251);
-          doc.roundedRect(margin, y, contentWidth, 16, 2, 2, "F");
-
-          // Timeline connector line (except first)
-          if (index > 0) {
-            doc.setDrawColor(203, 213, 225);
-            doc.setLineWidth(1);
-            doc.line(margin + 5, y - 4, margin + 5, y);
-          }
-
-          // Timeline dot
-          doc.setFillColor(...colors.primary);
-          doc.circle(margin + 5, y + 8, 2, "F");
-          doc.setDrawColor(...colors.primary);
-          doc.setLineWidth(0.5);
-          doc.circle(margin + 5, y + 8, 3, "S");
-
-          // Event title and time
-          doc.setFont("helvetica", "bold");
-          doc.setFontSize(10);
-          doc.setTextColor(...colors.dark);
-          const eventTitle = event.actionTitle || "Action Taken";
-          doc.text(eventTitle, margin + 12, y + 6);
-
-          doc.setFont("helvetica", "normal");
-          doc.setFontSize(8);
-          doc.setTextColor(...colors.textLight);
-          doc.text(formatDate(event.createdAt), margin + 12, y + 11);
-
-          // Event details (right aligned)
-          if (event.actionDetails) {
-            const details = doc.splitTextToSize(event.actionDetails, 60);
-            doc.setFontSize(9);
-            doc.setTextColor(...colors.text);
-            doc.text(details[0], pageWidth - margin - 4, y + 9, { align: "right" });
-          }
-
-          y += 18;
-        });
-
-        y += 5;
-      } else {
-        // No activity recorded
-        if (y > 260) {
-          doc.addPage();
-          y = 20;
-        }
-
-        doc.setFont("helvetica", "bold");
-        doc.setFontSize(14);
-        doc.setTextColor(...colors.dark);
-        doc.text("ACTIVITY TIMELINE", margin, y);
-        y += 8;
-
-        doc.setFillColor(254, 243, 199);
-        doc.roundedRect(margin, y, contentWidth, 15, 2, 2, "F");
-        doc.setFont("helvetica", "normal");
-        doc.setFontSize(9);
-        doc.setTextColor(146, 64, 14);
-        doc.text("Note: No activity has been recorded for this complaint yet.", margin + 5, y + 9);
-
-        y += 20;
-      }
-
-      // ====== Footer ======
-      const footerY = pageHeight - 15;
-      doc.setDrawColor(...colors.light);
-      doc.setLineWidth(0.5);
-      doc.line(margin, footerY, pageWidth - margin, footerY);
-
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(8);
-      doc.setTextColor(...colors.textLight);
-      doc.text("This document is generated automatically by UMSafe Complaint Management System", pageWidth / 2, footerY + 4, { align: "center" });
-      doc.text("For inquiries, please contact your system administrator", pageWidth / 2, footerY + 8, { align: "center" });
-      doc.setFont("helvetica", "bold");
-      doc.text(`Page 1`, pageWidth - margin, footerY + 6, { align: "right" });
-
-      // ====== Confidentiality Notice (if anonymous) ======
-      if (complaint.isAnonymous) {
-        doc.setFontSize(7);
-        doc.setTextColor(220, 38, 38);
-        doc.text("CONFIDENTIAL: This complaint was submitted anonymously. Handle with discretion.", margin, footerY + 11);
-      }
-
-      // ====== Save File ======
-      const timestamp = new Date().toISOString().slice(0, 10);
-      const filename = `UMSafe_Report_${complaint.displayId || complaint.id}_${timestamp}.pdf`;
-      doc.save(filename);
-      
-      toast.success("Report downloaded successfully!");
-    } catch (err) {
-      console.error("PDF generation failed:", err);
-      toast.error("Failed to generate report. Please try again.");
-    }
+    const complaintForPDF = canViewAnonymousDetails
+      ? { ...complaint, isAnonymous: false }
+      : complaint;
+    generateComplaintPDF(complaintForPDF, assignedToName, assignedToEmail, complaintHistory);
   };
   return (
     <div className="flex h-screen overflow-hidden bg-gray-100">
@@ -961,7 +576,7 @@ const ComplaintDetails = () => {
           <div className="complaint-detail-main-container">
             <div className="complaint-detail-main-frame">
               {/* Back Button */}
-              <div className="mb-6">
+              <div className="mb-6 flex items-center justify-between gap-4">
                 <button
                   onClick={() => navigate("/complaints")}
                   className="flex items-center px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors shadow-sm"
@@ -969,6 +584,17 @@ const ComplaintDetails = () => {
                   <FontAwesomeIcon icon={faArrowLeft} className="w-4 h-4 mr-2" />
                   Back to Complaints
                 </button>
+
+                {/* View User Details Button (Super Admin Only for Anonymous Reports) */}
+                {isSuperAdmin && isAnonymous && complaint?.userId && (
+                  <button
+                    onClick={handleViewUserDetails}
+                    className="flex items-center px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-blue-700 rounded-md hover:bg-blue-700 transition-colors shadow-sm"
+                  >
+                    <FontAwesomeIcon icon={faUser} className="w-4 h-4 mr-2" />
+                    View User Details
+                  </button>
+                )}
               </div>
           <div className="flex flex-col lg:flex-row gap-6">
             {/* Main Content Column */}
@@ -976,36 +602,41 @@ const ComplaintDetails = () => {
               {/* Status Banner */}
               <StatusBanner
                 currentStatus={currentStatus}
-                statusColors={statusColors}
+                statusColor={getStatusColor(currentStatus)}
                 priorityColor={priorityColor}
-                priority={complaint.category.priority}
+                priority={complaint?.category?.priority || 'Medium'}
               />
 
               {/* Complaint Details Card */}
               <ComplaintDetailsCard
-                title={complaint?.title || "No Title Provided"}
-                description={
-                  complaint?.description || "No Description Provided"
-                }
-                submittedBy={complaint?.username || "Unknown"}
+                title={displayedTitle}
+                description={displayedDescription}
+                submittedBy={displayedSubmittedBy}
                 dateSubmitted={
                   complaint.createdAt
                     ? new Date(complaint.createdAt).toISOString().split("T")[0]
                     : "Unknown"
                 }
                 category={complaint?.category.name || "Unknown"}
-                location={
-                  complaint?.facultyLocation.facultyBlockRoom || "Unknown"
-                }
-                attachments={complaint?.media || []}
+                location={displayedLocation}
+                attachments={displayedAttachments}
               />
 
               {/* Activity History */}
-              <ActivityHistory history={complaintHistory} />
+              {canViewAnonymousDetails ? (
+                <ActivityHistory history={complaintHistory} />
+              ) : (
+                <div className="bg-white rounded-lg shadow-md p-6 border border-gray-100">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">Anonymous Complaint</h3>
+                  <p className="text-sm text-gray-600">
+                    Details are hidden for anonymous submissions. Super Admins can view full content.
+                  </p>
+                </div>
+              )}
             </div>
 
             {/* Right Sidebar */}
-            <div className="w-full lg:w-80 space-y-6">
+            <div className="w-full lg:w-80 space-y-6" style={{ overflow: 'visible' }}>
               {/* Quick Actions Card */}
               {shouldShowQuickActions && (
                 <QuickActionsCard
@@ -1022,7 +653,21 @@ const ComplaintDetails = () => {
                   staffMembers={staffMembers}
                   assignedTo={assignedToName}
                   handleAssignChange={handleAssignChange}
-                  handleRevokeAssignment={revokeAssignedStaff}
+                  handleRevokeAssignment={() => {
+                    const onSuccess = async () => {
+                      setAssignedToId('');
+                      setAssignedToName('Unassigned');
+                      setAssignedToEmail('');
+                      setCurrentStatus('Open');
+                      updateHistory(`Assignment revoked`);
+                      
+                      const refreshed = await refreshComplaintFromPartner(complaint.id, complaint);
+                      setComplaint(refreshed);
+                      await fetchAndSetHistories(complaint.id);
+                    };
+                    
+                    revokeAssignedStaff(complaint.id, onSuccess);
+                  }}
                   isReportModalOpen={isReportModalOpen}
                   setIsReportModalOpen={setIsReportModalOpen}
                   reportFormat={reportFormat}
@@ -1056,6 +701,66 @@ const ComplaintDetails = () => {
         onCancel={handleCancelCreateChatroom}
         complaintId={complaint?.reportId || complaint?.id}
       />
+
+      {/* User Details Modal (Super Admin Only) */}
+      <ViewUserDetailsModal
+        isOpen={showUserDetailsModal}
+        onClose={handleCloseUserDetailsModal}
+        userDetails={userDetails}
+        isLoading={isLoadingUserDetails}
+      />
+
+      {/* Close Case Confirmation Modal */}
+      {isCloseConfirmationOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
+            {/* Modal Header */}
+            <div className="bg-red-50 px-6 py-4 border-b border-red-100 flex items-center gap-3">
+              <div className="text-2xl text-red-600">⚠️</div>
+              <div>
+                <h2 className="text-lg font-semibold text-red-900">Close & Cancel Case</h2>
+                <p className="text-sm text-red-700">This action cannot be undone</p>
+              </div>
+            </div>
+
+            {/* Modal Content */}
+            <div className="px-6 py-4">
+              <p className="text-gray-700 mb-2">
+                Are you sure you want to <span className="font-semibold text-red-600">close and cancel</span> this complaint?
+              </p>
+              <div className="bg-red-50 border border-red-200 rounded-lg p-3 mt-4">
+                <p className="text-sm text-red-800">
+                  <span className="font-semibold">Closing a case means:</span>
+                </p>
+                <ul className="text-sm text-red-700 mt-2 ml-4 list-disc space-y-1">
+                  <li>The case is cancelled and archived</li>
+                  <li>No further actions can be taken</li>
+                  <li>The reported issue is marked as resolved externally</li>
+                </ul>
+              </div>
+              <p className="text-xs text-gray-500 mt-4">
+                Complaint ID: <span className="font-mono">{complaint?.displayId}</span>
+              </p>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="bg-gray-50 px-6 py-4 flex gap-3 justify-end rounded-b-lg border-t border-gray-200">
+              <button
+                onClick={handleCancelClose}
+                className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors font-medium"
+              >
+                Keep Open
+              </button>
+              <button
+                onClick={handleConfirmClose}
+                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-semibold shadow-md hover:shadow-lg"
+              >
+                Confirm Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

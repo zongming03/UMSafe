@@ -20,7 +20,7 @@ const userSchema = new mongoose.Schema({
   },
   role: {
     type: String,
-    enum: ["admin", "officer"],
+    enum: ["admin", "officer", "superadmin"],
     required: true,
   },
   hashedpassword: {
@@ -34,7 +34,7 @@ const userSchema = new mongoose.Schema({
 
   profileImage: {
     type: String,
-    default: null, // Will be set from Cloudinary in controller
+    default: null, 
   },
 
   notifications: {

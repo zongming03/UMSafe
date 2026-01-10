@@ -17,12 +17,12 @@ const setup = async () => {
   try {
     console.log('Starting default image upload to Cloudinary...');
     const imageUrl = await uploadDefaultProfileImage();
-    console.log('✅ Default profile image uploaded successfully!');
+    console.log('Default profile image uploaded successfully!');
     console.log('URL:', imageUrl);
     console.log('\nYou can now use this URL as the default profile image.');
     process.exit(0);
   } catch (error) {
-    console.error('❌ Failed to upload default image:', error);
+    console.error('Failed to upload default image:', error);
     process.exit(1);
   }
 };

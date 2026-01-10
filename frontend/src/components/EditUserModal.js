@@ -9,6 +9,7 @@ const EditUserModal = ({
   onSubmit,
   userForm,
   onFormChange,
+  canCreateSuperAdmin = false,
 }) => {
   if (!isOpen) return null;
   return (
@@ -88,6 +89,9 @@ const EditUserModal = ({
                         value={userForm.role}
                         onChange={onFormChange}
                       >
+                        {canCreateSuperAdmin && (
+                          <option value="superadmin">Super Admin</option>
+                        )}
                         <option value="admin">Admin</option>
                         <option value="officer">Officer</option>
                       </select>

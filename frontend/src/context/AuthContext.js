@@ -13,6 +13,7 @@ export const AuthProvider = ({ children }) => {
   const [timeLeft, setTimeLeft] = useState(null); // milliseconds
   const [sessionExpiring, setSessionExpiring] = useState(false);
   const sessionIntervalRef = useRef(null);
+  const logoutTimerRef = useRef(null);
 
   // Threshold (ms) before expiry to show banner
   const EXPIRY_WARNING_THRESHOLD = 5 * 60 * 1000; // 5 minutes
@@ -21,6 +22,22 @@ export const AuthProvider = ({ children }) => {
   const formatDate = (unixTime) => {
     return new Date(unixTime * 1000).toLocaleString();
   };
+
+  const setLogoutTimer = (expSeconds) => {
+    // Clear any existing timer
+    if (logoutTimerRef.current) {
+      clearTimeout(logoutTimerRef.current);
+      logoutTimerRef.current = null;
+    }
+
+    const currentTime = Date.now() / 1000;
+    const remainingTime = Math.max(0, (expSeconds - currentTime) * 1000);
+    logoutTimerRef.current = setTimeout(() => {
+      console.log("⏰ Token expired. Logging out...");
+      logout().then(redirectToLogin);
+    }, remainingTime);
+  };
+
 
   useEffect(() => {
     const token =
@@ -58,11 +75,7 @@ export const AuthProvider = ({ children }) => {
             )} seconds (at ${formatDate(decoded.exp)})`
           );
 
-          const timer = setTimeout(() => {
-            console.log("⏰ Token expired. Logging out...");
-                logout().then(redirectToLogin);
-          }, remainingTime);
-          localStorage.setItem("logoutTimerId", timer);
+          setLogoutTimer(decoded.exp);
           startSessionCountdown(decoded.exp);
         } else {
           console.log("❌ Token already expired. Logging out...");
@@ -76,11 +89,11 @@ export const AuthProvider = ({ children }) => {
     setLoading(false);
   }, []);
 
-  const redirectToLogin = () => {
+  function redirectToLogin() {
     try {
       window.location.replace("/login");
     } catch {}
-  };
+  }
 
   const login = async (userData, token, rememberMe) => {
     const storage = rememberMe ? localStorage : sessionStorage;
@@ -96,11 +109,7 @@ export const AuthProvider = ({ children }) => {
 
       setExpiryTimestamp(decoded.exp);
       startSessionCountdown(decoded.exp);
-          const timer = setTimeout(() => {
-            console.log("⏰ Token expired. Logging out...");
-        logout().then(redirectToLogin);
-          }, remainingTime);
-      localStorage.setItem("logoutTimerId", timer);
+      setLogoutTimer(decoded.exp);
     } catch (err) {
       console.error("⚠️ Invalid token:", err);
       logout();
@@ -149,10 +158,10 @@ export const AuthProvider = ({ children }) => {
       sessionIntervalRef.current = null;
     }
 
-    const timerId = localStorage.getItem("logoutTimerId");
-    if (timerId) {
-      clearTimeout(Number(timerId));    }
-    localStorage.removeItem("logoutTimerId");
+    if (logoutTimerRef.current) {
+      clearTimeout(logoutTimerRef.current);
+      logoutTimerRef.current = null;
+    }
 
     flushSync(() => {
       setUser(null);
@@ -185,6 +194,14 @@ export const AuthProvider = ({ children }) => {
     try {
       const token = localStorage.getItem("token") || sessionStorage.getItem("token");
       if (!token) return logout();
+      
+      // Clear old logout timer FIRST to prevent race condition
+      if (logoutTimerRef.current) {
+        clearTimeout(logoutTimerRef.current);
+        logoutTimerRef.current = null;
+        console.log("🧹 Cleared old logout timer before refresh");
+      }
+      
       const base = (process.env.REACT_APP_API_BASE_URL || "http://localhost:5000/admin").replace(/\/$/, "");
       const response = await fetch(`${base}/auth/refresh`, {
         method: "POST",
@@ -201,21 +218,11 @@ export const AuthProvider = ({ children }) => {
       setExpiryTimestamp(data.exp);
       setSessionExpiring(false);
       startSessionCountdown(data.exp);
-      // Clear old logout timer first to prevent race condition
-      const oldTimerId = localStorage.getItem("logoutTimerId");
-      if (oldTimerId) {
-        clearTimeout(Number(oldTimerId));
-        console.log("🧹 Cleared old logout timer before setting new one");
-      }
-      // Reset logout timer
+      
+      // Set NEW logout timer
       const decoded = jwtDecode(data.token);
-      const currentTime = Date.now() / 1000;
-      const remainingTime = (decoded.exp - currentTime) * 1000;
-          const timer = setTimeout(() => {
-            console.log("⏰ Token expired. Logging out...");
-            logout().then(redirectToLogin);
-          }, remainingTime);
-      localStorage.setItem("logoutTimerId", timer);
+      setLogoutTimer(decoded.exp);
+      console.log(`✅ Session extended. New expiry: ${formatDate(decoded.exp)}`);
       return true;
     } catch (err) {
       console.error("Failed to extend session:", err);

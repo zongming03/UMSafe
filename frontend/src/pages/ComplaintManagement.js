@@ -1,14 +1,14 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useEffect } from "react";
 import "../styles/ComplaintManagement.css";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { fetchReports } from "../services/api";
+import { fetchReports } from "../services/reportsApi";
+import { fetchRooms, fetchFacultyCategories } from "../services/api";
 import { useComplaintUpdates } from "../hooks/useComplaintUpdates";
 import {
   faFileExport,
   faFileCsv,
   faChevronDown,
   faCheckCircle,
-  faFileExcel,
   faFilePdf,
   faSearch,
   faFilter,
@@ -26,273 +26,280 @@ import FilterSlotComplaint from "../components/FilterSlotComplaint";
 import Pagination from "../components/Pagination";
 import { useNavigate } from "react-router-dom";
 import { generatePDFHtml } from "../components/ExportPDFTemplate";
-import MOCK_COMPLAINTS from "../mock/mockComplaints";
+
+// Import utilities
+import { exportToCSV, exportToPDF } from "../utils/exportUtils";
+import {
+  capitalizeStatus,
+  getStatusColor,
+  getPriorityColor,
+} from "../utils/statusUtils";
+import {
+  getSortIcon as getSortIconString,
+} from "../utils/filterUtils";
+import { mapReportToComplaint } from "../utils/complaintMapper";
 
 const ComplaintManagement = () => {
-  const [isProfileOpen, setIsProfileOpen] = useState(false);
-  const [selectedComplaints, setSelectedComplaints] = useState([]);
+  // ==================== STATE MANAGEMENT ====================
+  // Filtering & Search
   const [searchTerm, setSearchTerm] = useState("");
   const [activeFilter, setActiveFilter] = useState("all");
-
-  // Export utility functions
-  const formatDate = (dateString) => {
-    if (!dateString) return 'N/A';
-    const date = new Date(dateString);
-    return date.toLocaleString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-  };
-
-  const getComplaintsForExport = () => {
-    return filteredComplaints.filter(complaint => 
-      selectedComplaints.includes(complaint.id)
-    );
-  };
-
-  const exportToCSV = () => {
-    const complaintsToExport = getComplaintsForExport();
-    if (complaintsToExport.length === 0) return;
-
-    // Define CSV headers
-    const headers = [
-      'Complaint ID',
-      'Title',
-      'Description',
-      'Status',
-      'Category',
-      'Priority',
-      'Reporter',
-      'Assigned To',
-      'Location',
-      'Created Date',
-      'Last Updated',
-      'Anonymous'
-    ];
-
-    // Convert complaints to CSV rows
-    const rows = complaintsToExport.map(complaint => [
-      complaint.displayId || complaint.id,
-      complaint.title,
-      complaint.description?.replace(/[\n\r]/g, ' ').replace(/"/g, '""') || 'N/A',
-      complaint.status,
-      complaint.category?.name || 'N/A',
-      complaint.category?.priority || 'N/A',
-      complaint.username || 'Unknown',
-      complaint.adminName || 'Unassigned',
-      `${complaint.facultyLocation?.faculty || ''} ${complaint.facultyLocation?.facultyBlock || ''} ${complaint.facultyLocation?.facultyBlockRoom || ''}`.trim() || 'N/A',
-      formatDate(complaint.createdAt),
-      formatDate(complaint.updatedAt),
-      complaint.isAnonymous ? 'Yes' : 'No'
-    ]);
-
-    // Create CSV content
-    const csvContent = [
-      headers.map(h => `"${h}"`).join(','),
-      ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
-    ].join('\n');
-
-    // Create and download file
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    const url = URL.createObjectURL(blob);
-    const timestamp = new Date().toISOString().slice(0, 10);
-    link.setAttribute('href', url);
-    link.setAttribute('download', `UMSafe_Complaints_${timestamp}.csv`);
-    link.style.visibility = 'hidden';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
-  const exportToExcel = () => {
-    const complaintsToExport = getComplaintsForExport();
-    if (complaintsToExport.length === 0) return;
-
-    // Create HTML table
-    const headers = [
-      'Complaint ID', 'Title', 'Description', 'Status', 'Category', 'Priority',
-      'Reporter', 'Assigned To', 'Faculty', 'Block', 'Room',
-      'Created Date', 'Last Updated', 'Anonymous'
-    ];
-
-    const rows = complaintsToExport.map(complaint => [
-      complaint.displayId || complaint.id,
-      complaint.title,
-      complaint.description || 'N/A',
-      complaint.status,
-      complaint.category?.name || 'N/A',
-      complaint.category?.priority || 'N/A',
-      complaint.username || 'Unknown',
-      complaint.adminName || 'Unassigned',
-      complaint.facultyLocation?.faculty || 'N/A',
-      complaint.facultyLocation?.facultyBlock || 'N/A',
-      complaint.facultyLocation?.facultyBlockRoom || 'N/A',
-      formatDate(complaint.createdAt),
-      formatDate(complaint.updatedAt),
-      complaint.isAnonymous ? 'Yes' : 'No'
-    ]);
-
-    // Create Excel-compatible HTML with professional styling
-    const htmlContent = `
-      <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
-      <head>
-        <meta charset="utf-8">
-        <style>
-          table { border-collapse: collapse; width: 100%; font-family: Arial, sans-serif; }
-          th { background-color: #4F46E5; color: white; font-weight: bold; padding: 12px 8px; text-align: left; border: 1px solid #ddd; }
-          td { padding: 10px 8px; border: 1px solid #ddd; vertical-align: top; }
-          tr:nth-child(even) { background-color: #f9fafb; }
-          .header { font-size: 18px; font-weight: bold; margin-bottom: 10px; color: #1f2937; }
-          .meta { font-size: 12px; color: #6b7280; margin-bottom: 20px; }
-        </style>
-      </head>
-      <body>
-        <div class="header">UMSafe Complaint Management System - Export Report</div>
-        <div class="meta">Generated on: ${new Date().toLocaleString()} | Total Records: ${complaintsToExport.length}</div>
-        <table>
-          <thead>
-            <tr>${headers.map(h => `<th>${h}</th>`).join('')}</tr>
-          </thead>
-          <tbody>
-            ${rows.map(row => `<tr>${row.map(cell => `<td>${cell}</td>`).join('')}</tr>`).join('')}
-          </tbody>
-        </table>
-      </body>
-      </html>
-    `;
-
-    // Create and download file
-    const blob = new Blob([htmlContent], { type: 'application/vnd.ms-excel' });
-    const link = document.createElement('a');
-    const url = URL.createObjectURL(blob);
-    const timestamp = new Date().toISOString().slice(0, 10);
-    link.setAttribute('href', url);
-    link.setAttribute('download', `UMSafe_Complaints_${timestamp}.xls`);
-    link.style.visibility = 'hidden';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
-  const exportToPDF = () => {
-    const complaintsToExport = getComplaintsForExport();
-    if (complaintsToExport.length === 0) return;
-
-    const printWindow = window.open('', '_blank');
-    const htmlContent = generatePDFHtml(complaintsToExport, formatDate);
-
-    printWindow.document.write(htmlContent);
-    printWindow.document.close();
-  };
   const [selectedCategory, setSelectedCategory] = useState("all");
-  const [currentPage, setCurrentPage] = useState(1);
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
-  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
-  const [complaintToDelete, setComplaintToDelete] = useState(null);
   const [selectedDateRange, setSelectedDateRange] = useState("all");
   const [dateRange, setDateRange] = useState({ start: null, end: null });
   const [customStartDate, setCustomStartDate] = useState("");
   const [customEndDate, setCustomEndDate] = useState("");
+
+  // Pagination & Selection
+  const [currentPage, setCurrentPage] = useState(1);
+  const [selectedComplaints, setSelectedComplaints] = useState([]);
+
+  // Modals & UI State
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [complaintToDelete, setComplaintToDelete] = useState(null);
   const [sortConfig, setSortConfig] = useState(null);
-  const profileRef = useRef(null);
+
+  // Data
+  const [categoryOptions, setCategoryOptions] = useState([]);
   const [admins, setAdmins] = useState([]);
   const [complaints, setComplaints] = useState([]);
+  const [filteredComplaints, setFilteredComplaints] = useState([]);
+  const [userFacultyName, setUserFacultyName] = useState("");
+  const [userRole, setUserRole] = useState("");
+
+  // Loading & Error States
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [usingMock, setUsingMock] = useState(false);
+
   const navigate = useNavigate();
+
+  // ==================== UTILITY FUNCTIONS ====================
+  // Wrapper for getSortIcon to return React component
+  const getSortIcon = (key) => {
+    const iconString = getSortIconString(key, sortConfig);
+    if (iconString === "⇅") {
+      return <FontAwesomeIcon icon={faSort} className="text-gray-300 ml-1" />;
+    } else if (iconString === "↑") {
+      return <FontAwesomeIcon icon={faSortUp} className="text-blue-500 ml-1" />;
+    } else {
+      return (
+        <FontAwesomeIcon icon={faSortDown} className="text-blue-500 ml-1" />
+      );
+    }
+  };
 
   // Real-time complaint updates
   useComplaintUpdates({
-    onNewComplaint: (payload) => {
-      // Add new complaint to list
-      setComplaints((prev) => [
-        {
-          id: payload.complaintId,
-          title: payload.title,
-          status: 'Opened',
-          createdAt: payload.createdAt || new Date().toISOString(),
-          category: { name: 'Unknown', priority: 'Low' },
-          adminName: 'Unassigned',
-        },
-        ...prev,
-      ]);
+    onNewComplaint: async (payload) => {
+      console.log("📬 New complaint received via WebSocket:", payload);
+
+      // Fetch full complaint details from API
+      try {
+        const response = await fetchReports();
+        const reportsData =
+          response.data?.reports || response.data?.data || response.data || [];
+
+        // Find the new complaint by ID
+        const newReport = reportsData.find(
+          (r) =>
+            r.id === payload.complaintId || r.displayId === payload.complaintId
+        );
+
+        if (newReport) {
+          const mappedComplaint = {
+            id: newReport.id,
+            displayId: newReport.displayId,
+            userId: newReport.userId,
+            username: newReport.username,
+            adminId: newReport.adminId || "Unassigned",
+            adminName: newReport.adminName || "Unassigned",
+            status: capitalizeStatus(newReport.status),
+            title: newReport.title,
+            description: newReport.description,
+            category: {
+              name: newReport.category?.name || "Unknown",
+              priority: newReport.category?.priority || "Low",
+            },
+            media: newReport.media || [],
+            latitude: newReport.latitude,
+            longitude: newReport.longitude,
+            facultyLocation: newReport.facultyLocation || {},
+            isAnonymous: newReport.isAnonymous,
+            isFeedbackProvided: newReport.isFeedbackProvided,
+            chatroomId: newReport.chatroomId || "",
+            createdAt: newReport.createdAt,
+            updatedAt: newReport.updatedAt,
+            version: newReport.version,
+            comments: newReport.comments || [],
+          };
+
+          console.log("✅ Adding new complaint to list:", mappedComplaint);
+
+          // Add to list (avoid duplicates)
+          setComplaints((prev) => {
+            const exists = prev.some((c) => c.id === mappedComplaint.id);
+            if (exists) {
+              console.log("⚠️ Complaint already exists, skipping");
+              return prev;
+            }
+            return [mappedComplaint, ...prev];
+          });
+        } else {
+          console.log("⚠️ New complaint not found in API, adding minimal data");
+          // Fallback: Add minimal complaint data
+          setComplaints((prev) => {
+            const exists = prev.some((c) => c.id === payload.complaintId);
+            if (exists) return prev;
+
+            return [
+              {
+                id: payload.complaintId,
+                displayId: payload.complaintId,
+                userId: payload.userId || "Unknown",
+                username: payload.username || "Unknown User",
+                adminId: "Unassigned",
+                adminName: "Unassigned",
+                status: "Opened",
+                title: payload.title || "New Complaint",
+                description: payload.description || "",
+                category: { name: "Unknown", priority: "Low" },
+                media: [],
+                latitude: null,
+                longitude: null,
+                facultyLocation: {},
+                isAnonymous: false,
+                isFeedbackProvided: false,
+                chatroomId: "",
+                createdAt: payload.createdAt || new Date().toISOString(),
+                updatedAt: payload.createdAt || new Date().toISOString(),
+                version: 0,
+                comments: [],
+              },
+              ...prev,
+            ];
+          });
+        }
+      } catch (err) {
+        console.error("❌ Error fetching new complaint details:", err);
+        // Fallback: Add minimal complaint data
+        setComplaints((prev) => {
+          const exists = prev.some((c) => c.id === payload.complaintId);
+          if (exists) return prev;
+
+          return [
+            {
+              id: payload.complaintId,
+              displayId: payload.complaintId,
+              userId: payload.userId || "Unknown",
+              username: payload.username || "Unknown User",
+              adminId: "Unassigned",
+              adminName: "Unassigned",
+              status: "Opened",
+              title: payload.title || "New Complaint",
+              description: payload.description || "",
+              category: { name: "Unknown", priority: "Low" },
+              media: [],
+              latitude: null,
+              longitude: null,
+              facultyLocation: {},
+              isAnonymous: false,
+              isFeedbackProvided: false,
+              chatroomId: "",
+              createdAt: payload.createdAt || new Date().toISOString(),
+              updatedAt: payload.createdAt || new Date().toISOString(),
+              version: 0,
+              comments: [],
+            },
+            ...prev,
+          ];
+        });
+      }
     },
     onStatusChange: (payload) => {
+      console.log("🔄 Status change received via WebSocket:", payload);
       // Update complaint status in local state
       setComplaints((prev) =>
         prev.map((c) =>
-          c.id === payload.complaintId
-            ? { ...c, status: payload.status }
+          c.id === payload.complaintId || c.displayId === payload.complaintId
+            ? {
+                ...c,
+                status: capitalizeStatus(payload.status),
+                updatedAt: new Date().toISOString(),
+              }
             : c
         )
       );
     },
     onAssignment: (payload) => {
+      console.log("👤 Assignment change received via WebSocket:", payload);
       // Update complaint assignment in local state
       setComplaints((prev) =>
         prev.map((c) =>
-          c.id === payload.complaintId
-            ? { ...c, adminId: payload.adminId, adminName: payload.adminId ? (payload.adminName || 'Assigned') : 'Unassigned' }
+          c.id === payload.complaintId || c.displayId === payload.complaintId
+            ? {
+                ...c,
+                adminId: payload.adminId || "Unassigned",
+                adminName: payload.adminId
+                  ? payload.adminName || "Assigned"
+                  : "Unassigned",
+                updatedAt: new Date().toISOString(),
+              }
             : c
         )
       );
     },
   });
 
-  
+  // ==================== EFFECTS & INITIALIZATION ====================
+
+  // Real-time WebSocket updates for new complaints, status changes, and assignments
   useEffect(() => {
+    // Resolve logged-in user's faculty name for filtering and get user role
+    (async () => {
+      try {
+        const userDataStr =
+          localStorage.getItem("user") || sessionStorage.getItem("user");
+        const currentUser = userDataStr ? JSON.parse(userDataStr) : null;
+        
+        // Get and set user role for permission checks
+        if (currentUser?.role) {
+          setUserRole(currentUser.role);
+        }
+        
+        const currentUserFacultyId = currentUser?.facultyid;
+        if (!currentUserFacultyId) return;
+        const res = await fetchRooms();
+        const faculties = Array.isArray(res.data) ? res.data : [];
+        const faculty = faculties.find(
+          (f) => String(f._id) === String(currentUserFacultyId)
+        );
+        if (faculty?.name) setUserFacultyName(String(faculty.name));
+      } catch (e) {
+        console.warn("[Complaints] Failed to resolve user faculty name", e);
+      }
+    })();
+
     const loadComplaints = async () => {
       setIsLoading(true);
       setError(null);
+
       try {
         const response = await fetchReports();
         console.log("📋 Reports API Response:", response.data);
-        
+
         // Extract reports array from response
-        const reportsData = response.data?.reports || response.data?.data || response.data || [];
-        
-        // Map API response to match component's expected format
-        const mappedComplaints = reportsData.map(report => ({
-          id: report.id,
-          displayId: report.displayId,
-          userId: report.userId,
-          username: report.username,
-          adminId: report.adminId || "Unassigned",
-          adminName: report.adminName || "Unassigned",
-          status: capitalizeStatus(report.status), 
-          title: report.title,
-          description: report.description,
-          category: {
-            name: report.category?.name || "Unknown",
-            priority: report.category?.priority || "Low"
-          },
-          media: report.media || [],
-          latitude: report.latitude,
-          longitude: report.longitude,
-          facultyLocation: report.facultyLocation || {},
-          isAnonymous: report.isAnonymous,
-          isFeedbackProvided: report.isFeedbackProvided,
-          chatroomId: report.chatroomId || "",
-          createdAt: report.createdAt,
-          updatedAt: report.updatedAt,
-          version: report.version,
-          comments: report.comments || []
-        }));
-        
-        console.log("✅ Mapped complaints:", mappedComplaints);
+        const reportsData =
+          response.data?.reports || response.data?.data || response.data || [];
+
+        // Map API response using utility
+        const mappedComplaints = reportsData.map(mapReportToComplaint);
+
         setComplaints(mappedComplaints);
-        setUsingMock(false);
       } catch (err) {
-        console.error("❌ Error fetching complaints:", err);
-        // Fallback to mock data when API is unreachable
-        setUsingMock(true);
-        setError(null);
-        setComplaints(MOCK_COMPLAINTS);
+        console.error("Error fetching complaints:", err);
+        setError("Failed to fetch complaints.");
+        setComplaints([]);
       } finally {
         setIsLoading(false);
       }
@@ -300,60 +307,10 @@ const ComplaintManagement = () => {
 
     loadComplaints();
   }, []);
-  
-  // Helper function to capitalize status
-  const capitalizeStatus = (status) => {
-    if (!status) return "Opened";
-    
-    // Map backend status to frontend status
-    const statusMap = {
-      'opened': 'Opened',
-      'inprogress': 'InProgress',
-      'in progress': 'InProgress',
-      'resolved': 'Resolved',
-      'closed': 'Closed'
-    };
-    
-    return statusMap[status.toLowerCase()] || status.charAt(0).toUpperCase() + status.slice(1);
-  };
 
-
-
-  const [filteredComplaints, setFilteredComplaints] = useState([]);
-
-  const getStatusColor = (status) => {
-    switch (status) {
-      case "Opened":
-        return "bg-yellow-100 text-yellow-800";
-      case "InProgress":
-        return "bg-blue-100 text-blue-800";
-      case "Resolved":
-        return "bg-green-100 text-green-800";
-      case "Closed":
-        return "bg-red-100 text-red-800";
-      default:
-        return "bg-gray-100 text-gray-800";
-    }
-  };
-
-  const getPriorityColor = (priority) => {
-    switch (priority) {
-      case "High":
-        return "text-red-600";
-      case "Medium":
-        return "text-orange-500";
-      case "Low":
-        return "text-green-600";
-      default:
-        return "text-gray-600";
-    }
-  };
+  // Global click listener for dropdown menus
   useEffect(() => {
     const handleGlobalClick = (event) => {
-      if (profileRef.current && !profileRef.current.contains(event.target)) {
-        setIsProfileOpen(false);
-      }
-
       const exportButton = document.getElementById("exportButton");
       const exportDropdown = document.getElementById("exportDropdown");
       if (
@@ -371,93 +328,110 @@ const ComplaintManagement = () => {
     };
   }, []);
 
+  // Fetch and filter admins by faculty
   useEffect(() => {
-    // Get current user's faculty ID to fetch only admins from same faculty
-    const userDataStr = localStorage.getItem("user") || sessionStorage.getItem("user");
+    const userDataStr =
+      localStorage.getItem("user") || sessionStorage.getItem("user");
     const currentUser = userDataStr ? JSON.parse(userDataStr) : null;
     const currentUserFacultyId = currentUser?.facultyid;
 
-    if (currentUserFacultyId) {
-      // Fetch admins filtered by faculty ID
-      fetch(`${(process.env.REACT_APP_API_BASE_URL || "https://ac47f6e223f4.ngrok-free.app/admin").replace(/\/$/, "")}/usersMobile/users/faculty/${currentUserFacultyId}`, {
-        credentials: "include",
+    const apiBase = process.env.REACT_APP_API_BASE_URL.replace(/\/$/, "");
+    fetch(`${apiBase}/mobile/users`, {
+      credentials: "include",
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error(`HTTP Error: ${res.status}`);
+        return res.json();
       })
-        .then((res) => {
-          if (!res.ok) throw new Error(`HTTP Error: ${res.status}`);
-          return res.json();
-        })
-        .then((data) => {
-          setAdmins(data.data || []);
-        })
-        .catch((err) => {
-          console.error("Error fetching faculty admins:", err);
-          // Fallback to all users if endpoint fails
-          fetch(`${(process.env.REACT_APP_API_BASE_URL || "https://ac47f6e223f4.ngrok-free.app/admin").replace(/\/$/, "")}/usersMobile/users`, {
-            credentials: "include",
-          })
-            .then((res) => res.json())
-            .then((data) => setAdmins(data.data || []))
-            .catch((err) => console.error(err));
-        });
-    } else {
-      // Fallback to fetch all users from ngrok if no faculty ID
-      const ngrokBase = (process.env.REACT_APP_NGROK_BASE_URL || "https://ac47f6e223f4.ngrok-free.app/admin").replace(/\/$/, "");
-      fetch(`${ngrokBase}/usersMobile/users`, {
-        credentials: "include",
+      .then((data) => {
+        const userList = data.data || data.users || [];
+        const filtered = userList.filter(
+          (user) =>
+            (user.role === "admin" || user.role === "superadmin") &&
+            String(user.facultyid) === String(currentUserFacultyId)
+        );
+        setAdmins(filtered);
       })
-        .then((res) => {
-          if (!res.ok) throw new Error(`HTTP Error: ${res.status}`);
-          return res.json();
-        })
-        .then((data) => {
-          setAdmins(data.data || []);
-        })
-        .catch((err) => console.error(err));
-    }
+      .catch((err) => {
+        console.error("Error fetching admins:", err);
+        setAdmins([]);
+      });
   }, []);
 
-  const getAdminName = (adminId) => {
-    if (!Array.isArray(admins)) return "Unknownnn";
-    const admin = admins.find((a) => a._id === adminId);
+  // Fetch categories from backend
+  useEffect(() => {
+    const userDataStr =
+      localStorage.getItem("user") || sessionStorage.getItem("user");
+    const currentUser = userDataStr ? JSON.parse(userDataStr) : null;
+    const userFacultyId = currentUser?.facultyid;
+    
+    if (!userFacultyId) {
+      console.error("No facultyId found for current user");
+      setCategoryOptions([]);
+      return;
+    }
+
+    fetchFacultyCategories(userFacultyId)
+      .then((res) => {
+        const categories = Array.isArray(res.data)
+          ? res.data
+          : res.data.data || res.data.categories || [];
+        setCategoryOptions(categories);
+      })
+      .catch((err) => {
+        console.error("Error fetching categories:", err);
+        setCategoryOptions([]);
+      });
+  }, []);
+
+  const getAdminName = (complaint) => {
+    if (complaint.adminName && complaint.adminName !== "Unassigned") {
+      return complaint.adminName;
+    }
+
+    if (!Array.isArray(admins) || !complaint.adminId) return "Unassigned";
+    const admin = admins.find((a) => a._id === complaint.adminId);
     return admin ? admin.name : "Unassigned";
   };
 
-  const getDateRange = (option) => {
-    const today = new Date();
-    let start, end;
-    switch (option) {
-      case "today":
-        start = end = today;
-        break;
-      case "week":
-        start = new Date(today);
-        start.setDate(today.getDate() - today.getDay()); // Sunday
-        end = new Date(today);
-        end.setDate(start.getDate() + 6); // Saturday
-        break;
-      case "month":
-        start = new Date(today.getFullYear(), today.getMonth(), 1);
-        end = new Date(today.getFullYear(), today.getMonth() + 1, 0);
-        break;
-      case "all":
-      default:
-        start = end = null;
-        break;
-    }
-    return { start, end };
-  };
+  // Handle date range changes
   const handleDateRangeChange = (e) => {
     const value = e.target.value;
     setSelectedDateRange(value);
+    
     if (value === "custom") {
       setCustomStartDate("");
       setCustomEndDate("");
       setDateRange({ start: null, end: null });
     } else {
-      setDateRange(getDateRange(value));
+      // Calculate date ranges for preset options
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const endDate = new Date(today);
+      endDate.setHours(23, 59, 59, 999);
+
+      let startDate = new Date(today);
+
+      if (value === "today") {
+        startDate = new Date(today);
+      } else if (value === "week") {
+        // Get start of current week (Monday)
+        startDate = new Date(today);
+        const day = startDate.getDay();
+        const diff = startDate.getDate() - day + (day === 0 ? -6 : 1);
+        startDate.setDate(diff);
+        startDate.setHours(0, 0, 0, 0);
+      } else if (value === "month") {
+        // Get start of current month
+        startDate = new Date(today.getFullYear(), today.getMonth(), 1);
+        startDate.setHours(0, 0, 0, 0);
+      }
+
+      setDateRange({ start: startDate, end: endDate });
     }
   };
 
+  // Handle select all checkbox
   const handleSelectAll = (e) => {
     if (e.target.checked) {
       setSelectedComplaints(
@@ -467,6 +441,8 @@ const ComplaintManagement = () => {
       setSelectedComplaints([]);
     }
   };
+
+  // Handle individual complaint selection
   const handleSelectComplaint = (id) => {
     if (selectedComplaints.includes(id)) {
       setSelectedComplaints(
@@ -476,6 +452,8 @@ const ComplaintManagement = () => {
       setSelectedComplaints([...selectedComplaints, id]);
     }
   };
+
+  // Sort handler - updates sort config and reorders filtered complaints
   const handleSort = (key) => {
     const direction =
       sortConfig &&
@@ -509,11 +487,25 @@ const ComplaintManagement = () => {
     setFilteredComplaints(sorted);
   };
 
+  // Apply filters based on search, status, category, and date
   const applyFilters = () => {
     const filtered = complaints.filter((complaint) => {
       const title = complaint?.title || "";
       const displayId = complaint?.displayId || "";
-      const adminName = getAdminName(complaint.adminId) || "";
+      const adminName = getAdminName(complaint) || "";
+
+      // ✅ Faculty filter - only show complaints from user's faculty
+      const complaintFacultyName = (
+        complaint?.facultyLocation?.faculty ||
+        complaint?.facultyLocation?.facultyName ||
+        ""
+      ).toString().trim().toLowerCase();
+      const normalizedUserFaculty = (userFacultyName || "").toString().trim().toLowerCase();
+      
+      // If user faculty not resolved yet or complaint doesn't match user's faculty, exclude it
+      const matchesFaculty = normalizedUserFaculty && complaintFacultyName === normalizedUserFaculty;
+      
+      if (!matchesFaculty) return false;
 
       // ✅ Search filter (use displayId)
       const matchesSearch =
@@ -532,17 +524,17 @@ const ComplaintManagement = () => {
 
       // ✅ Date filtering
       let matchesDate = true;
-      const rawDate = complaint.createdAt;
-      const formattedDate = rawDate
-        ? new Date(rawDate).toISOString().slice(0, 10)
-        : "";
 
-      if (
-        selectedDateRange === "today" ||
-        selectedDateRange === "week" ||
-        selectedDateRange === "month"
-      ) {
-        if (dateRange.start && dateRange.end) {
+      if (selectedDateRange !== "all") {
+        const rawDate = complaint.createdAt;
+        const formattedDate = rawDate
+          ? new Date(rawDate).toISOString().slice(0, 10)
+          : "";
+
+        if (selectedDateRange === "custom" && customStartDate && customEndDate) {
+          matchesDate =
+            formattedDate >= customStartDate && formattedDate <= customEndDate;
+        } else if (dateRange.start && dateRange.end) {
           const complaintDate = formattedDate;
           const startDate = new Date(dateRange.start)
             .toISOString()
@@ -550,13 +542,6 @@ const ComplaintManagement = () => {
           const endDate = new Date(dateRange.end).toISOString().slice(0, 10);
           matchesDate = complaintDate >= startDate && complaintDate <= endDate;
         }
-      } else if (
-        selectedDateRange === "custom" &&
-        customStartDate &&
-        customEndDate
-      ) {
-        matchesDate =
-          formattedDate >= customStartDate && formattedDate <= customEndDate;
       }
 
       return matchesSearch && matchesStatus && matchesCategory && matchesDate;
@@ -576,9 +561,12 @@ const ComplaintManagement = () => {
     dateRange,
     customStartDate,
     customEndDate,
+    userFacultyName, // Re-filter when user faculty name is resolved
   ]);
 
-  // Pagination logic
+  // ==================== PAGINATION & NAVIGATION ====================
+
+  // Calculate pagination properties
   const itemsPerPage = 10;
   const totalPages = Math.max(
     1,
@@ -588,98 +576,96 @@ const ComplaintManagement = () => {
     (currentPage - 1) * itemsPerPage,
     currentPage * itemsPerPage
   );
-  const getSortIcon = (key) => {
-      if (!sortConfig || sortConfig.key !== key) {
-        return <FontAwesomeIcon icon={faSort} className="text-gray-300 ml-1" />;
-      }
-      return sortConfig.direction === "ascending" ? (
-        <FontAwesomeIcon icon={faSortUp} className="text-blue-500 ml-1" />
-      ) : (
-        <FontAwesomeIcon icon={faSortDown} className="text-blue-500 ml-1" />
-      );
-    };
 
+  // Navigate to complaint details page
   const handleComplaintClick = (complaint) => {
     // Pass all complaints for sidebar navigation
-    navigate(`/complaints/${complaint.id}`, { 
-      state: { 
-        complaint, 
-        allComplaints: filteredComplaints 
-      } 
+    navigate(`/complaints/${complaint.id}`, {
+      state: {
+        complaint,
+        allComplaints: filteredComplaints,
+      },
     });
   };
 
-  return (
-      <div className="min-h-screen bg-gray-50 flex flex-col">
-        <div className="flex flex-1">
-          {/* Main Content */}
-          <main className="complaint-container">
-            <div className="max-w-7xl mx-auto">
-              {/* Page Header */}
-              <div className="complaint-page-header">
-                <div>
-                  <h1 className="text-2xl font-bold text-gray-900">
-                    Complaints Management
-                  </h1>
-                  <p className="mt-1 text-sm text-gray-500">
-                    Manage and track all complaints in the system -{" "}
-                    {new Date().toLocaleDateString("en-US", {
-                      weekday: "long",
-                      year: "numeric",
-                      month: "long",
-                      day: "numeric",
-                    })}
-                  </p>
-                </div>
+  // ==================== RENDER ====================
 
-                <div className="mt-4 md:mt-0 flex items-center gap-3">
-                  <div className="relative">
-                    <button
-                      id="exportButton"
-                      onClick={() => {
-                        const count = selectedComplaints.length;
-                        if (count === 0) {
-                          const n = document.createElement("div");
-                          n.className = "export-notification";
-                          n.innerHTML = `<span>Please select complaints to export (max 10).</span>`;
-                          document.body.appendChild(n);
-                          setTimeout(() => n.remove(), 3000);
-                          return;
-                        }
-                        if (count > 10) {
-                          const n = document.createElement("div");
-                          n.className = "export-notification";
-                          n.innerHTML = `<span>You can export up to 10 complaints per request. You selected ${count}.</span>`;
-                          document.body.appendChild(n);
-                          setTimeout(() => n.remove(), 3500);
-                          return;
-                        }
-                        const dropdown = document.getElementById("exportDropdown");
-                        if (dropdown) {
-                          dropdown.classList.toggle("hidden");
-                        }
-                      }}
-                      className={`complaint-export-button ${
-                        selectedComplaints.length === 0 || selectedComplaints.length > 10
-                          ? "opacity-50 cursor-not-allowed"
-                          : ""
-                      }`}
-                      aria-disabled={selectedComplaints.length === 0 || selectedComplaints.length > 10}
-                    >
-                      <FontAwesomeIcon
-                        icon={faFileExport}
-                        className="mr-2"
-                      ></FontAwesomeIcon>
-                      Export
-                      <FontAwesomeIcon
-                        icon={faChevronDown}
-                        className="ml-2 text-xs"
-                      ></FontAwesomeIcon>
-                    </button>
-                    <div
-                      id="exportDropdown"
-                      className="hidden absolute right-0 top-full mt-2 w-56 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 z-50"
-                    >
+  return (
+    <div className="min-h-screen bg-gray-50 flex flex-col">
+      <div className="flex flex-1">
+        {/* Main Content */}
+        <main className="complaint-container">
+          <div className="max-w-7xl mx-auto">
+            {/* Page Header */}
+            <div className="complaint-page-header">
+              <div>
+                <h1 className="text-2xl font-bold text-gray-900">
+                  Complaints Management
+                </h1>
+                <p className="mt-1 text-sm text-gray-500">
+                  Manage and track all complaints in the system -{" "}
+                  {new Date().toLocaleDateString("en-US", {
+                    weekday: "long",
+                    year: "numeric",
+                    month: "long",
+                    day: "numeric",
+                  })}
+                </p>
+              </div>
+
+              <div className="mt-4 md:mt-0 flex items-center gap-3">
+                <div className="relative">
+                  <button
+                    id="exportButton"
+                    onClick={() => {
+                      const count = selectedComplaints.length;
+                      if (count === 0) {
+                        const n = document.createElement("div");
+                        n.className = "export-notification";
+                        n.innerHTML = `<span>Please select complaints to export (max 10).</span>`;
+                        document.body.appendChild(n);
+                        setTimeout(() => n.remove(), 3000);
+                        return;
+                      }
+                      if (count > 10) {
+                        const n = document.createElement("div");
+                        n.className = "export-notification";
+                        n.innerHTML = `<span>You can export up to 10 complaints per request. You selected ${count}.</span>`;
+                        document.body.appendChild(n);
+                        setTimeout(() => n.remove(), 3500);
+                        return;
+                      }
+                      const dropdown =
+                        document.getElementById("exportDropdown");
+                      if (dropdown) {
+                        dropdown.classList.toggle("hidden");
+                      }
+                    }}
+                    className={`complaint-export-button ${
+                      selectedComplaints.length === 0 ||
+                      selectedComplaints.length > 10
+                        ? "opacity-50 cursor-not-allowed"
+                        : ""
+                    }`}
+                    aria-disabled={
+                      selectedComplaints.length === 0 ||
+                      selectedComplaints.length > 10
+                    }
+                  >
+                    <FontAwesomeIcon
+                      icon={faFileExport}
+                      className="mr-2"
+                    ></FontAwesomeIcon>
+                    Export
+                    <FontAwesomeIcon
+                      icon={faChevronDown}
+                      className="ml-2 text-xs"
+                    ></FontAwesomeIcon>
+                  </button>
+                  <div
+                    id="exportDropdown"
+                    className="hidden absolute right-0 top-full mt-2 w-56 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 z-50"
+                  >
                     <div className="py-1">
                       <div className="px-4 py-2 text-sm text-gray-700 border-b border-gray-200">
                         <p className="font-medium">Export Options</p>
@@ -694,7 +680,10 @@ const ComplaintManagement = () => {
                             const count = selectedComplaints.length;
                             if (count === 0 || count > 10) return;
                             try {
-                              exportToCSV();
+                              exportToCSV(
+                                filteredComplaints,
+                                selectedComplaints
+                              );
                               const n = document.createElement("div");
                               n.className = "export-notification";
                               n.innerHTML = `<span>✅ Successfully exported ${count} complaints as CSV</span>`;
@@ -709,7 +698,9 @@ const ComplaintManagement = () => {
                               document.body.appendChild(n);
                               setTimeout(() => n.remove(), 3000);
                             }
-                            document.getElementById("exportDropdown")?.classList.add("hidden");
+                            document
+                              .getElementById("exportDropdown")
+                              ?.classList.add("hidden");
                           }}
                           className="complaint-export-button-selection"
                         >
@@ -726,7 +717,11 @@ const ComplaintManagement = () => {
                             const count = selectedComplaints.length;
                             if (count === 0 || count > 10) return;
                             try {
-                              exportToPDF();
+                              exportToPDF(
+                                filteredComplaints,
+                                selectedComplaints,
+                                generatePDFHtml
+                              );
                               const n = document.createElement("div");
                               n.className = "export-notification";
                               n.innerHTML = `<span>✅ Print preview opened for ${count} complaints</span>`;
@@ -741,7 +736,9 @@ const ComplaintManagement = () => {
                               document.body.appendChild(n);
                               setTimeout(() => n.remove(), 3000);
                             }
-                            document.getElementById("exportDropdown")?.classList.add("hidden");
+                            document
+                              .getElementById("exportDropdown")
+                              ?.classList.add("hidden");
                           }}
                           className="complaint-export-button-selection"
                         >
@@ -753,247 +750,232 @@ const ComplaintManagement = () => {
                         </button>
                       </div>
                     </div>
-                    </div>
                   </div>
                 </div>
               </div>
+            </div>
 
-              {/* Search and Filter Section */}
-              {usingMock && (
-                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
-                  <div className="flex items-center">
-                    <FontAwesomeIcon icon={faExclamationTriangle} className="text-yellow-600 mr-3" />
-                    <span className="text-yellow-800">
-                      Using mock complaints due to API unavailability. Data is not live.
-                    </span>
-                  </div>
-                </div>
-              )}
+            {/* Search and Filter Section */}
 
-              <div className="search-filter-section">
-                <div className="search-filter-button-container">
-                  <div className="search-filter-bar">
-                    <div className="search-bar-box">
-                      <input
-                        type="text"
-                        className="search-bar-input"
-                        placeholder="Search complaints by ID, title, or assignee..."
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                      />
-                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                        <FontAwesomeIcon
-                          icon={faSearch}
-                          className="text-gray-400"
-                        ></FontAwesomeIcon>
-                      </div>
-                    </div>
-
-                    <div className="flex space-x-2">
-                      <div className="relative">
-                        <button
-                          className="filter-button"
-                          onClick={() =>
-                            setShowAdvancedFilters(!showAdvancedFilters)
-                          }
-                        >
-                          <FontAwesomeIcon icon={faFilter} className="mr-2" />
-                          Filters
-                          <FontAwesomeIcon
-                            icon={faChevronDown}
-                            className={`ml-2 text-xs transition-transform ${
-                              showAdvancedFilters ? "rotate-180" : ""
-                            }`}
-                          />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-
-                  {showAdvancedFilters && (
-                    <div className="advanced-filter-dropdown ">
-                      <FilterSlotComplaint
-                        label="Status"
-                        id="status-filter"
-                        value={activeFilter}
-                        onChange={(e) => setActiveFilter(e.target.value)}
-                        options={[
-                          { value: "all", label: "All Statuses" },
-                          { value: "Opened", label: "Opened" },
-                          { value: "InProgress", label: "In Progress" },
-                          { value: "Resolved", label: "Resolved" },
-                          { value: "Closed", label: "Closed" },
-                        ]}
-                        className="advanced-filter-status"
-                      />
-                      <FilterSlotComplaint
-                        label="Category"
-                        id="category-filter"
-                        value={selectedCategory}
-                        onChange={(e) => setSelectedCategory(e.target.value)}
-                        options={[
-                          { value: "all", label: "All Categories" },
-                          { value: "Bullying", label: "Bullying" },
-                          {
-                            value: "Sexual harassment",
-                            label: "Sexual harassment",
-                          },
-                          { value: "Dress Code", label: "Dress Code" },
-                          {
-                            value: "Unauthorized Access",
-                            label: "Unauthorized Access",
-                          },
-                          { value: "Cleanliness", label: "Cleanliness" },
-                          {
-                            value: "Academic Misconduct",
-                            label: "Academic Misconduct",
-                          },
-                          { value: "Vandalism", label: "Vandalism" },
-                          { value: "Mental Issues", label: "Mental Issues" },
-                        ]}
-                        className="advanced-filter-status"
-                      />
-                      <FilterSlotComplaint
-                        label="Date Range"
-                        id="date-filter"
-                        value={selectedDateRange}
-                        onChange={handleDateRangeChange}
-                        options={[
-                          { value: "all", label: "All Time" },
-                          { value: "today", label: "Today" },
-                          { value: "week", label: "This Week" },
-                          { value: "month", label: "This Month" },
-                          { value: "custom", label: "Custom Range" },
-                        ]}
-                        className="advanced-filter-status"
-                      />
-                      {selectedDateRange === "custom" && (
-                        <div className="flex gap-2 mt-2">
-                          <input
-                            type="date"
-                            className="complaint-filter-custom-calender"
-                            value={customStartDate}
-                            onChange={(e) => {
-                              const value = e.target.value;
-                              setCustomStartDate(value);
-                              if (customEndDate && value > customEndDate) {
-                                setCustomEndDate(value);
-                              }
-                            }}
-                            max={customEndDate || undefined}
-                            placeholder="Start date"
-                          />
-                          <span className="self-center">to</span>
-                          <input
-                            type="date"
-                            className="complaint-filter-custom-calender"
-                            value={customEndDate}
-                            onChange={(e) => {
-                              const value = e.target.value;
-                              setCustomEndDate(value);
-                              if (customStartDate && value < customStartDate) {
-                                setCustomStartDate(value);
-                              }
-                            }}
-                            min={customStartDate || undefined}
-                            placeholder="End date"
-                          />
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-
-                <div className="complaint-status-found-box">
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      onClick={() => setActiveFilter("all")}
-                      className={`complaint-status-selection ${
-                        activeFilter === "all"
-                          ? "bg-blue-100 text-blue-800"
-                          : "bg-white text-gray-700 border border-gray-300 hover:bg-gray-50"
-                      }`}
-                    >
-                      All
-                    </button>
-
-                    <button
-                      onClick={() => setActiveFilter("Opened")}
-                      className={`complaint-status-selection ${
-                        activeFilter === "Opened"
-                          ? "bg-yellow-100 text-yellow-800"
-                          : "bg-white text-gray-700 border border-gray-300 hover:bg-gray-50"
-                      }`}
-                    >
+            <div className="search-filter-section">
+              <div className="search-filter-button-container">
+                <div className="search-filter-bar">
+                  <div className="search-bar-box">
+                    <input
+                      type="text"
+                      className="search-bar-input"
+                      placeholder="Search complaints by ID, title, or assignee..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                    />
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                       <FontAwesomeIcon
-                        icon={faExclamationCircle}
-                        className="mr-1"
-                      />
-                      Open
-                    </button>
+                        icon={faSearch}
+                        className="text-gray-400"
+                      ></FontAwesomeIcon>
+                    </div>
+                  </div>
 
-                    <button
-                      onClick={() => setActiveFilter("InProgress")}
-                      className={`complaint-status-selection ${
-                        activeFilter === "InProgress"
-                          ? "bg-blue-100 text-blue-800"
-                          : "bg-white text-gray-700 border border-gray-300 hover:bg-gray-50"
-                      }`}
-                    >
-                      <FontAwesomeIcon icon={faSpinner} className="mr-1" />
-                      In Progress
-                    </button>
-
-                    <button
-                      onClick={() => setActiveFilter("Resolved")}
-                      className={`complaint-status-selection ${
-                        activeFilter === "Resolved"
-                          ? "bg-green-100 text-green-800"
-                          : "bg-white text-gray-700 border border-gray-300 hover:bg-gray-50"
-                      }`}
-                    >
-                      <FontAwesomeIcon icon={faCheckCircle} className="mr-1" />
-                      Resolved
-                    </button>
-
-                    <button
-                      onClick={() => setActiveFilter("Closed")}
-                      className={`complaint-status-selection ${
-                        activeFilter === "Closed"
-                          ? "bg-red-100 text-red-800"
-                          : "bg-white text-gray-700 border border-gray-300 hover:bg-gray-50"
-                      }`}
-                    >
-                      <FontAwesomeIcon icon={faLock} className="mr-1" />
-                      Closed
-                    </button>
-
-                    <div className="ml-auto text-sm text-gray-500 flex items-center">
-                      <span>{filteredComplaints.length} complaints found</span>
+                  <div className="flex space-x-2">
+                    <div className="relative">
+                      <button
+                        className="filter-button"
+                        onClick={() =>
+                          setShowAdvancedFilters(!showAdvancedFilters)
+                        }
+                      >
+                        <FontAwesomeIcon icon={faFilter} className="mr-2" />
+                        Filters
+                        <FontAwesomeIcon
+                          icon={faChevronDown}
+                          className={`ml-2 text-xs transition-transform ${
+                            showAdvancedFilters ? "rotate-180" : ""
+                          }`}
+                        />
+                      </button>
                     </div>
                   </div>
                 </div>
+
+                {showAdvancedFilters && (
+                  <div className="advanced-filter-dropdown ">
+                    <FilterSlotComplaint
+                      label="Status"
+                      id="status-filter"
+                      value={activeFilter}
+                      onChange={(e) => setActiveFilter(e.target.value)}
+                      options={[
+                        { value: "all", label: "All Statuses" },
+                        { value: "Opened", label: "Opened" },
+                        { value: "InProgress", label: "In Progress" },
+                        { value: "Resolved", label: "Resolved" },
+                        { value: "Closed", label: "Closed" },
+                      ]}
+                      className="advanced-filter-status"
+                    />
+                    <FilterSlotComplaint
+                      label="Category"
+                      id="category-filter"
+                      value={selectedCategory}
+                      onChange={(e) => setSelectedCategory(e.target.value)}
+                      options={[
+                        { value: "all", label: "All Categories" },
+                        ...categoryOptions
+                          .map((category) => ({ value: category.name, label: category.name }))
+                          .sort((a, b) => a.label.localeCompare(b.label)),
+                      ]}
+                      className="advanced-filter-status"
+                    />
+                    <FilterSlotComplaint
+                      label="Date Range"
+                      id="date-filter"
+                      value={selectedDateRange}
+                      onChange={handleDateRangeChange}
+                      options={[
+                        { value: "all", label: "All Time" },
+                        { value: "today", label: "Today" },
+                        { value: "week", label: "This Week" },
+                        { value: "month", label: "This Month" },
+                        { value: "custom", label: "Custom Range" },
+                      ]}
+                      className="advanced-filter-status"
+                    />
+                    {selectedDateRange === "custom" && (
+                      <div className="flex gap-2 mt-2">
+                        <input
+                          type="date"
+                          className="complaint-filter-custom-calender"
+                          value={customStartDate}
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            setCustomStartDate(value);
+                            if (customEndDate && value > customEndDate) {
+                              setCustomEndDate(value);
+                            }
+                          }}
+                          max={customEndDate || undefined}
+                          placeholder="Start date"
+                        />
+                        <span className="self-center">to</span>
+                        <input
+                          type="date"
+                          className="complaint-filter-custom-calender"
+                          value={customEndDate}
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            setCustomEndDate(value);
+                            if (customStartDate && value < customStartDate) {
+                              setCustomStartDate(value);
+                            }
+                          }}
+                          min={customStartDate || undefined}
+                          placeholder="End date"
+                        />
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
-              {/* Loading and Error States */}
-              {isLoading && (
-                <div className="flex justify-center items-center py-12">
-                  <FontAwesomeIcon icon={faSpinner} spin className="text-blue-600 text-3xl mr-3" />
-                  <span className="text-gray-600">Loading complaints from database...</span>
-                </div>
-              )}
+              <div className="complaint-status-found-box">
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={() => setActiveFilter("all")}
+                    className={`complaint-status-selection ${
+                      activeFilter === "all"
+                        ? "bg-blue-100 text-blue-800"
+                        : "bg-white text-gray-700 border border-gray-300 hover:bg-gray-50"
+                    }`}
+                  >
+                    All
+                  </button>
 
-              {error && (
-                <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
-                  <div className="flex items-center">
-                    <FontAwesomeIcon icon={faExclamationTriangle} className="text-red-600 mr-3" />
-                    <span className="text-red-800">{error}</span>
+                  <button
+                    onClick={() => setActiveFilter("Opened")}
+                    className={`complaint-status-selection ${
+                      activeFilter === "Opened"
+                        ? "bg-yellow-100 text-yellow-800"
+                        : "bg-white text-gray-700 border border-gray-300 hover:bg-gray-50"
+                    }`}
+                  >
+                    <FontAwesomeIcon
+                      icon={faExclamationCircle}
+                      className="mr-1"
+                    />
+                    Open
+                  </button>
+
+                  <button
+                    onClick={() => setActiveFilter("InProgress")}
+                    className={`complaint-status-selection ${
+                      activeFilter === "InProgress"
+                        ? "bg-blue-100 text-blue-800"
+                        : "bg-white text-gray-700 border border-gray-300 hover:bg-gray-50"
+                    }`}
+                  >
+                    <FontAwesomeIcon icon={faSpinner} className="mr-1" />
+                    In Progress
+                  </button>
+
+                  <button
+                    onClick={() => setActiveFilter("Resolved")}
+                    className={`complaint-status-selection ${
+                      activeFilter === "Resolved"
+                        ? "bg-green-100 text-green-800"
+                        : "bg-white text-gray-700 border border-gray-300 hover:bg-gray-50"
+                    }`}
+                  >
+                    <FontAwesomeIcon icon={faCheckCircle} className="mr-1" />
+                    Resolved
+                  </button>
+
+                  <button
+                    onClick={() => setActiveFilter("Closed")}
+                    className={`complaint-status-selection ${
+                      activeFilter === "Closed"
+                        ? "bg-red-100 text-red-800"
+                        : "bg-white text-gray-700 border border-gray-300 hover:bg-gray-50"
+                    }`}
+                  >
+                    <FontAwesomeIcon icon={faLock} className="mr-1" />
+                    Closed
+                  </button>
+
+                  <div className="ml-auto text-sm text-gray-500 flex items-center">
+                    <span>{filteredComplaints.length} complaints found</span>
                   </div>
                 </div>
-              )}
+              </div>
+            </div>
 
-              {/* Complaints Table */}
-              {!isLoading && !error && (
+            {/* Loading and Error States */}
+            {isLoading && (
+              <div className="flex justify-center items-center py-12">
+                <FontAwesomeIcon
+                  icon={faSpinner}
+                  spin
+                  className="text-blue-600 text-3xl mr-3"
+                />
+                <span className="text-gray-600">
+                  Loading complaints from database...
+                </span>
+              </div>
+            )}
+
+            {error && (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
+                <div className="flex items-center">
+                  <FontAwesomeIcon
+                    icon={faExclamationTriangle}
+                    className="text-red-600 mr-3"
+                  />
+                  <span className="text-red-800">{error}</span>
+                </div>
+              </div>
+            )}
+
+            {/* Complaints Table */}
+            {!isLoading && !error && (
               <div className="complaint-table-container">
                 <div className="overflow-x-auto">
                   <table className="complaint-table-header">
@@ -1062,17 +1044,13 @@ const ComplaintManagement = () => {
                           scope="col"
                           className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
                         >
-                          <div className="flex items-center">
-                            Category
-                          </div>
+                          <div className="flex items-center">Category</div>
                         </th>
                         <th
                           scope="col"
                           className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
                         >
-                          <div className="flex items-center">
-                            Assigned To
-                          </div>
+                          <div className="flex items-center">Assigned To</div>
                         </th>
                         <th
                           scope="col"
@@ -1104,7 +1082,10 @@ const ComplaintManagement = () => {
                                 />
                               </div>
                             </td>
-                            <td className="px-3 py-4 whitespace-nowrap text-sm font-medium text-blue-600 cursor-pointer">
+                            <td
+                              className="px-3 py-4 whitespace-nowrap text-sm font-medium text-blue-600 cursor-pointer hover:text-blue-800 hover:underline"
+                              onClick={() => handleComplaintClick(complaint)}
+                            >
                               {complaint.displayId}
                             </td>
                             <td
@@ -1150,13 +1131,12 @@ const ComplaintManagement = () => {
                               {complaint.category.name}
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                              {getAdminName(complaint.adminId) ===
-                              "Unassigned" ? (
+                              {getAdminName(complaint) === "Unassigned" ? (
                                 <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800">
                                   Unassigned
                                 </span>
                               ) : (
-                                getAdminName(complaint.adminId)
+                                getAdminName(complaint)
                               )}
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
@@ -1175,9 +1155,15 @@ const ComplaintManagement = () => {
                                   ></FontAwesomeIcon>
                                 </button>
                                 <button
-                                  className="!rounded-button whitespace-nowrap text-red-600 hover:text-red-900 cursor-pointer"
-                                  title="Delete"
+                                  className={`!rounded-button whitespace-nowrap ${
+                                    userRole === "officer"
+                                      ? "text-gray-300 cursor-not-allowed"
+                                      : "text-red-600 hover:text-red-900 cursor-pointer"
+                                  }`}
+                                  title={userRole === "officer" ? "Only admins can delete complaints" : "Delete"}
+                                  disabled={userRole === "officer"}
                                   onClick={() => {
+                                    if (userRole === "officer") return;
                                     setComplaintToDelete(complaint);
                                     setIsDeleteModalOpen(true);
                                   }}
@@ -1218,7 +1204,9 @@ const ComplaintManagement = () => {
                                                   Are you sure you want to
                                                   delete complaint{" "}
                                                   <span className="font-medium">
-                                                    {complaintToDelete.displayId}
+                                                    {
+                                                      complaintToDelete.displayId
+                                                    }
                                                   </span>
                                                   ?
                                                 </p>
@@ -1304,10 +1292,7 @@ const ComplaintManagement = () => {
                                 setSearchTerm("");
                                 setActiveFilter("all");
                                 setSelectedCategory("all");
-                                setSelectedDateRange("all");
-                                setCustomStartDate("");
-                                setCustomEndDate("");
-                                setDateRange({ start: null, end: null });
+                                setSelectedComplaints([]);
                               }}
                               className="!rounded-button whitespace-nowrap mt-2 text-sm text-blue-600 hover:text-blue-800 cursor-pointer"
                             >
@@ -1330,11 +1315,11 @@ const ComplaintManagement = () => {
                   />
                 )}
               </div>
-              )}
-            </div>
-          </main>
-        </div>
+            )}
+          </div>
+        </main>
       </div>
-    );
+    </div>
+  );
 };
 export default ComplaintManagement;

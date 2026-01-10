@@ -21,6 +21,11 @@ export const addOfficer = async (req, res) => {
 
   console.log("[addOfficer] Input:", req.body);
 
+  // Permission guard: only superadmin can create superadmin accounts
+  if (String(role).toLowerCase() === "superadmin" && String(req.user.role).toLowerCase() !== "superadmin") {
+    return res.status(403).json({ message: "Only Super Admin can create Super Admin accounts" });
+  }
+
   try {
     if (!validator.validate(email)) {
       return res.status(400).json({ message: "Invalid email format" });
@@ -134,6 +139,12 @@ export const getAllOfficers = async (req, res) => {
 // PATCH /api/users/:id
 export const updateOfficer = async (req, res) => {
   const { name, staffid, email, role, phone } = req.body;
+
+  // Permission guard: only superadmin can update role to superadmin
+  if (String(role).toLowerCase() === "superadmin" && String(req.user.role).toLowerCase() !== "superadmin") {
+    return res.status(403).json({ message: "Only Super Admin can promote users to Super Admin" });
+  }
+
   try {
     const updatedUser = await User.findByIdAndUpdate(
       req.params.id,

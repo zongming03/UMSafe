@@ -47,12 +47,12 @@ const QuickActionsCard = ({
   };
 
   return (
-    <div className="bg-white shadow-lg rounded-2xl overflow-hidden border border-gray-100">
+    <div className="bg-white shadow-lg rounded-2xl border border-gray-100" style={{ overflow: 'visible' }}>
       <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
         <h2 className="text-lg font-semibold text-gray-800">Quick Actions</h2>
       </div>
 
-      <div className="p-5 space-y-4">
+      <div className="p-5 space-y-4" style={{ overflow: 'visible' }}>
         {/* === Update Status === */}
         <div className="relative" ref={statusRef}>
           <button
@@ -99,7 +99,7 @@ const QuickActionsCard = ({
             >
               <span className="flex items-center space-x-2">
                 <FontAwesomeIcon icon={faUserPlus} className="text-blue-600" />
-                <span>Reassign Complaint</span>
+                <span>Assign Complaint</span>
               </span>
               <FontAwesomeIcon
                 icon={faChevronDown}
@@ -110,7 +110,7 @@ const QuickActionsCard = ({
             </button>
 
             {isAssignDropdownOpen && (
-              <div className="absolute z-20 mt-2 w-full bg-white rounded-lg shadow-md border border-gray-100 max-h-60 overflow-y-auto">
+              <div className="absolute z-50 mt-2 w-full bg-white rounded-lg shadow-lg border border-gray-200 max-h-80 overflow-y-auto" style={{ maxHeight: '20rem' }}>
                 {/* Revoke Admin Option */}
                 {assignedTo && assignedTo !== "Not Assigned" && (
                   <>
@@ -155,7 +155,23 @@ const QuickActionsCard = ({
         </button>
 
         {/* === Chat with Student === */}
-        {!isAnonymous && (
+        {isAnonymous ? (
+          <div title="Chatroom not available for anonymous complaints - student must be identified first" className="group relative">
+            <button
+              disabled
+              className="w-full flex items-center justify-between px-4 py-2 bg-gray-300 text-gray-500 rounded-lg text-sm font-medium cursor-not-allowed opacity-60"
+            >
+              <span className="flex items-center space-x-2">
+                <FontAwesomeIcon icon={faComments} />
+                <span>Chat with Student</span>
+              </span>
+            </button>
+            <div className="absolute hidden group-hover:block bg-gray-800 text-white text-xs rounded-lg py-2 px-3 bottom-full left-0 mb-2 w-48 z-10">
+              Chatroom unavailable for anonymous complaints.
+              <div className="absolute top-full left-4 w-2 h-2 bg-gray-800 transform rotate-45"></div>
+            </div>
+          </div>
+        ) : (
           <button
             onClick={handleOpenChatroom}
             className="flex w-full items-center justify-between px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-all shadow-sm"

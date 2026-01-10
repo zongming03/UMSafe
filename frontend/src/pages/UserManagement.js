@@ -20,6 +20,7 @@ import {
 import Pagination from "../components/Pagination";
 import showNotification from "../utils/showNotification";
 import LoadingOverlay from "../components/LoadingOverlay";
+import MobileAdminSection from "../components/MobileAdminSection";
 import {
   addOfficer,
   getAllOfficers,
@@ -48,6 +49,7 @@ const UserManagement = () => {
     email: "",
     phone: "",
   });
+  const [adminView, setAdminView] = useState("web"); // web | mobile
   const [error, setError] = useState(null);
   const [userToDelete, setUserToDelete] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -147,7 +149,6 @@ const UserManagement = () => {
     try {
       const res = await addOfficer(userForm);
       if (res && (res.status === 200 || res.status === 201)) {
-        // Show success notification (no clipboard copy)
         if (res.data?.password) {
           const password = res.data.password;
           showNotification(
@@ -170,7 +171,6 @@ const UserManagement = () => {
       }
     } catch (error) {
       console.error("Error adding user:", error);
-      // Prefer detailed API message when available (e.g., duplicate email/staff ID)
       const apiMessage =
         error?.response?.data?.message ||
         error?.response?.data?.msg ||
@@ -252,7 +252,7 @@ const UserManagement = () => {
 
     // Prevent bulk delete if it includes current user
     if (Array.isArray(userToDelete) && currentUserId) {
-      const includesCurrentUser = userToDelete.some(user => user._id === currentUserId);
+      const includesCurrentUser = userToDelete.some((user) => user._id === currentUserId);
       if (includesCurrentUser) {
         showNotification("You cannot delete your own account.");
         setIsDeleteModalOpen(false);
@@ -263,11 +263,28 @@ const UserManagement = () => {
 
     try {
       if (Array.isArray(userToDelete)) {
+        const privilegedIds = users
+          .filter((user) => {
+            const role = user.role?.toLowerCase();
+            return role === "admin" || role === "superadmin";
+          })
+          .map((user) => user._id);
+
+        const privilegedToDelete = userToDelete.filter((user) => privilegedIds.includes(user._id));
+        const remainingPrivileged = privilegedIds.filter((id) => !privilegedToDelete.some((user) => user._id === id));
+
+        if (privilegedToDelete.length > 0 && remainingPrivileged.length === 0) {
+          showNotification("At least one Admin or Super Admin must remain in the system.");
+          setIsDeleteModalOpen(false);
+          setIsLoading(false);
+          return;
+        }
+
         await bulkDeleteOfficers(userToDelete.map((user) => user._id));
         showNotification(`${userToDelete.length} users deleted successfully`);
       } else {
-        if (userToDelete.role === "admin" && isLastAdmin(userToDelete)) {
-          showNotification("At least one Admin must remain in the system.");
+        if ((userToDelete.role === "admin" || userToDelete.role === "superadmin") && isLastAdmin(userToDelete._id)) {
+          showNotification("At least one Admin or Super Admin must remain in the system.");
           setIsDeleteModalOpen(false);
           setIsLoading(false);
           return;
@@ -319,10 +336,11 @@ const UserManagement = () => {
   };
 
   const isLastAdmin = (userId) => {
-    const adminUsers = users.filter(
-      (user) => user.role.toLowerCase() === "admin"
-    );
-    return adminUsers.length === 1 && adminUsers[0]._id === userId;
+    const privilegedUsers = users.filter((user) => {
+      const role = user.role?.toLowerCase();
+      return role === "admin" || role === "superadmin";
+    });
+    return privilegedUsers.length === 1 && privilegedUsers[0]._id === userId;
   };
 
   const fetchAndSetUsers = async () => {
@@ -370,7 +388,7 @@ const UserManagement = () => {
                 </p>
               </div>
 
-              <div className="mt-4 md:mt-0 flex space-x-3">
+              <div className="mt-4 md:mt-0 flex items-center space-x-3">
                 <div className="relative">
                   {selectedUsers.length > 1 && (
                     <>
@@ -410,15 +428,37 @@ const UserManagement = () => {
                     </>
                   )}
                 </div>
-                <button
-                  onClick={handleAddUser}
-                  className="!rounded-button whitespace-nowrap inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none cursor-pointer"
-                >
-                  <FontAwesomeIcon icon={faUserPlus} className="mr-2" />
-                  Add New User
-                </button>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setAdminView("web")}
+                    className={`px-3 py-2 text-sm font-medium rounded-md border ${adminView === "web" ? "bg-blue-600 text-white border-blue-600" : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"}`}
+                  >
+                    Web Admin
+                  </button>
+                  <button
+                    onClick={() => setAdminView("mobile")}
+                    className={`px-3 py-2 text-sm font-medium rounded-md border ${adminView === "mobile" ? "bg-blue-600 text-white border-blue-600" : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"}`}
+                  >
+                    Mobile Admin
+                  </button>
+                </div>
+                {adminView !== "mobile" && (
+                  <button
+                    onClick={handleAddUser}
+                    className="!rounded-button whitespace-nowrap inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none cursor-pointer"
+                  >
+                    <FontAwesomeIcon icon={faUserPlus} className="mr-2" />
+                    Add New User
+                  </button>
+                )}
               </div>
             </div>
+
+            {/* Mobile Admin Section */}
+            {adminView === "mobile" && <MobileAdminSection />}
+
+            {/* Web Admin content hidden when mobile view */}
+            <div className={adminView === "mobile" ? "hidden" : "block"}>
 
             {/* User Stats Cards */}
             <div className="user-stats-card">
@@ -463,6 +503,7 @@ const UserManagement = () => {
                       onChange={handleRoleFilterChange}
                       options={[
                         { value: "all", label: "All Roles" },
+                        { value: "superadmin", label: "Super Admin" },
                         { value: "admin", label: "Admin" },
                         { value: "officer", label: "Officer" },
                       ]}
@@ -614,6 +655,7 @@ const UserManagement = () => {
               />
             </div>
           </div>
+          </div>
         </main>
       </div>
 
@@ -626,6 +668,14 @@ const UserManagement = () => {
         onSubmit={handleSubmitAddUser}
         userForm={userForm}
         onFormChange={handleFormChange}
+        canCreateSuperAdmin={(localStorage.getItem("user") || sessionStorage.getItem("user")) ? (() => {
+          try {
+            const u = JSON.parse(localStorage.getItem("user") || sessionStorage.getItem("user"));
+            return String(u?.role).toLowerCase() === "superadmin";
+          } catch {
+            return false;
+          }
+        })() : false}
       />
 
       {/* Edit User Modal */}
@@ -635,6 +685,14 @@ const UserManagement = () => {
         onSubmit={handleSubmitEditUser}
         userForm={userForm}
         onFormChange={handleFormChange}
+        canCreateSuperAdmin={(localStorage.getItem("user") || sessionStorage.getItem("user")) ? (() => {
+          try {
+            const u = JSON.parse(localStorage.getItem("user") || sessionStorage.getItem("user"));
+            return String(u?.role).toLowerCase() === "superadmin";
+          } catch {
+            return false;
+          }
+        })() : false}
       />
 
       {/* Delete Confirmation Modal */}

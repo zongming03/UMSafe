@@ -1,40 +1,16 @@
 import axios from "axios";
 
 // ==================== API Configuration ====================
-// Main API Base URL (Auth, Rooms, Categories, Users, Profile) - localhost
+// All API calls go through our backend - no direct partner API calls from frontend
 const API_BASE = (
-  process.env.REACT_APP_API_BASE_URL || 
-  "http://localhost:5000/admin"
+  process.env.REACT_APP_API_BASE_URL
 ).replace(/\/$/, "");
 
-// Reports API Base URL (Complaints, Reports, Chatrooms)
-// CRITICAL: Must set explicit ngrok URL with /admin path
-// axios does NOT use package.json proxy - it requires full baseURL
-// ngrok base is https://639bc5d3aec7.ngrok-free.app/admin so endpoints start with /reports
-const REPORTS_API_BASE = (
-  process.env.REACT_APP_REPORTS_API_BASE_URL || 
-  "https://639bc5d3aec7.ngrok-free.app"
-).replace(/\/$/, "");
-
-// ============================================================
-
-// Main API instance for auth, rooms, categories, users, profile
 const api = axios.create({
   baseURL: API_BASE,
   withCredentials: true,
 });
 
-// Reports API instance for complaint/report management
-const reportsApi = axios.create({
-  baseURL: REPORTS_API_BASE,
-  withCredentials: true,
-  headers: {
-    'Content-Type': 'application/json',
-    'ngrok-skip-browser-warning': 'true', // Ensure ngrok header is always present
-  }
-});
-
-// Add auth token to main API requests
 api.interceptors.request.use((config) => {
   const token =
     localStorage.getItem("token") || sessionStorage.getItem("token");
@@ -44,17 +20,6 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// Add auth token and ngrok header to reports API requests
-reportsApi.interceptors.request.use((config) => {
-  const token =
-    localStorage.getItem("token") || sessionStorage.getItem("token");
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  // Ensure ngrok header is always present
-  config.headers['ngrok-skip-browser-warning'] = 'true';
-  return config;
-});
 
 // ==================== Auth APIs ====================
 // Login & Logout
@@ -89,6 +54,20 @@ export const deleteCategory = (categoryId) =>
 export const bulkDeleteCategories = (categories) =>
   api.post("/categories/bulk-delete", { categories });
 
+// ==================== Faculty Category Management APIs ====================
+export const fetchFacultyCategories = (facultyId) => 
+  api.get(`/faculty-categories/${facultyId}`);
+export const fetchAllFacultyCategories = () => 
+  api.get("/faculty-categories");
+export const addFacultyCategory = (data) => 
+  api.post("/faculty-categories", data);
+export const updateFacultyCategory = (facultyId, categoryId, data) =>
+  api.patch(`/faculty-categories/${facultyId}/${categoryId}`, data);
+export const deleteFacultyCategory = (facultyId, categoryId) =>
+  api.delete(`/faculty-categories/${facultyId}/${categoryId}`);
+export const bulkDeleteFacultyCategories = (facultyId, categoryIds) =>
+  api.post(`/faculty-categories/${facultyId}/bulk-delete`, { categoryIds });
+
 // ==================== User Management APIs ====================
 export const addOfficer = (data) => api.post("/users", data);
 export const getAllOfficers = () => api.get("/users");
@@ -106,58 +85,34 @@ export const updateProfile = (data) =>
 export const changePassword = (data) =>
   api.post("/profile/change-password", data);
 
-// ==================== Reports/Complaints Management APIs (using ngrok) ====================
-// 1) GET /reports - Fetch all reports/complaints (baseURL already has /admin)
-export const fetchReports = () => reportsApi.get("/reports");
-
-// 2) GET /reports/{id} - Get single report/complaint details
-export const getReport = (reportId) => reportsApi.get(`/reports/${reportId}`);
-
-// 3) PATCH /reports/{reportId}/assign-admin - Assign admin to report
-export const assignAdmin = (reportId, data) => 
-  reportsApi.patch(`/reports/${reportId}/assign-admin`, data);
-
-// 4) PATCH /reports/:id/revoke - Revoke report assignment  
-export const revokeReport = (reportId) => 
-  reportsApi.patch(`/reports/${reportId}/revoke`);
-
-// 5) PATCH /reports/:id/close - Close report
-export const closeReport = (reportId, data) => 
-  reportsApi.patch(`/reports/${reportId}/close`, data);
-
-// 6) PATCH /reports/:id/resolve - Resolve report
-export const resolveReport = (reportId, data) => 
-  reportsApi.patch(`/reports/${reportId}/resolve`, data);
-
-// ==================== Chatroom Management APIs (using ngrok) ====================
-export const fetchChatrooms = () => api.get("/chatrooms");
-
-// 7) POST /reports/{reportId}/chatrooms/initiate - Initiate chatroom
-export const initiateChatroom = async (reportId) => {
-  const response = await reportsApi.post(`/reports/${reportId}/chatrooms/initiate`);
-  return response.data;
-};
-
-// 8) GET /reports/:reportId/chatrooms/:chatroomId/chats - Get chat messages
-export const getChatMessages = (reportId, chatroomId) =>
-  reportsApi.get(`/reports/${reportId}/chatrooms/${chatroomId}/chats`)
-     .then((res) => res.data);
-
-// 9) POST /reports/:reportId/chatrooms/:chatroomId/chats - Send message
-export const sendMessage = async (reportId, chatroomId, messageData) => {
-  // If caller passed a FormData (file uploads), let axios send multipart/form-data
-  if (messageData instanceof FormData) {
-    const res = await reportsApi
-      .post(`/reports/${reportId}/chatrooms/${chatroomId}/chats`, messageData, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
-    return res.data;
-  }
-
-  // Default: JSON body
-  const res_1 = await reportsApi
-    .post(`/reports/${reportId}/chatrooms/${chatroomId}/chats`, messageData);
-  return res_1.data;
-};
-
 export default api;
+
+//Mobile Routes to Partner
+
+export const getAllUsersForMobile = () => api.get("mobile/users");
+export const getUsersByFacultyForMobile = (facultyId) => api.get(`mobile/users/faculty/${facultyId}`);
+export const getAllRoomsForMobile = () => api.get("mobile/rooms");
+export const getAllCategoriesForMobile = () => api.get("mobile/categories");
+
+// ==================== Mobile Admin (Partner) ====================
+// Create admin account on partner (mobile) service
+export const createMobileAdmin = (data) =>
+  api.post("/mobileAdmin/users", data);
+
+// List admin accounts from partner (mobile) service
+export const fetchMobileAdmins = () =>
+  api.get("/mobileAdmin/users");
+
+// Delete admin account on partner (mobile) service
+export const deleteMobileAdmin = (id) =>
+  api.delete(`/mobileAdmin/users/${id}`);
+
+// ==================== User Details (Super Admin) ====================
+// Get detailed user information by userId (for super admin viewing anonymous reports)
+export const getUserDetails = (userId) =>
+  api.get(`/users/${userId}/details`);
+
+// ==================== Faculty Info ====================
+// Get faculty name by ID
+export const getFacultyName = (facultyId) =>
+  api.get(`/rooms/faculty/${facultyId}`);

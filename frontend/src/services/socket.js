@@ -27,14 +27,15 @@ export const initSocket = (token) => {
     return null;
   }
 
-  const authToken = token?.startsWith("Bearer ") ? token : `Bearer ${token}`;
+  // Send raw token (without "Bearer " prefix) — backend expects just the token
+  const authToken = token?.startsWith("Bearer ") ? token.slice(7) : token;
 
   socket = io(getSocketBaseUrl(), {
     // Ensure default path; server typically serves at '/socket.io'
     path: "/socket.io",
     auth: { token: authToken },
     transports: ["websocket"],
-    withCredentials: true,
+    withCredentials: false,
     // Be gentle with reconnects to avoid noisy errors
     reconnection: true,
     reconnectionAttempts: 5,

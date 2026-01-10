@@ -3,12 +3,14 @@
     overflow-y: auto;
     background-color: #f9fafb;
     padding: 2rem;
+    overflow-x: visible;
 }
 
 .complaint-detail-main-frame{
     width: 100%;
     height: 100%;
     padding: 0 1rem;
+    overflow: visible;
 }
 
 .complaint-detail-page-header{

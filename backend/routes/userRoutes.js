@@ -14,14 +14,14 @@ import {
   authorizeRoles,
 } from "../middleware/authMiddleware.js";
 
-router.post("/", authMiddleware, authorizeRoles("admin"), addOfficer);
-router.get("/", authMiddleware, authorizeRoles("admin"), getAllOfficers);
-router.patch("/:id", authMiddleware, authorizeRoles("admin"), updateOfficer);
-router.delete("/:id", authMiddleware, authorizeRoles("admin"), deleteOfficer);
+router.post("/", authMiddleware, authorizeRoles("admin", "superadmin"), addOfficer);
+router.get("/", authMiddleware, authorizeRoles("admin", "superadmin"), getAllOfficers);
+router.patch("/:id", authMiddleware, authorizeRoles("admin", "superadmin"), updateOfficer);
+router.delete("/:id", authMiddleware, authorizeRoles("admin", "superadmin"), deleteOfficer);
 router.post(
   "/bulk-delete",
   authMiddleware,
-  authorizeRoles("admin"),
+  authorizeRoles("admin", "superadmin"),
   bulkDeleteOfficer
 );
 

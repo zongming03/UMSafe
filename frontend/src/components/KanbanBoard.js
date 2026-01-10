@@ -35,7 +35,9 @@ const KanbanBoard = ({ complaints = [], onStatusChange, onCardClick, adminsMap =
   };
 
   const handleDragStart = (e, complaint) => {
-    e.dataTransfer.setData("text/plain", complaint.id);
+    const identifier = complaint.id || complaint.displayId || complaint._id;
+    if (!identifier) return;
+    e.dataTransfer.setData("text/plain", identifier);
     e.dataTransfer.effectAllowed = "move";
     setDraggedComplaint(complaint);
   };
@@ -51,47 +53,34 @@ const KanbanBoard = ({ complaints = [], onStatusChange, onCardClick, adminsMap =
     if (!id || !draggedComplaint) return;
 
     const currentStatus = normalizeStatus(draggedComplaint.status);
-    
-    // Get current user from localStorage/sessionStorage
-    const storedUserStr = localStorage.getItem("user") || sessionStorage.getItem("user");
-    const currentUser = storedUserStr ? JSON.parse(storedUserStr) : null;
-    const currentUserId = currentUser?.id || currentUser?._id;
-    const isAdmin = currentUser?.role === "admin";
 
     // Validation rules
-    // 1. Cannot move TO "Opened" or "InProgress"
-    if (targetStatus === "Opened") {
-      showNotification("❌ Cannot move complaints to 'Opened'. Complaints are automatically set to Opened when submitted or revoked.");
+    // 1. Opened/InProgress cards cannot be dragged
+    if (currentStatus === "Opened" || currentStatus === "InProgress") {
+      showNotification("❌ 'Opened' and 'In Progress' items cannot be moved via drag-and-drop.");
       setDraggedComplaint(null);
       return;
     }
 
-    if (targetStatus === "InProgress") {
-      showNotification("❌ Cannot move complaints to 'In Progress'. Status is set when admin assigns the complaint.");
+    // 2. Only allow toggling between Resolved and Closed
+    const isTerminal = currentStatus === "Resolved" || currentStatus === "Closed";
+    const targetIsTerminal = targetStatus === "Resolved" || targetStatus === "Closed";
+    if (!isTerminal || !targetIsTerminal) {
+      showNotification("❌ You can only move between Resolved and Closed.");
       setDraggedComplaint(null);
       return;
     }
 
-    // 2. Can only move FROM "InProgress" TO "Resolved" or "Closed"
-    if (currentStatus !== "InProgress") {
-      showNotification("❌ Only complaints in 'In Progress' status can be moved to Resolved or Closed.");
+    // 3. No-op if dropping into same status
+    if (targetStatus === currentStatus) {
       setDraggedComplaint(null);
       return;
     }
 
-    // 3. Check if user is assigned to this complaint (unless admin)
-    if (!isAdmin && draggedComplaint.adminId !== currentUserId) {
-      showNotification("❌ You can only move complaints that are assigned to you.");
-      setDraggedComplaint(null);
-      return;
-    }
-
-    // 4. Allow move from InProgress to Resolved or Closed
-    if ((targetStatus === "Resolved" || targetStatus === "Closed") && currentStatus === "InProgress") {
-      if (onStatusChange) {
-        onStatusChange(id, targetStatus);
-        showNotification(`✅ Complaint moved to ${targetStatus}`);
-      }
+    // 4. Allow swap between terminal states
+    if (onStatusChange) {
+      onStatusChange(id, targetStatus);
+      showNotification(`✅ Complaint moved to ${targetStatus}`);
     }
 
     setDraggedComplaint(null);

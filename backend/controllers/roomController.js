@@ -141,11 +141,24 @@ export const deleteRoom = async (req, res) => {
 
   try {
     const faculty = await FacultyModel.findById(facultyId);
+    if (!faculty) return res.status(404).json({ msg: "Faculty not found" });
+
     const block = faculty.faculty_blocks.id(blockId);
+    if (!block) return res.status(404).json({ msg: "Block not found" });
+
+    // Remove the room from the block
     block.faculty_block_rooms.pull(roomId);
+
+    let blockRemoved = false;
+    // If no rooms left in this block, remove the block as well
+    if (!block.faculty_block_rooms || block.faculty_block_rooms.length === 0) {
+      block.remove();
+      blockRemoved = true;
+    }
+
     await faculty.save();
 
-    res.json({ msg: "Room deleted" });
+    res.json({ msg: "Room deleted", blockRemoved });
   } catch (err) {
     res.status(500).json({ msg: "Error deleting room", error: err.message });
   }
@@ -162,21 +175,49 @@ export const getAllRooms = async (req, res) => {
   }
 };
 
+// GET /admin/rooms/faculty/:facultyId
+export const getFacultyById = async (req, res) => {
+  const { facultyId } = req.params;
+  try {
+    const faculty = await FacultyModel.findById(facultyId).select('name');
+    if (!faculty) {
+      return res.status(404).json({ msg: 'Faculty not found' });
+    }
+    return res.status(200).json({ id: facultyId, name: faculty.name });
+  } catch (err) {
+    return res.status(500).json({ msg: 'Error fetching faculty', error: err.message });
+  }
+};
+
 export const bulkDeleteRooms = async (req, res) => {
   const { rooms, facultyId } = req.body; // rooms: [{ blockId, roomId }]
   try {
     const faculty = await FacultyModel.findById(facultyId);
     if (!faculty) return res.status(404).json({ msg: "Faculty not found" });
 
+    // Track which blocks were modified to later check emptiness
+    const touchedBlockIds = new Set();
+
     rooms.forEach(({ blockId, roomId }) => {
       const block = faculty.faculty_blocks.id(blockId);
       if (block) {
         block.faculty_block_rooms.pull(roomId);
+        touchedBlockIds.add(String(blockId));
+      }
+    });
+
+    // Remove any blocks that are now empty
+    let blocksRemoved = 0;
+    Array.from(touchedBlockIds).forEach((bId) => {
+      const blk = faculty.faculty_blocks.id(bId);
+      if (blk && (!blk.faculty_block_rooms || blk.faculty_block_rooms.length === 0)) {
+        blk.remove();
+        blocksRemoved += 1;
       }
     });
 
     await faculty.save();
-    res.json({ msg: "Rooms deleted" });
+    res.json({ msg: "Rooms deleted", blocksRemoved });
   } catch (err) {
     res.status(500).json({ msg: "Error deleting rooms", error: err.message });
   }

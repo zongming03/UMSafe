@@ -340,17 +340,19 @@ const RoomManagement = () => {
       const facultyId = userFacultyId; 
 
       if (Array.isArray(roomToDelete)) {
-        await bulkDeleteRooms(
+        const res = await bulkDeleteRooms(
           facultyId,
           roomToDelete.map((room) => ({
             blockId: room.blockId,
             roomId: room.roomId,
           }))
         );
-        showNotification(`${roomToDelete.length} rooms deleted successfully`);
+        const removed = res?.data?.blocksRemoved || 0;
+        showNotification(`${roomToDelete.length} room(s) deleted successfully${removed ? `, ${removed} block(s) removed` : ''}`);
       } else {
-        await deleteRoom(facultyId, roomToDelete.blockId, roomToDelete.roomId);
-        showNotification("Room deleted successfully");
+        const res = await deleteRoom(facultyId, roomToDelete.blockId, roomToDelete.roomId);
+        const blockRemoved = !!res?.data?.blockRemoved;
+        showNotification(`Room deleted successfully${blockRemoved ? ", block removed" : ''}`);
       }
       await fetchAndSetRooms();
       closeDeleteModal();

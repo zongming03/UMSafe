@@ -5,7 +5,6 @@ import Sidebar from "../components/Sidebar";
 import { Outlet, useLocation } from "react-router-dom";
 import SessionExpiryBanner from "../components/SessionExpiryBanner";
 import SocketListener from "../components/SocketListener";
-import SocketTestPanel from "../components/SocketTestPanel";
 
 export default function Layout({ userRole }) {
   const location = useLocation();
@@ -105,7 +104,6 @@ export default function Layout({ userRole }) {
       </div>
 
       <Footer />
-      <SocketTestPanel />
     </div>
   );
 }

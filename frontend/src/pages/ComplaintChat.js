@@ -15,7 +15,7 @@ import profile from "../assets/profile.png";
 import man from "../assets/man.png";
 import ComplaintChatHeader from "../components/ComplaintChatHeader";
 import { useParams, useLocation, useNavigate } from "react-router-dom";
-import { getChatMessages, sendMessage, initiateChatroom } from "../services/api.js";
+import { getChatMessages, sendMessage, initiateChatroom } from "../services/reportsApi.js";
 import api from "../services/api.js"; 
 import { AuthContext } from "../context/AuthContext";
 import LoadingOverlay from "../components/LoadingOverlay";
@@ -23,8 +23,6 @@ import { useChatUpdates } from "../hooks/useChatUpdates";
 
 const ComplaintChat = () => {
   const { reportId, chatroomId } = useParams();
-
-  console.log("🔍 ComplaintChat Params - reportId:", reportId, "chatroomId:", chatroomId);
 
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState([]);
@@ -35,13 +33,14 @@ const ComplaintChat = () => {
   const [isSending, setIsSending] = useState(false);
   const [adminIds, setAdminIds] = useState(new Set());
   const [adminProfiles, setAdminProfiles] = useState(new Map()); 
-    const [currentUserProfile, setCurrentUserProfile] = useState(null); // Full profile data with latest profileImage
+  const [currentUserProfile, setCurrentUserProfile] = useState(null); // Full profile data with latest profileImage
+  const [hasFetchedMessages, setHasFetchedMessages] = useState(false);
+  const [videoModalOpen, setVideoModalOpen] = useState(false);
+  const [selectedVideo, setSelectedVideo] = useState(null);
   const location = useLocation();
   const navigate = useNavigate();
   const complaint = location.state;
   const { user: currentUser } = useContext(AuthContext);
-
-  console.log("ComplaintChat - complaint:", complaint);
 
   // Format date/time as 'YYYY-MM-DD HH:MM:SS'
   const formatDateTimeYYYYMMDD_HHMMSS = (input) => {
@@ -68,8 +67,7 @@ const ComplaintChat = () => {
   useEffect(() => {
     const loadAdmins = async () => {
       try {
-        // Fetch all users from main API (localhost) to avoid ngrok CORS issues
-        const res = await api.get("/usersMobile/users");
+        const res = await api.get("/mobile/users");
         const admins = res.data?.data || res.data || [];
         const ids = new Set(admins.map((a) => a._id || a.id));
         const profileMap = new Map(admins.map((a) => [a._id || a.id, a]));
@@ -92,8 +90,10 @@ const ComplaintChat = () => {
   }, [currentUser]);
 
   useEffect(() => {
+    // Only fetch messages once when admins are loaded and chatroomId is available
+    if (hasFetchedMessages || adminIds.size === 0) return;
+
     const fetchMessages = async () => {
-      console.log("🚀 Fetching messages for reportId:", reportId, "chatroomId:", chatroomId);
       try {
         // Helper function to get avatar for a sender
         const getAvatar = (senderId) => {
@@ -103,7 +103,7 @@ const ComplaintChat = () => {
               // Check if it's a Cloudinary URL (starts with http) or local path
               return adminProfile.profileImage.startsWith('http') 
                 ? adminProfile.profileImage 
-                : `${((process.env.REACT_APP_NGROK_BASE_URL || "https://ac47f6e223f4.ngrok-free.app/admin").replace(/\/$/, "")).replace(/\/admin$/, "")}${adminProfile.profileImage}`;
+                : `${((process.env.REACT_APP_API_BASE_URL).replace(/\/$/, "")).replace(/\/admin$/, "")}${adminProfile.profileImage}`;
             }
             return man; // fallback to default admin avatar
           }
@@ -149,25 +149,50 @@ const ComplaintChat = () => {
           chats = response;
         }
         
-        const mapped = chats.map((c) => ({
-          ...c,
-          timestamp: c.createdAt || c.updatedAt,
-          content: c.message || c.content,
-          isAdmin: adminIds.has(c.senderId),
-          avatar: getAvatar(c.senderId),
-        }));
-        console.log("✅ Mapped", mapped.length, "chat messages");
+        const mapped = chats.map((c, idx) => {
+          // Handle both singular attachment and legacy attachments array
+          const single = c.attachment;
+          const plural = Array.isArray(c.attachments) ? c.attachments : [];
+
+          const normalizedAttachments = single
+            ? [{
+                url: single.url,
+                type: single.type,
+                // Give PDFs a friendly name with extension so downloads open correctly
+                name: single.name || (single.type?.toLowerCase() === 'pdf' ? `pdf${idx + 1}.pdf` : `${single.type || 'file'}${idx + 1}`),
+              }]
+            : plural.map((att, aIdx) => ({
+                ...att,
+                name: att.name || (att.type?.toLowerCase() === 'pdf' ? `pdf${aIdx + 1}.pdf` : `${att.type || 'file'}${aIdx + 1}`),
+              }));
+
+          return {
+            ...c,
+            timestamp: c.createdAt || c.updatedAt,
+            content: c.message || c.content,
+            isAdmin: adminIds.has(c.senderId),
+            avatar: getAvatar(c.senderId),
+            attachments: normalizedAttachments,
+          };
+        });
         setMessages(mapped);
+        setHasFetchedMessages(true);
       } catch (error) {
         console.error("Failed to load messages:", error);
         setMessages([]);
+        setHasFetchedMessages(true);
       } finally {
         setLoading(false);
       }
     };
 
     fetchMessages();
-  }, [reportId, chatroomId, adminIds, adminProfiles]);
+  }, [reportId, chatroomId, adminIds, adminProfiles, hasFetchedMessages]);
+
+  // Reset fetch flag when chatroomId changes
+  useEffect(() => {
+    setHasFetchedMessages(false);
+  }, [chatroomId]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -184,7 +209,6 @@ const ComplaintChat = () => {
       if (!isNewChatroom) return; // Already sent or has other messages
       
       try {
-        console.log("📢 Sending system message for chatroom:", chatroomId);
         const systemMessageData = {
           message: `Chatroom opened for complaint #${reportId}. Both parties are now connected.`,
           senderId: "system",
@@ -192,9 +216,8 @@ const ComplaintChat = () => {
         };
         
         await sendMessage(reportId, chatroomId, systemMessageData);
-        console.log("✅ System message sent successfully");
       } catch (error) {
-        console.warn("⚠️ Failed to send system message:", error);
+        console.warn("Failed to send system message:", error);
         // Don't fail the chat if system message fails
       }
     };
@@ -297,6 +320,7 @@ const ComplaintChat = () => {
       isAdmin: true,
       // receiverId could be determined by chatroom participants; keep undefined for backend to resolve
       message: message,
+      content: message, // Also include as 'content' for rendering compatibility
       createdAt: new Date().toISOString(),
       attachments: optimisticAttachments,
     };
@@ -313,6 +337,15 @@ const ComplaintChat = () => {
     try {
       let roomId = chatroomId;
       if (!roomId) {
+        // 🔒 VALIDATION: Check if complaint is anonymous before attempting to create chatroom
+        if (complaint?.isAnonymous) {
+          alert("Chatroom cannot be created for anonymous complaints. The student must be identified first.");
+          setIsSending(false);
+          // Remove the optimistically added message since we're not sending
+          setMessages((prev) => prev.filter((msg) => msg.id !== newMessage.id));
+          return;
+        }
+
         const res = await initiateChatroom(reportId);
         roomId = res?.chatroom?.id;
         if (roomId) {
@@ -323,11 +356,17 @@ const ComplaintChat = () => {
       }
 
         if (roomId) {
+        // Build payload for partner API (must include senderId and receiverId, no attachments)
+        // receiverId is the user who filed the complaint (complaint.userId)
+        const receiverId = complaint?.userId || "student-001";
+        
         // send message to backend; if attachmentsToSend contains File objects, send as FormData
         const hasFiles = attachmentsToSend && attachmentsToSend.length > 0 && attachmentsToSend[0] instanceof File;
         if (hasFiles) {
           const form = new FormData();
           form.append("message", newMessage.message);
+          form.append("senderId", currentUserId);
+          form.append("receiverId", receiverId);
           // append files with key 'files' (backend should read from req.files.files or similar)
           attachmentsToSend.forEach((file) => form.append("files", file));
           const response = await sendMessage(reportId, roomId, form);
@@ -339,11 +378,12 @@ const ComplaintChat = () => {
               const updated = [...prev];
               const lastIndex = updated.length - 1;
               if (lastIndex >= 0 && updated[lastIndex].id === newMessage.id) {
+                // Merge the response with the optimistic message, keeping optimistic content as fallback
                 updated[lastIndex] = {
                   ...updated[lastIndex],
-                  id: response.chat.id,
-                  createdAt: response.chat.createdAt,
-                  updatedAt: response.chat.updatedAt,
+                  ...response.chat,
+                  content: response.chat.message || updated[lastIndex].content, // Ensure content is always available for rendering
+                  message: response.chat.message || updated[lastIndex].message,
                 };
               }
               return updated;
@@ -351,9 +391,11 @@ const ComplaintChat = () => {
           }
         } else {
           // Attachments are metadata only (no file objects)
+          // Build payload with senderId and receiverId for partner API
           const payload = {
             message: newMessage.message,
-            attachments: newMessage.attachments,
+            senderId: currentUserId,
+            receiverId: receiverId,
           };
           const response = await sendMessage(reportId, roomId, payload);
           console.log("✅ Message sent successfully - Response:", response);
@@ -364,11 +406,12 @@ const ComplaintChat = () => {
               const updated = [...prev];
               const lastIndex = updated.length - 1;
               if (lastIndex >= 0 && updated[lastIndex].id === newMessage.id) {
+                // Merge the response with the optimistic message, keeping optimistic content as fallback
                 updated[lastIndex] = {
                   ...updated[lastIndex],
-                  id: response.chat.id,
-                  createdAt: response.chat.createdAt,
-                  updatedAt: response.chat.updatedAt,
+                  ...response.chat,
+                  content: response.chat.message || updated[lastIndex].content, // Ensure content is always available for rendering
+                  message: response.chat.message || updated[lastIndex].message,
                 };
               }
               return updated;
@@ -407,6 +450,59 @@ const ComplaintChat = () => {
   const handleEmojiClick = (emoji) => {
     setMessage(message + emoji);
     setShowEmojiPicker(false);
+  };
+
+  // Handle file downloads with proper filename and extension
+  const handleDownloadAttachment = (attachment) => {
+    // Extract file extension from attachment.name or content-type
+    let fileName = attachment.name || 'download';
+    const contentType = attachment.type || 'application/octet-stream';
+    
+    // If filename doesn't have an extension, infer from content type
+    if (!fileName.includes('.')) {
+      if (contentType.includes('pdf')) fileName += '.pdf';
+      else if (contentType.includes('image')) {
+        const ext = contentType.split('/')[1]?.split(';')[0] || 'jpg';
+        fileName += '.' + ext;
+      }
+      else if (contentType.includes('video')) {
+        const ext = contentType.split('/')[1]?.split(';')[0] || 'mp4';
+        fileName += '.' + ext;
+      }
+      else if (contentType.includes('word')) fileName += '.docx';
+      else if (contentType.includes('excel') || contentType.includes('spreadsheet')) fileName += '.xlsx';
+      else fileName += '.bin';
+    }
+    
+    // Fetch and download the file
+    fetch(attachment.url)
+      .then(res => res.blob())
+      .then(blob => {
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = fileName;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+      })
+      .catch(err => {
+        console.error('Download failed:', err);
+        // Fallback: open in new tab if download fails
+        window.open(attachment.url, '_blank');
+      });
+  };
+
+  // Handle opening video in modal
+  const handleOpenVideoModal = (videoAttachment) => {
+    setSelectedVideo(videoAttachment);
+    setVideoModalOpen(true);
+  };
+
+  const handleCloseVideoModal = () => {
+    setVideoModalOpen(false);
+    setSelectedVideo(null);
   };
 
   const emojis = [
@@ -481,48 +577,81 @@ const ComplaintChat = () => {
                           isOutgoing ? "bg-gradient-to-r from-blue-600 to-blue-500 text-white" : "bg-white text-gray-800"
                         }`}
                       >
-                        <p className="text-sm">{msg.content || msg.message}</p>
+                        {/* Show message text if not empty */}
+                        {(msg.content || msg.message) && (
+                          <p className="text-sm">{msg.content || msg.message}</p>
+                        )}
+                        
+                        {/* Show attachments */}
                         {msg.attachments && msg.attachments.length > 0 && (
-                          <div className="mt-2 space-y-2">
+                          <div className={`space-y-2 ${(msg.content || msg.message) ? 'mt-3' : ''}`}>
                             {msg.attachments.map((attachment, index) => {
-                              const fileBoxClass = isOutgoing
-                                ? "flex items-center p-2 rounded bg-blue-700 text-white cursor-pointer"
-                                : "flex items-center p-2 rounded bg-gray-100 text-gray-800";
-                              const linkClass = isOutgoing
-                                ? "text-xs text-white hover:underline cursor-pointer"
-                                : "text-xs text-blue-600 hover:underline";
-
+                              const attachmentType = attachment.type?.toLowerCase() || '';
+                              
                               return (
-                                <div key={index} className="flex items-center gap-2">
-                                  {attachment.url ? (
-                                   
-                                    attachment.type && attachment.type.startsWith("image") ? (
-                                      <a href={attachment.url} target="_blank" rel="noopener noreferrer" className={isOutgoing ? "rounded-md overflow-hidden ring-2 ring-white cursor-pointer" : "rounded-md overflow-hidden"}>
-                                        <img src={attachment.url} alt={attachment.name} className="h-28 rounded-md object-cover" />
-                                      </a>
-                                    ) : (
-                                      
-                                      attachment._local ? (
-                                        <div
-                                          className={fileBoxClass}
-                                          onClick={() => {
-                                            if (attachment.url) window.open(attachment.url, "_blank", "noopener noreferrer");
-                                          }}
-                                        >
-                                          <FontAwesomeIcon icon={faFile} className="mr-2" />
-                                          <span className="text-xs truncate">{attachment.name}</span>
-                                        </div>
-                                      ) : (
-                                        <a href={attachment.url} target="_blank" rel="noopener noreferrer" className={linkClass} download>
-                                          {attachment.name || attachment.url}
-                                        </a>
-                                      )
-                                    )
-                                  ) : (
-                                    <div className={fileBoxClass}>
-                                      <FontAwesomeIcon icon={faFile} className="mr-2" />
-                                      <span className="text-xs truncate">{attachment.name}</span>
+                                <div key={index}>
+                                  {/* Image attachment */}
+                                  {attachmentType === 'image' || attachmentType.startsWith('image') ? (
+                                    <a 
+                                      href={attachment.url} 
+                                      target="_blank" 
+                                      rel="noopener noreferrer" 
+                                      className={isOutgoing ? "block rounded-lg overflow-hidden ring-2 ring-white/50 hover:ring-white transition-all cursor-pointer" : "block rounded-lg overflow-hidden hover:opacity-90 transition-opacity"}
+                                    >
+                                      <img 
+                                        src={attachment.url} 
+                                        alt={attachment.name || 'Image'} 
+                                        className="max-w-xs max-h-64 rounded-lg object-cover"
+                                        onError={(e) => {
+                                          e.target.onerror = null;
+                                          e.target.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="100" height="100"%3E%3Crect fill="%23ddd" width="100" height="100"/%3E%3Ctext fill="%23999" x="50%25" y="50%25" text-anchor="middle" dy=".3em"%3EImage%3C/text%3E%3C/svg%3E';
+                                        }}
+                                      />
+                                    </a>
+                                  ) : 
+                                  /* Video attachment */
+                                  attachmentType === 'video' || attachmentType.startsWith('video') ? (
+                                    <div 
+                                      className="rounded-lg overflow-hidden max-w-xs cursor-pointer hover:opacity-90 transition-opacity"
+                                      onClick={() => handleOpenVideoModal(attachment)}
+                                      title="Click to view in full screen"
+                                    >
+                                      <video 
+                                        className="w-full max-h-64 rounded-lg bg-black"
+                                        preload="metadata"
+                                      >
+                                        <source src={attachment.url} type="video/mp4" />
+                                        Your browser does not support the video tag.
+                                      </video>
                                     </div>
+                                  ) : 
+                                  /* PDF and other file attachments */
+                                  (
+                                    <a 
+                                      href="#" 
+                                      onClick={(e) => {
+                                        e.preventDefault();
+                                        handleDownloadAttachment(attachment);
+                                      }}
+                                      className={`flex items-center gap-2 p-3 rounded-lg transition-all cursor-pointer ${
+                                        isOutgoing 
+                                          ? 'bg-blue-700 hover:bg-blue-800 text-white' 
+                                          : 'bg-gray-100 hover:bg-gray-200 text-gray-800'
+                                      }`}
+                                    >
+                                      <FontAwesomeIcon 
+                                        icon={attachmentType === 'pdf' ? faFilePdf : faFile} 
+                                        className={`text-lg ${attachmentType === 'pdf' ? 'text-red-500' : ''}`}
+                                      />
+                                      <div className="flex flex-col items-start flex-1 min-w-0">
+                                        <span className="text-sm font-medium truncate max-w-[200px]">
+                                          {attachment.name || 'Download File'}
+                                        </span>
+                                        <span className="text-xs opacity-75">
+                                          {attachmentType === 'pdf' ? 'PDF Document' : 'File Attachment'}
+                                        </span>
+                                      </div>
+                                    </a>
                                   )}
                                 </div>
                               );
@@ -646,6 +775,44 @@ const ComplaintChat = () => {
           </div>
         </div>
       </div>
+
+      {/* Video Modal */}
+      {videoModalOpen && selectedVideo && (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4"
+          onClick={handleCloseVideoModal}
+        >
+          <div 
+            className="bg-black rounded-lg shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="flex items-center justify-between p-4 border-b border-gray-700">
+              <h3 className="text-white font-semibold">
+                {selectedVideo.name || 'Video'}
+              </h3>
+              <button
+                onClick={handleCloseVideoModal}
+                className="text-gray-400 hover:text-white transition-colors p-1"
+              >
+                <FontAwesomeIcon icon={faTimes} className="text-xl" />
+              </button>
+            </div>
+
+            {/* Video Container */}
+            <div className="flex-1 overflow-auto bg-black flex items-center justify-center">
+              <video 
+                controls 
+                autoPlay
+                className="max-w-full max-h-full"
+              >
+                <source src={selectedVideo.url} type="video/mp4" />
+                Your browser does not support the video tag.
+              </video>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

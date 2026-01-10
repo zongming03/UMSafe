@@ -1,26 +1,21 @@
 import React, { useState, useEffect, useRef, useMemo, useContext } from "react";
 import * as echarts from "echarts";
-import jsPDF from "jspdf";
-import api, { fetchReports } from "../services/api";
+import api from "../services/api";
+import { fetchReports, getReportHistories } from "../services/reportsApi";
+import { fetchFacultyCategories } from "../services/api";
 import { AuthContext } from "../context/AuthContext";
 import { useLocation } from "react-router-dom";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import MOCK_COMPLAINTS from "../mock/mockComplaints";
 import {
   faSpinner,
   faCheckCircle,
   faFileExport,
-  faChevronDown,
-  faChevronUp,
   faTimes,
   faCalendarAlt,
-  faCalendarCheck,
   faTags,
   faLayerGroup,
   faDoorClosed,
   faInfoCircle,
-  faExclamationTriangle,
-  faUserShield,
   faUndo,
   faChartPie,
   faChartLine,
@@ -32,10 +27,14 @@ import {
   faHourglassHalf,
   faSignal,
   faMapMarkerAlt,
-  faClock
+  faClock,
+  faFilter,
 } from "@fortawesome/free-solid-svg-icons";
 import { faStar as faStarRegular } from "@fortawesome/free-regular-svg-icons";
 import { faStar as faStarSolid } from "@fortawesome/free-solid-svg-icons";
+import LoadingOverlay from "../components/LoadingOverlay";
+import { generateAnalyticsPDF } from "../utils/analyticsPDFGenerator";
+
 
 
 function App() {
@@ -96,7 +95,7 @@ function App() {
   // ============================================================================
   
   // Force analytics to use local mock data (set to false to enable backend API)
-  const USE_MOCK_ANALYTICS = false;
+  
 
   // ============================================================================
   // STATE MANAGEMENT
@@ -115,11 +114,13 @@ function App() {
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("overview");
-  const [isFilterCollapsed, setIsFilterCollapsed] = useState(false);
+  const [isFilterCollapsed, setIsFilterCollapsed] = useState(true);
+  const [hasCustomDateRange, setHasCustomDateRange] = useState(false);
   const [categoryOptions, setCategoryOptions] = useState([]);
   const [blockOptions, setBlockOptions] = useState([]);
   const [roomOptions, setRoomOptions] = useState([]);
   const [officerOptions, setOfficerOptions] = useState([]); 
+  const [userFacultyName, setUserFacultyName] = useState("");
   const profileRef = useRef(null);
   const notificationRef = useRef(null);
   const complaintChartRef = useRef(null);
@@ -129,9 +130,10 @@ function App() {
   const performanceChartRef = useRef(null);
   const ageChartRef = useRef(null);
   const filterRefetchTimer = useRef(null);
+  const historiesCacheRef = useRef(new Map()); 
   const location = useLocation();
   const initialDataRef = useRef(null);
-  const [preferLocationData, setPreferLocationData] = useState(true);
+  const [preferLocationData, setPreferLocationData] = useState(false);
   const [notifications, setNotifications] = useState([]);
 
   // ============================================================================
@@ -164,40 +166,17 @@ function App() {
   // Load officer options for assignment filter
   useEffect(() => {
     const loadOfficers = async () => {
-      if (USE_MOCK_ANALYTICS) {
-        const base =
-          (initialDataRef.current && initialDataRef.current.length
-            ? initialDataRef.current
-            : MOCK_COMPLAINTS) || [];
-        const pairs = [];
-        base.forEach((c) => {
-          const id = String(c.adminId || c.assignedTo || c.assigned_to || "").trim();
-          const name = String(c.adminName || c.assignedName || "").trim();
-          // Only add if we have a valid ID and name (skip empty/unassigned)
-          if (id && name && name !== "Unassigned") {
-            pairs.push({ _id: id, name });
-          }
-        });
-        const dedup = Array.from(
-          new Map(pairs.map((p) => [String(p._id), p]))
-        ).map(([, v]) => v);
-        setOfficerOptions(dedup);
-        return;
-      }
       try {
         const res = await api.get("/users");
         const list = Array.isArray(res.data) ? res.data : [];
         const mapped = list
-          .filter((u) => u && u._id && u.name && (u.role === "officer" || u.role === "admin"))
+          .filter((u) => u && u._id && u.name && (u.role === "officer" || u.role === "admin" || u.role === "superadmin"))
           .map((u) => ({ _id: u._id, name: u.name }));
         setOfficerOptions(mapped);
       } catch (e) {
         console.warn("[Analytics] Failed to fetch officers, will fallback to deriving from complaints", e);
         // Fallback: derive unique adminId-like values from current dataset if needed
-        const base =
-          (initialDataRef.current && initialDataRef.current.length
-            ? initialDataRef.current
-            : MOCK_COMPLAINTS) || [];
+        const base = Array.isArray(initialDataRef.current) ? initialDataRef.current : [];
         const pairs = [];
         base.forEach((c) => {
           const id = String(c.adminId || c.assignedTo || c.assigned_to || "").trim();
@@ -214,43 +193,11 @@ function App() {
       }
     };
     loadOfficers();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Load blocks/rooms for current user's faculty
   useEffect(() => {
     const loadRooms = async () => {
-      // When using mock analytics, derive blocks and rooms from local dataset
-      if (USE_MOCK_ANALYTICS) {
-        const base =
-          (initialDataRef.current && initialDataRef.current.length
-            ? initialDataRef.current
-            : MOCK_COMPLAINTS) || [];
-        const blocks = Array.from(
-          new Set(
-            base
-              .map((c) => String(c.facultyLocation?.facultyBlock || c.facultyLocation?.block || "").trim())
-              .filter(Boolean)
-          )
-        ).sort((a, b) => a.localeCompare(b));
-        setBlockOptions(blocks);
-        // Initialize rooms for the active block selection
-        const activeBlockName = selectedBlock !== "all" ? selectedBlock : blocks[0];
-        if (!activeBlockName) {
-          setRoomOptions([]);
-          return;
-        }
-        const rooms = Array.from(
-          new Set(
-            base
-              .filter((c) => String(c.facultyLocation?.facultyBlock || c.facultyLocation?.block || "").trim() === String(activeBlockName))
-              .map((c) => String(c.facultyLocation?.facultyBlockRoom || c.facultyLocation?.room || "").trim())
-              .filter(Boolean)
-          )
-        ).sort((a, b) => a.localeCompare(b));
-        setRoomOptions(rooms);
-        return;
-      }
       try {
         const res = await api.get("/rooms");
         const faculties = Array.isArray(res.data) ? res.data : [];
@@ -259,6 +206,12 @@ function App() {
           faculty = faculties.find((f) => String(f._id) === String(user.facultyid));
         }
         if (!faculty && faculties.length) faculty = faculties[0];
+
+        // Capture faculty name for filtering by location later (fallbacks for schema variants)
+        const facName = faculty?.name || faculty?.faculty || faculty?.title;
+        if (facName) {
+          setUserFacultyName(String(facName));
+        }
 
         const blocks = Array.from(
           new Set((faculty?.faculty_blocks || []).map((b) => String(b.name)))
@@ -282,25 +235,13 @@ function App() {
     loadRooms();
   }, [user?.facultyid]);
 
+  // Auto-fetch complaints when filters change
+  useEffect(() => {
+    fetchComplaints(false, "Filters updated");
+  }, [dateRange, selectedCategory, selectedBlock, selectedRoom, selectedStatus, selectedPriority, selectedOfficer]);
+
   useEffect(() => {
     const refreshRoomsForBlock = async () => {
-      if (USE_MOCK_ANALYTICS) {
-        const base =
-          (initialDataRef.current && initialDataRef.current.length
-            ? initialDataRef.current
-            : MOCK_COMPLAINTS) || [];
-        const rooms = Array.from(
-          new Set(
-            base
-              .filter((c) => String(c.facultyLocation?.facultyBlock || c.facultyLocation?.block || "").trim() === String(selectedBlock))
-              .map((c) => String(c.facultyLocation?.facultyBlockRoom || c.facultyLocation?.room || "").trim())
-              .filter(Boolean)
-          )
-        ).sort((a, b) => a.localeCompare(b));
-        setRoomOptions(rooms);
-        setSelectedRoom("all");
-        return;
-      }
       try {
         const res = await api.get("/rooms");
         const faculties = Array.isArray(res.data) ? res.data : [];
@@ -317,54 +258,54 @@ function App() {
     if (selectedBlock && selectedBlock !== "all") {
       refreshRoomsForBlock();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedBlock]);
 
   // Load categories from backend to populate the Category filter dynamically
   useEffect(() => {
     const loadCategories = async () => {
-      // When using mock analytics, derive categories from local dataset and skip API
-      if (USE_MOCK_ANALYTICS) {
-        const base =
-          (initialDataRef.current && initialDataRef.current.length
-            ? initialDataRef.current
-            : MOCK_COMPLAINTS) || [];
-        const derived = Array.from(
-          new Set(
-            base
-              .map((c) => {
-                const n = c?.category?.name || c?.category?.title || c?.category_id?.name;
-                return n ? String(n) : "";
-              })
-              .filter(Boolean)
-          )
-        ).sort((a, b) => a.localeCompare(b));
-        setCategoryOptions(derived);
-        return;
-      }
       try {
-        const res = await api.get("/categories");
-        const list = Array.isArray(res.data) ? res.data : [];
+        const userDataStr =
+          localStorage.getItem("user") || sessionStorage.getItem("user");
+        const currentUser = userDataStr ? JSON.parse(userDataStr) : null;
+        const userFacultyId = currentUser?.facultyid || user?.facultyid;
+        
+        if (!userFacultyId) {
+          console.warn("[Analytics] No facultyId found for current user");
+          setCategoryOptions([]);
+          return;
+        }
+
+        const res = await fetchFacultyCategories(userFacultyId);
+        let categories = Array.isArray(res.data) ? res.data : [];
+        console.log("[Analytics] Fetched faculty categories:", categories);
+        
+        // Check if response contains faculty objects with nested categories or just categories
+        if (categories.length > 0 && categories[0].categories && Array.isArray(categories[0].categories)) {
+          // Response is faculty objects with nested categories
+          categories = categories.flatMap((f) => f.categories || []);
+        }
+        
+        // Extract category names
         const names = Array.from(
           new Set(
-            list
+            categories
               .map((c) => (c && (c.name || c.title) ? String(c.name || c.title) : ""))
               .filter(Boolean)
           )
         ).sort((a, b) => a.localeCompare(b));
+
+        console.log("[Analytics] Loaded faculty categories:", names);
+        
         if (names.length) {
           setCategoryOptions(names);
           return;
         }
         // If backend has no categories, fall back to local base data
       } catch (e) {
-        console.warn("[Analytics] Failed to fetch categories, falling back to local dataset", e);
+        console.warn("[Analytics] Failed to fetch faculty categories, falling back to local dataset", e);
       }
-      // Fallback: derive categories from initial data (router) or mock
-      const base =
-        (initialDataRef.current && initialDataRef.current.length
-          ? initialDataRef.current
-          : MOCK_COMPLAINTS) || [];
+      // Fallback: derive categories from initial data (router) if available
+      const base = Array.isArray(initialDataRef.current) ? initialDataRef.current : [];
       const derived = Array.from(
         new Set(
           base
@@ -378,7 +319,6 @@ function App() {
       setCategoryOptions(derived);
     };
     loadCategories();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ============================================================================
@@ -404,36 +344,41 @@ function App() {
             formatter: (params) =>
               `${params.seriesName} <br/>${params.name}: ${params.value} (${params.percent}%)`,
           },
-          legend: isWide
-            ? {
-                orient: "vertical",
-                right: 10,
-                top: "middle",
-                type: "scroll",
-                data: [], // will be filled dynamically
-              }
-            : {
-                orient: "horizontal",
-                bottom: 0,
-                left: "center",
-                type: "scroll",
-                data: [], // will be filled dynamically
-              },
+          legend: {
+            orient: "horizontal",
+            bottom: 5,
+            left: "center",
+            data: [], // will be filled dynamically
+          },
           series: [
             {
               name: "Complaint Distribution",
               type: "pie",
               radius: ["48%", "68%"],
-              center: isWide ? ["35%", "50%"] : ["50%", "45%"], // leave room for legend
-              avoidLabelOverlap: true,
+              center: ["50%", "50%"], // center the pie chart
+              avoidLabelOverlap: false,
               itemStyle: {
                 borderRadius: 10,
                 borderColor: "#fff",
                 borderWidth: 2,
               },
-              label: { show: false },
+              label: { 
+                show: true,
+                formatter: '{d}%',
+                fontSize: 10,
+                fontWeight: 'bold',
+                color: '#faf5f5ff',
+                position: 'inside'
+              },
               labelLine: { show: false },
-              data: [], // will be updated by updateChartsWithData
+              emphasis: {
+                label: {
+                  show: true,
+                  fontSize: 13,
+                  fontWeight: 'bold'
+                }
+              },
+              data: [], 
             },
           ],
         };
@@ -797,7 +742,7 @@ function App() {
       if (chart) chart.dispose();
     };
   }, [activeTab]);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState("");
   const [hasData, setHasData] = useState(true);
@@ -815,6 +760,7 @@ function App() {
   const filterData = (data) => {
     const fromTs = dateRange.from ? Date.parse(dateRange.from) : null;
     const toTs = dateRange.to ? Date.parse(dateRange.to) : null;
+    const normalizedUserFaculty = (userFacultyName || "").toString().toLowerCase();
     return (data || []).filter((c) => {
       try {
         const created = c.createdAt
@@ -826,6 +772,12 @@ function App() {
           if (fromTs && created < fromTs) return false;
           if (toTs && created > toTs + 24 * 60 * 60 * 1000) return false;
         }
+
+        // Enforce faculty filter strictly: if user faculty name not resolved yet, show none to avoid mismatch
+        if (!normalizedUserFaculty) return false;
+        const reportFaculty = (c.facultyLocation?.faculty || c.facultyLocation?.facultyName || "").toString().trim().toLowerCase();
+        if (!reportFaculty || reportFaculty !== normalizedUserFaculty) return false;
+
         if (selectedCategory && selectedCategory !== "all") {
           const cat =
             (c.category && (c.category.name || c.category.title)) ||
@@ -874,11 +826,42 @@ function App() {
     });
   };
 
+  // Attach report histories via API (cached) so performance metrics can compute timelines
+  const attachHistories = async (list) => {
+    if (!Array.isArray(list) || list.length === 0) return [];
+    const enriched = await Promise.all(
+      list.map(async (c) => {
+        const id = c.id || c._id || c.reportId || c.displayId;
+        if (!id) return c;
+        if (c.reportHistories || c.timelineHistory) return c;
+
+        if (historiesCacheRef.current.has(id)) {
+          return { ...c, reportHistories: historiesCacheRef.current.get(id) };
+        }
+
+        try {
+          const res = await getReportHistories(id);
+          const histories = res.data?.reportHistories || res.data?.histories || res.data || [];
+          historiesCacheRef.current.set(id, histories);
+          return { ...c, reportHistories: histories };
+        } catch (err) {
+          console.warn("[Analytics] Failed to fetch report histories for", id, err);
+          return c;
+        }
+      })
+    );
+    return enriched;
+  };
+
   // Fetch complaints from backend and apply client-side filters
   const fetchComplaints = async (
     showToastFlag = false,
     message = "Data refreshed"
   ) => {
+    // Avoid flicker: wait until user's faculty name is resolved before updating
+    if (!userFacultyName || String(userFacultyName).trim() === "") {
+      return;
+    }
     setIsLoading(true);
     setFetchError(null);
     if (showToastFlag) {
@@ -889,18 +872,19 @@ function App() {
       const base =
         initialDataRef.current && initialDataRef.current.length
           ? initialDataRef.current
-          : MOCK_COMPLAINTS;
+          : [];
       console.log(
-        "[Analytics] fetchComplaints using local base (router/mock). base count:",
+        "[Analytics] fetchComplaints using local base (router). base count:",
         Array.isArray(base) ? base.length : 0,
         "dateRange:",
         dateRange
       );
       const filtered = filterData(base);
-      console.log("[Analytics] fetchComplaints filtered count:", filtered.length);
-      setComplaints(filtered);
-      setHasData(filtered.length > 0);
-      updateChartsWithData(filtered);
+      const withHistories = await attachHistories(filtered);
+      console.log("[Analytics] fetchComplaints filtered count:", withHistories.length);
+      setComplaints(withHistories);
+      setHasData(withHistories.length > 0);
+      updateChartsWithData(withHistories);
       setLastUpdatedAt(new Date());
       setIsLoading(false);
       if (showToastFlag) {
@@ -914,21 +898,17 @@ function App() {
       console.log("[Analytics] Fetched reports from API:", data.length);
 
       const filtered = filterData(data);
+      const withHistories = await attachHistories(filtered);
 
-      setComplaints(filtered);
-      setHasData(filtered.length > 0);
-      updateChartsWithData(filtered);
+      setComplaints(withHistories);
+      setHasData(withHistories.length > 0);
+      updateChartsWithData(withHistories);
       setLastUpdatedAt(new Date());
     } catch (err) {
-      console.error("Failed to load complaints for analytics, using local demo data:", err);
-      setFetchError(err.message || "Failed to fetch (using local demo data)");
-      const fallback = filterData(MOCK_COMPLAINTS);
-      setComplaints(fallback);
-      setHasData(fallback.length > 0);
-      if (fallback.length > 0) {
-        updateChartsWithData(fallback);
-        setLastUpdatedAt(new Date());
-      }
+      console.error("Failed to load complaints for analytics:", err);
+      setFetchError(err.message || "Failed to fetch complaints");
+      setComplaints([]);
+      setHasData(false);
     } finally {
       setIsLoading(false);
       if (showToastFlag) {
@@ -971,21 +951,8 @@ function App() {
     fetchComplaints(true, "Filters have been reset to default values");
   };
 
-  // Seed from router state if available (preferred). If none, fall back to MOCK_COMPLAINTS so the summary cards show data.
+  // Seed from router state if available (preferred). If none, start empty.
   useEffect(() => {
-    if (USE_MOCK_ANALYTICS) {
-      // Always seed from local mock data
-      initialDataRef.current = MOCK_COMPLAINTS;
-      console.log("[Analytics] Seed complaints from MOCK_COMPLAINTS. count:", initialDataRef.current.length);
-      const filtered = filterData(initialDataRef.current);
-      console.log("[Analytics] Seed filtered complaints (count):", filtered.length, "dateRange:", dateRange);
-      setComplaints(filtered);
-      setHasData(filtered.length > 0);
-      if (filtered.length > 0) updateChartsWithData(filtered);
-      setLastUpdatedAt(new Date());
-      setPreferLocationData(true);
-      return;
-    }
     const state = location?.state;
     console.log("[Analytics] Enter AnalyticsDashboard with router state:", state);
     let locComplaints = null;
@@ -1001,25 +968,29 @@ function App() {
         (state.complaint ? [state.complaint] : null);
     }
     const hasRouterData = Array.isArray(locComplaints);
-    initialDataRef.current = hasRouterData ? locComplaints : MOCK_COMPLAINTS;
+    initialDataRef.current = hasRouterData ? locComplaints : [];
     console.log(
       "[Analytics] Seed complaints (router?",
       hasRouterData,
       ") count:",
       Array.isArray(initialDataRef.current) ? initialDataRef.current.length : 0
     );
-    const filtered = filterData(initialDataRef.current);
-    console.log(
-      "[Analytics] Seed filtered complaints (count):",
-      filtered.length,
-      "dateRange:",
-      dateRange
-    );
-    setComplaints(filtered);
-    setHasData(filtered.length > 0);
-    if (filtered.length > 0) updateChartsWithData(filtered);
-    setLastUpdatedAt(new Date());
-    setPreferLocationData(hasRouterData);
+    const run = async () => {
+      const filtered = filterData(initialDataRef.current);
+      const withHistories = await attachHistories(filtered);
+      console.log(
+        "[Analytics] Seed filtered complaints (count):",
+        withHistories.length,
+        "dateRange:",
+        dateRange
+      );
+      setComplaints(withHistories);
+      setHasData(withHistories.length > 0);
+      if (withHistories.length > 0) updateChartsWithData(withHistories);
+      setLastUpdatedAt(new Date());
+      setPreferLocationData(hasRouterData);
+    };
+    run();
   }, [location]);
 
 
@@ -1031,7 +1002,7 @@ function App() {
     return () => {
       if (filterRefetchTimer.current) clearTimeout(filterRefetchTimer.current);
     };
-  }, [dateRange, selectedCategory, selectedLocation, selectedBlock, selectedRoom, selectedOfficer, selectedStatus, selectedPriority]);
+  }, [dateRange, selectedCategory, selectedLocation, selectedBlock, selectedRoom, selectedOfficer, selectedStatus, selectedPriority, userFacultyName]);
 
   // Build and apply chart options from complaints
   const updateChartsWithData = (data) => {
@@ -1196,9 +1167,12 @@ function App() {
 
     // Performance per officer (assignedTo) - resolution rate, response time and resolution time
     const officerMap = {};
+    const normalize = (s) => (s || "").toString().trim().toLowerCase();
+
     data.forEach((c) => {
-      const officer =
-        c.assignedTo || c.adminId || c.assigned_to || "Unassigned";
+      const officer = c.assignedTo || c.adminId || c.assigned_to || "Unassigned";
+      const officerName = c.adminName || c.assignedName || officerOptions.find((o) => String(o._id) === String(officer))?.name || "";
+
       officerMap[officer] = officerMap[officer] || {
         total: 0,
         resolved: 0,
@@ -1206,38 +1180,126 @@ function App() {
         resolutionTimes: [],
       };
       officerMap[officer].total += 1;
+
       const status = (c.status || "").toLowerCase();
-      if (status === "resolved" || status === "closed")
-        officerMap[officer].resolved += 1;
-      
-      // Calculate Response Time and Resolution Time from timelineHistory
-      if (c.timelineHistory && Array.isArray(c.timelineHistory)) {
-        const submittedEvent = c.timelineHistory.find(evt => evt.actionTitle === "Report Submitted");
-        const assignedEvent = c.timelineHistory.find(evt => evt.actionTitle === "Admin Assigned");
-        
-        // Response Time: from submitted to assigned
-        if (submittedEvent && assignedEvent) {
-          const submittedTime = Date.parse(submittedEvent.createdAt);
-          const assignedTime = Date.parse(assignedEvent.createdAt);
-          if (!isNaN(submittedTime) && !isNaN(assignedTime) && assignedTime > submittedTime) {
-            const responseHrs = (assignedTime - submittedTime) / (1000 * 60 * 60);
-            officerMap[officer].responseTimes.push(responseHrs);
+      if (status === "resolved" || status === "closed") officerMap[officer].resolved += 1;
+
+      if (c.reportHistories && Array.isArray(c.reportHistories)) {
+        const sorted = [...c.reportHistories].sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt));
+
+        const matchesAssignmentToOfficer = (evt) => {
+          if (evt.actionTitle !== "Admin Assigned") return false;
+          const details = normalize(evt.actionDetails);
+          if (officerName && details.includes(normalize(officerName))) return true;
+          if (officer && details.includes(normalize(officer))) return true;
+          return false;
+        };
+
+        // Response Time: Prefer assignment -> chat. If chat predates a later reassignment,
+        // fall back to assignment -> first subsequent meaningful event (resolve/close/reassign/revoke).
+        const chatEvt = sorted.find((evt) =>
+          evt.actionTitle === "Chat initiated" ||
+          evt.actionTitle === "Chatroom Initial" ||
+          evt.actionTitle === "Chatroom Created" ||
+          evt.actionTitle === "Chat Started"
+        );
+        const isMeaningfulNextEvent = (evt) => {
+          if (!evt || !evt.actionTitle) return false;
+          const t = evt.actionTitle.toLowerCase();
+          return (
+            t.includes("case resolved") ||
+            t.includes("case closed") ||
+            t.includes("status updated to resolved") ||
+            t.includes("status updated to closed") ||
+            t.includes("admin assigned") ||
+            t.includes("admin revoked")
+          );
+        };
+
+        const tryFallbackFromLastAssignment = () => {
+          const allAssigns = sorted.filter((evt) => matchesAssignmentToOfficer(evt));
+          const lastAnyAssign = allAssigns[allAssigns.length - 1];
+          if (!lastAnyAssign) return false;
+          const assignTsAny = Date.parse(lastAnyAssign.createdAt);
+          const nextEvt = sorted.find((h) => Date.parse(h.createdAt) > assignTsAny && isMeaningfulNextEvent(h));
+          if (nextEvt) {
+            const nextTs = Date.parse(nextEvt.createdAt);
+            if (!isNaN(nextTs)) {
+              const respHrs = (nextTs - assignTsAny) / (1000 * 60 * 60);
+              officerMap[officer].responseTimes.push(respHrs);
+              console.log("[Performance] Response time (fallback)", {
+                reportId: c.id || c._id || c.displayId,
+                officerId: officer,
+                officerName,
+                assignedAt: lastAnyAssign.createdAt,
+                nextEvent: nextEvt.actionTitle,
+                nextEventAt: nextEvt.createdAt,
+                hours: Number(respHrs.toFixed(2)),
+              });
+              return true;
+            }
           }
+          console.log(
+            "[Performance] Response time unavailable — no chat or subsequent event",
+            { reportId: c.id || c._id || c.displayId, officerId: officer, officerName }
+          );
+          return false;
+        };
+
+        if (chatEvt) {
+          const chatTs = Date.parse(chatEvt.createdAt);
+          const assigns = sorted.filter(
+            (evt) => matchesAssignmentToOfficer(evt) && Date.parse(evt.createdAt) < chatTs
+          );
+          const lastAssign = assigns[assigns.length - 1];
+          if (lastAssign) {
+            const assignTs = Date.parse(lastAssign.createdAt);
+            if (!isNaN(assignTs) && !isNaN(chatTs) && chatTs > assignTs) {
+              const respHrs = (chatTs - assignTs) / (1000 * 60 * 60);
+              console.log(
+                "[Performance] Response time:",
+                {
+                  reportId: c.id || c._id || c.displayId,
+                  officerId: officer,
+                  officerName,
+                  assignedAt: lastAssign.createdAt,
+                  chatInitiatedAt: chatEvt.createdAt,
+                  hours: Number(respHrs.toFixed(2)),
+                }
+              );
+              officerMap[officer].responseTimes.push(respHrs);
+            } else {
+              // Chat exists but predates this officer's latest assignment — use fallback
+              tryFallbackFromLastAssignment();
+            }
+          } else {
+            // No matching assignment found before chat — use fallback based on latest assignment
+            tryFallbackFromLastAssignment();
+          }
+        } else {
+          // No chat event at all — use fallback based on latest assignment
+          tryFallbackFromLastAssignment();
         }
 
-        // Resolution Time: from assigned to resolved/closed
-        if ((status === "resolved" || status === "closed") && assignedEvent) {
-          const resolvedEvent = c.timelineHistory.find(evt => 
-            evt.actionTitle === "Status Updated" && 
-            (evt.actionDetails?.includes("Resolved") || evt.actionDetails?.includes("Closed"))
+        // Resolution Time: most recent Admin Assigned to this officer before Case Resolved/Closed
+        if (status === "resolved" || status === "closed") {
+          const resolveEvt = sorted.find((evt) =>
+            evt.actionTitle === "Case Resolved" ||
+            evt.actionTitle === "Case Closed" ||
+            evt.actionTitle === "Status Updated to Resolved" ||
+            evt.actionTitle === "Status Updated to Closed"
           );
-          
-          if (resolvedEvent) {
-            const assignedTime = Date.parse(assignedEvent.createdAt);
-            const resolvedTime = Date.parse(resolvedEvent.createdAt);
-            if (!isNaN(assignedTime) && !isNaN(resolvedTime) && resolvedTime > assignedTime) {
-              const resolutionHrs = (resolvedTime - assignedTime) / (1000 * 60 * 60);
-              officerMap[officer].resolutionTimes.push(resolutionHrs);
+          if (resolveEvt) {
+            const resolveTs = Date.parse(resolveEvt.createdAt);
+            const assigns = sorted.filter(
+              (evt) => matchesAssignmentToOfficer(evt) && Date.parse(evt.createdAt) < resolveTs
+            );
+            const lastAssign = assigns[assigns.length - 1];
+            if (lastAssign) {
+              const assignTs = Date.parse(lastAssign.createdAt);
+              if (!isNaN(assignTs) && !isNaN(resolveTs) && resolveTs > assignTs) {
+                officerMap[officer].resolutionTimes.push((resolveTs - assignTs) / (1000 * 60 * 60));
+              }
             }
           }
         }
@@ -1282,10 +1344,43 @@ function App() {
   };
   
   // UI helpers: quick date presets and active filter chips
+  // Derived values for filter options
+  const blocks = blockOptions;
+  const categories = categoryOptions;
+  const officers = officerOptions;
+  const filteredRooms = selectedBlock && selectedBlock !== "all" ? roomOptions : [];
+
+  const handleQuickDate = (preset) => {
+    const today = new Date();
+    let from, to;
+    
+    if (preset === 'thisMonth') {
+      from = new Date(today.getFullYear(), today.getMonth(), 1);
+      to = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+    } else if (preset === 'thisYear') {
+      from = new Date(today.getFullYear(), 0, 1);
+      to = new Date(today.getFullYear(), 11, 31);
+    } else {
+      // preset is number of days
+      const days = parseInt(preset);
+      to = new Date();
+      from = new Date();
+      from.setDate(from.getDate() - days);
+    }
+    
+    setDateRange({
+      from: formatDate(from),
+      to: formatDate(to)
+    });
+    setHasCustomDateRange(true);
+  };
+
   const clearFilter = (key) => {
     switch (key) {
       case "date":
+      case "dateRange":
         setDateRange(getDefaultDateRange());
+        setHasCustomDateRange(false);
         break;
       case "category":
         setSelectedCategory("all");
@@ -1311,9 +1406,6 @@ function App() {
     }
   };
 
-  const defaultDateRange = getDefaultDateRange();
-  const hasCustomDateRange =
-    dateRange.from !== defaultDateRange.from || dateRange.to !== defaultDateRange.to;
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [exportSettings, setExportSettings] = useState({
     summary: true,
@@ -1327,360 +1419,47 @@ function App() {
   const exportToPDF = () => {
     setIsExportModalOpen(true);
   };
-  
-  // Export Analytics PDF - Professional analyst-style report
-  const exportAnalyticsPDF = ({
-    orientation = 'portrait',
-    include = {
-      summary: true,
-      statusDistribution: true,
-      charts: true,
-      performance: true
-    },
-    filename = buildFileName('analytics-report')
-  } = {}) => {
-    try {
-      const doc = new jsPDF({ orientation, unit: 'pt', format: 'a4' });
-      const page = { w: doc.internal.pageSize.getWidth(), h: doc.internal.pageSize.getHeight(), margin: 40 };
-      const colors = { 
-        primary: [37, 99, 235], 
-        success: [16, 185, 129], 
-        warning: [245, 158, 11],
-        danger: [239, 68, 68],
-        gray: [107, 114, 128],
-        lightGray: [229, 231, 235]
-      };
-      let y = page.margin;
 
-      const checkSpace = (needed) => {
-        if (y + needed > page.h - page.margin) { doc.addPage(); y = page.margin; }
-      };
-
-      const drawLine = (y1, color = colors.lightGray) => {
-        doc.setDrawColor(...color);
-        doc.setLineWidth(0.5);
-        doc.line(page.margin, y1, page.w - page.margin, y1);
-      };
-
-      // Calculate totals for use throughout the report
-      const totalComplaints = (complaints || []).length;
-
-      // ===== HEADER =====
-      doc.setFillColor(...colors.primary);
-      doc.rect(0, 0, page.w, 80, 'F');
-      doc.setTextColor(255);
-      doc.setFontSize(24);
-      doc.setFont(undefined, 'bold');
-      doc.text('UMSAFE ANALYTICS REPORT', page.margin, 45);
-      doc.setFontSize(10);
-      doc.setFont(undefined, 'normal');
-      doc.text(`Report Generated: ${formatDMY(new Date())} at ${new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}`, page.margin, 65);
-      doc.setTextColor(0);
-      y = 100;
-
-      // ===== REPORT PERIOD & FILTERS =====
-      doc.setFontSize(14);
-      doc.setFont(undefined, 'bold');
-      doc.text('REPORT PERIOD', page.margin, y);
-      y += 18;
-      drawLine(y);
-      y += 15;
-      
-      doc.setFontSize(10);
-      doc.setFont(undefined, 'normal');
-      doc.text(`Analysis Period: ${formatDMY(dateRange.from)} to ${formatDMY(dateRange.to)}`, page.margin + 10, y);
-      y += 20;
-
-      doc.setFontSize(12);
-      doc.setFont(undefined, 'bold');
-      doc.text('Applied Filters:', page.margin + 10, y);
-      y += 15;
-      
-      doc.setFontSize(9);
-      doc.setFont(undefined, 'normal');
-      const filters = [
-        ['Category', selectedCategory !== 'all' ? selectedCategory : 'All Categories'],
-        ['Block', selectedBlock !== 'all' ? selectedBlock : 'All Blocks'],
-        ['Room', selectedRoom !== 'all' ? selectedRoom : 'All Rooms'],
-        ['Status', selectedStatus || 'All Status'],
-        ['Priority', selectedPriority || 'All Priorities'],
-        ['Assigned To', selectedOfficer !== 'all' ? officerOptions.find(o => o.value === selectedOfficer)?.label || selectedOfficer : 'All Officers']
-      ];
-      
-      filters.forEach(([label, value]) => {
-        doc.setFont(undefined, 'bold');
-        doc.text(`${label}:`, page.margin + 20, y);
-        doc.setFont(undefined, 'normal');
-        doc.text(value, page.margin + 120, y);
-        y += 12;
-      });
-      y += 10;
-
-      // ===== EXECUTIVE SUMMARY =====
-      if (include.summary) {
-        checkSpace(120);
-        doc.setFontSize(14);
-        doc.setFont(undefined, 'bold');
-        doc.text('EXECUTIVE SUMMARY', page.margin, y);
-        y += 18;
-        drawLine(y);
-        y += 15;
-
-        doc.setFontSize(10);
-        doc.setFont(undefined, 'normal');
-        const resolvedPct = metrics.resolutionRate;
-        
-        // Key findings paragraph
-        doc.text(`This report analyzes ${totalComplaints} complaint cases recorded during the specified period.`, page.margin + 10, y);
-        y += 14;
-        doc.text(`The system achieved a resolution rate of ${resolvedPct}%, with ${metrics.resolved} cases successfully resolved,`, page.margin + 10, y);
-        y += 14;
-        doc.text(`${metrics.inProgress} cases currently in progress, and ${metrics.open} cases pending assignment.`, page.margin + 10, y);
-        y += 20;
-
-        // Key Metrics Table
-        doc.setFontSize(11);
-        doc.setFont(undefined, 'bold');
-        doc.text('Key Performance Indicators:', page.margin + 10, y);
-        y += 15;
-
-        const kpiData = [
-          ['Metric', 'Value', 'Status'],
-          ['Total Cases', String(totalComplaints), '—'],
-          ['Resolved Cases', String(metrics.resolved), `${resolvedPct}%`],
-          ['In Progress', String(metrics.inProgress), '—'],
-          ['Open/Pending', String(metrics.open), '—'],
-          ['Avg Response Time', `${isFinite(officerStats.teamAvg.avgResponseTime) ? officerStats.teamAvg.avgResponseTime.toFixed(1) : '0'} hours`, '—'],
-          ['Avg Resolution Time', `${isFinite(officerStats.teamAvg.avgResolutionTime) ? officerStats.teamAvg.avgResolutionTime.toFixed(1) : '0'} hours`, '—'],
-          ['Student Satisfaction', `${isFinite(feedbackMetrics.avgSatisfaction) ? feedbackMetrics.avgSatisfaction.toFixed(2) : 'N/A'}/5.0`, '—']
-        ];
-
-        const colWidths = [180, 120, 100];
-        const rowHeight = 18;
-        
-        // Table header
-        doc.setFillColor(240, 240, 240);
-        doc.rect(page.margin + 10, y, colWidths.reduce((a,b)=>a+b), rowHeight, 'F');
-        doc.setFontSize(9);
-        doc.setFont(undefined, 'bold');
-        let xPos = page.margin + 15;
-        kpiData[0].forEach((header, i) => {
-          doc.text(header, xPos, y + 12);
-          xPos += colWidths[i];
-        });
-        y += rowHeight;
-
-        // Table rows
-        doc.setFont(undefined, 'normal');
-        for (let i = 1; i < kpiData.length; i++) {
-          checkSpace(rowHeight + 5);
-          if (i % 2 === 0) {
-            doc.setFillColor(250, 250, 250);
-            doc.rect(page.margin + 10, y, colWidths.reduce((a,b)=>a+b), rowHeight, 'F');
-          }
-          xPos = page.margin + 15;
-          kpiData[i].forEach((cell, j) => {
-            doc.text(cell, xPos, y + 12);
-            xPos += colWidths[j];
-          });
-          y += rowHeight;
-        }
-        y += 20;
-      }
-
-      // ===== STATUS DISTRIBUTION =====
-      if (include.statusDistribution) {
-        checkSpace(100);
-        doc.setFontSize(14);
-        doc.setFont(undefined, 'bold');
-        doc.text('STATUS DISTRIBUTION ANALYSIS', page.margin, y);
-        y += 18;
-        drawLine(y);
-        y += 15;
-
-        doc.setFontSize(10);
-        doc.setFont(undefined, 'normal');
-        doc.text('Breakdown of cases by current status:', page.margin + 10, y);
-        y += 20;
-
-        const statusCounts = {};
-        (complaints || []).forEach(c => {
-          const status = (c.status || 'Unknown').toString();
-          statusCounts[status] = (statusCounts[status] || 0) + 1;
-        });
-
-        const sortedStatuses = Object.entries(statusCounts).sort((a, b) => b[1] - a[1]);
-        
-        sortedStatuses.forEach(([status, count]) => {
-          checkSpace(16);
-          const percentage = totalComplaints > 0 ? ((count / totalComplaints) * 100).toFixed(1) : 0;
-          
-          doc.setFont(undefined, 'bold');
-          doc.text('•', page.margin + 15, y);
-          doc.setFont(undefined, 'normal');
-          doc.text(`${status}:`, page.margin + 25, y);
-          doc.setFont(undefined, 'bold');
-          doc.text(`${count} cases`, page.margin + 150, y);
-          doc.setFont(undefined, 'normal');
-          doc.text(`(${percentage}%)`, page.margin + 220, y);
-          y += 14;
-        });
-        y += 15;
-      }
-
-      // ===== CHARTS =====
-      if (include.charts) {
-        const chartImages = [];
-        if (trendChartRef) {
-          const img = getChartImage(trendChartRef);
-          if (img) chartImages.push({ img, label: 'Trend Analysis', desc: 'Historical pattern of complaint submissions over time' });
-        }
-        if (performanceChartRef) {
-          const img = getChartImage(performanceChartRef);
-          if (img) chartImages.push({ img, label: 'Officer Performance Comparison', desc: 'Comparative analysis of officer workload and resolution metrics' });
-        }
-
-        chartImages.forEach(({ img, label, desc }) => {
-          checkSpace(200);
-          doc.setFontSize(14);
-          doc.setFont(undefined, 'bold');
-          doc.text(label.toUpperCase(), page.margin, y);
-          y += 18;
-          drawLine(y);
-          y += 10;
-          
-          doc.setFontSize(9);
-          doc.setFont(undefined, 'italic');
-          doc.text(desc, page.margin + 10, y);
-          y += 15;
-
-          const imgW = page.w - page.margin * 2;
-          const imgH = 180;
-          doc.addImage(img, 'PNG', page.margin, y, imgW, imgH);
-          y += imgH + 20;
-        });
-      }
-
-      // ===== OFFICER PERFORMANCE =====
-      if (include.performance && officerStats.list.length > 0) {
-        checkSpace(100);
-        doc.setFontSize(14);
-        doc.setFont(undefined, 'bold');
-        doc.text('OFFICER PERFORMANCE ANALYSIS', page.margin, y);
-        y += 18;
-        drawLine(y);
-        y += 15;
-
-        doc.setFontSize(10);
-        doc.setFont(undefined, 'normal');
-        doc.text('Top performing officers by case volume and resolution efficiency:', page.margin + 10, y);
-        y += 20;
-
-        const topOfficers = officerStats.list.filter(o => o.total > 0).slice(0, 10);
-        
-        if (topOfficers.length > 0) {
-          const tableData = [
-            ['Officer Name', 'Cases', 'Resolved', 'Rate', 'Resp.(h)', 'Resol.(h)', 'Sat.']
-          ];
-          
-          topOfficers.forEach(officer => {
-            const rate = officer.total > 0 ? ((officer.resolved / officer.total) * 100).toFixed(0) : '0';
-            tableData.push([
-              officer.name.length > 18 ? officer.name.substring(0, 16) + '..' : officer.name,
-              String(officer.total),
-              String(officer.resolved),
-              `${rate}%`,
-              (officer.avgResponseTime != null && isFinite(officer.avgResponseTime)) ? officer.avgResponseTime.toFixed(1) : '—',
-              (officer.avgResolutionTime != null && isFinite(officer.avgResolutionTime)) ? officer.avgResolutionTime.toFixed(1) : '—',
-              (officer.avgSat != null && isFinite(officer.avgSat)) ? officer.avgSat.toFixed(1) : '—'
-            ]);
-          });
-
-          const perfColWidths = [130, 45, 55, 45, 55, 55, 35];
-          const perfRowHeight = 16;
-
-          // Table header
-          doc.setFillColor(240, 240, 240);
-          doc.rect(page.margin + 10, y, perfColWidths.reduce((a,b)=>a+b), perfRowHeight, 'F');
-          doc.setFontSize(8);
-          doc.setFont(undefined, 'bold');
-          let xPos = page.margin + 13;
-          tableData[0].forEach((header, i) => {
-            doc.text(header, xPos, y + 11);
-            xPos += perfColWidths[i];
-          });
-          y += perfRowHeight;
-
-          // Table rows
-          doc.setFont(undefined, 'normal');
-          for (let i = 1; i < tableData.length; i++) {
-            checkSpace(perfRowHeight + 5);
-            if (i % 2 === 0) {
-              doc.setFillColor(250, 250, 250);
-              doc.rect(page.margin + 10, y, perfColWidths.reduce((a,b)=>a+b), perfRowHeight, 'F');
-            }
-            xPos = page.margin + 13;
-            tableData[i].forEach((cell, j) => {
-              doc.text(cell, xPos, y + 11);
-              xPos += perfColWidths[j];
-            });
-            y += perfRowHeight;
-          }
-          y += 20;
-        }
-      }
-
-      // ===== CONCLUSION =====
-      checkSpace(80);
-      doc.setFontSize(14);
-      doc.setFont(undefined, 'bold');
-      doc.text('CONCLUSION', page.margin, y);
-      y += 18;
-      drawLine(y);
-      y += 15;
-
-      doc.setFontSize(10);
-      doc.setFont(undefined, 'normal');
-      doc.text('This report provides a comprehensive overview of the UMSafe complaint management system', page.margin + 10, y);
-      y += 14;
-      doc.text('performance. The data reflects operational efficiency and areas for continuous improvement.', page.margin + 10, y);
-      y += 20;
-
-      // Footer on all pages
-      const totalPages = doc.internal.pages.length - 1;
-      for (let i = 1; i <= totalPages; i++) {
-        doc.setPage(i);
-        doc.setDrawColor(...colors.lightGray);
-        doc.setLineWidth(0.5);
-        doc.line(page.margin, page.h - 30, page.w - page.margin, page.h - 30);
-        doc.setFontSize(8);
-        doc.setTextColor(...colors.gray);
-        doc.setFont(undefined, 'normal');
-        doc.text('UMSafe - Confidential Report', page.margin, page.h - 18);
-        doc.text(`Page ${i} of ${totalPages}`, page.w - page.margin - 50, page.h - 18);
-      }
-
-      doc.save(filename);
-    } catch (error) {
-      console.error('PDF generation error:', error);
-      throw error;
-    }
-  };
-  
   const handleConfirmExport = () => {
     try {
       setIsExporting(true);
       setIsExportModalOpen(false);
-      exportAnalyticsPDF({
-        orientation: exportSettings.orientation,
-        include: {
-          summary: exportSettings.summary,
-          statusDistribution: exportSettings.statusDistribution,
-          charts: exportSettings.charts,
-          performance: exportSettings.performance,
+
+      // Collect chart images
+      const trendChartImage = getChartImage(trendChartRef);
+      const performanceChartImage = getChartImage(performanceChartRef);
+
+      // Build filter object
+      const filterData = {
+        Category: selectedCategory !== 'all' ? selectedCategory : 'All Categories',
+        Block: selectedBlock !== 'all' ? selectedBlock : 'All Blocks',
+        Room: selectedRoom !== 'all' ? selectedRoom : 'All Rooms',
+        Status: selectedStatus || 'All Status',
+        Priority: selectedPriority || 'All Priorities',
+        'Assigned To': selectedOfficer !== 'all' ? officerOptions.find(o => o.value === selectedOfficer)?.label || selectedOfficer : 'All Officers'
+      };
+
+      // Call the modular analytics PDF generator
+      generateAnalyticsPDF(
+        {
+          orientation: exportSettings.orientation,
+          include: {
+            summary: exportSettings.summary,
+            statusDistribution: exportSettings.statusDistribution,
+            charts: exportSettings.charts,
+            performance: exportSettings.performance,
+          },
+          filename: buildFileName(exportSettings.filename || 'analytics-report')
         },
-        filename: buildFileName(exportSettings.filename || 'analytics-report')
-      });
+        dateRange,
+        filterData,
+        complaints,
+        metrics,
+        officerStats,
+        feedbackMetrics,
+        trendChartImage,
+        performanceChartImage
+      );
     } catch (e) {
       console.error('PDF export failed', e);
       alert('Failed to generate PDF: ' + e.message);
@@ -1694,32 +1473,32 @@ function App() {
   // COMPUTED METRICS (useMemo)
   // ============================================================================
   
-  // Calculate summary metrics (total, resolved, in-progress, open, resolution rate)
+  // Calculate summary metrics (total, resolved, in-progress, open, closed, resolution rate)
   const metrics = useMemo(() => {
     const total = complaints?.length || 0;
     const resolved =
       complaints?.filter((c) => {
         const s = (c.status || "").toLowerCase();
-        return (
-          s === "resolved" || s === "closed" || s === "rejected" || c.resolvedAt || c.resolved_at
-        );
+        return s === "resolved";
+      }).length || 0;
+    const closed =
+      complaints?.filter((c) => {
+        const s = (c.status || "").toLowerCase();
+        return s === "closed";
       }).length || 0;
     const inProgress =
       complaints?.filter((c) => {
         const s = (c.status || "").toLowerCase();
         return (
           s === "inprogress" ||
-          s === "in progress" ||
-          s === "assigned" ||
-          s === "pending" ||
-          s === "in_review"
+          s === "in progress" 
         );
       }).length || 0;
-    const open = Math.max(0, total - resolved - inProgress);
+    const open = Math.max(0, total - resolved - inProgress - closed);
     const resolutionRate = total
       ? Math.round((resolved / total) * 1000) / 10
       : 0; // one decimal
-    return { total, resolved, inProgress, open, resolutionRate };
+    return { total, resolved, closed, inProgress, open, resolutionRate };
   }, [complaints]);
 
   // Month/period-over-period growth for Total Complaints based on current filters
@@ -1850,17 +1629,26 @@ function App() {
       const startPrev = new Date(endPrev.getTime() - (days - 1) * oneDay);
       const current = countBetween(startCurrent, endCurrent);
       const previous = countBetween(startPrev, endPrev);
-      let percent = 0;
+      
+      const change = current - previous;
+      
       let direction = 'flat';
-      if (previous === 0) {
-        percent = current > 0 ? 100 : 0;
-        direction = current > 0 ? 'up' : 'flat';
-      } else {
-        percent = ((current - previous) / previous) * 100;
-        direction = current > previous ? 'up' : current < previous ? 'down' : 'flat';
+      if (current > previous) {
+        direction = 'up';
+      } else if (current < previous) {
+        direction = 'down';
       }
-      percent = Math.round(percent * 10) / 10; // one decimal
-      return { label, current, previous, percent, direction };
+      
+      let displayText = '';
+      if (previous === 0 && current === 0) {
+        displayText = '0 → 0';
+      } else if (previous === 0) {
+        displayText = `0 → ${current}`;
+      } else {
+        displayText = `${change >= 0 ? '+' : ''}${change}`;
+      }
+      
+      return { label, current, previous, change, displayText, direction };
     };
     return [
       build('Year-over-Year', 365),
@@ -1870,14 +1658,12 @@ function App() {
     ];
   }, [complaints, dateRange.to]);
 
-  // Filter complaints that have explicit feedback provided flag and feedback object
   const feedbackComplaints = useMemo(() => {
     return (complaints || []).filter(
       (c) => c.isFeedbackProvided === true && c.feedback && (c.feedback.q1Rating || c.feedback.q2Rating || c.feedback.overallComment)
     );
   }, [complaints]);
 
-  // Extract common feedback themes from overallComment text
   const themeMetrics = useMemo(() => {
     const texts = feedbackComplaints
       .map(c => (c.feedback?.overallComment || '').trim())
@@ -1888,7 +1674,7 @@ function App() {
     const improvementKeywords = ['slow','delayed','unclear','confusing','late','no','lack','status','update','updates','response','detail','details','waiting','wait'];
     const freq = {};
     const nowTs = Date.now();
-    const recentWindowMs = 7 * 24 * 60 * 60 * 1000; // last 7 days for emerging
+    const recentWindowMs = 7 * 24 * 60 * 60 * 1000;
     const recentSet = new Set();
     texts.forEach((t, idx) => {
       const cleaned = t.toLowerCase().replace(/[^a-z0-9\s]/g,' ');
@@ -1973,7 +1759,7 @@ function App() {
     
     // Initialize all officers from officerOptions with zero values
     officerOptions.forEach((officer) => {
-      map[officer._id] = { total: 0, resolved: 0, responseTimes: [], resolutionTimes: [], sats: [] };
+      map[officer._id] = { name: officer.name, total: 0, resolved: 0, responseTimes: [], resolutionTimes: [], sats: [] };
     });
     
     // Process complaints and update officer stats
@@ -1981,38 +1767,74 @@ function App() {
       const officerKey = c.assignedTo || c.adminId || c.assigned_to;
       
       // Only process if officer is assigned (not Unassigned or null)
-      if (officerKey && officerKey !== "Unassigned" && map[officerKey]) {
+      if (officerKey && officerKey !== "Unassigned") {
+        if (!map[officerKey]) {
+          map[officerKey] = { name: c.adminName || c.assignedName || "Unknown", total: 0, resolved: 0, responseTimes: [], resolutionTimes: [], sats: [] };
+        }
+
         map[officerKey].total += 1;
         const s = (c.status || "").toString().toLowerCase();
         if (s === "resolved" || s === "closed") map[officerKey].resolved += 1;
 
-        // Calculate Response Time: from "Report Submitted" to "Admin Assigned" using timelineHistory
-        if (c.timelineHistory && Array.isArray(c.timelineHistory)) {
-          const submittedEvent = c.timelineHistory.find(evt => evt.actionTitle === "Report Submitted");
-          const assignedEvent = c.timelineHistory.find(evt => evt.actionTitle === "Admin Assigned");
+        // Calculate Response Time and Resolution Time using reportHistories
+        if (c.reportHistories && Array.isArray(c.reportHistories)) {
+          // Sort events by createdAt ascending to find most recent assignment before chat/resolution
+          const sortedEvents = [...c.reportHistories].sort((a, b) => 
+            Date.parse(a.createdAt) - Date.parse(b.createdAt)
+          );
           
-          if (submittedEvent && assignedEvent) {
-            const submittedTime = Date.parse(submittedEvent.createdAt);
-            const assignedTime = Date.parse(assignedEvent.createdAt);
-            if (!isNaN(submittedTime) && !isNaN(assignedTime) && assignedTime > submittedTime) {
-              const responseHrs = (assignedTime - submittedTime) / (1000 * 60 * 60);
-              map[officerKey].responseTimes.push(responseHrs);
+          // Find "Chat initiated" event
+          const chatroomEvent = sortedEvents.find(evt => 
+            evt.actionTitle === "Chat initiated" ||
+            evt.actionTitle === "Chatroom Initial" || 
+            evt.actionTitle === "Chatroom Created" ||
+            evt.actionTitle === "Chat Started"
+          );
+          
+          // Calculate Response Time: from most recent "Admin Assigned" before chat to "Chat initiated"
+          if (chatroomEvent) {
+            const chatroomTime = Date.parse(chatroomEvent.createdAt);
+            // Find the most recent "Admin Assigned" event before the chatroom event
+            const assignedEvents = sortedEvents.filter(evt => 
+              evt.actionTitle === "Admin Assigned" && 
+              Date.parse(evt.createdAt) < chatroomTime
+            );
+            const mostRecentAssignment = assignedEvents[assignedEvents.length - 1];
+            
+            if (mostRecentAssignment) {
+              const assignedTime = Date.parse(mostRecentAssignment.createdAt);
+              if (!isNaN(assignedTime) && !isNaN(chatroomTime) && chatroomTime > assignedTime) {
+                const responseHrs = (chatroomTime - assignedTime) / (1000 * 60 * 60);
+                map[officerKey].responseTimes.push(responseHrs);
+              }
             }
           }
 
-          // Calculate Resolution Time: from "Admin Assigned" to "Status changed to Resolved/Closed" using timelineHistory
-          if ((s === "resolved" || s === "closed") && assignedEvent) {
-            const resolvedEvent = c.timelineHistory.find(evt => 
-              evt.actionTitle === "Status Updated" && 
-              (evt.actionDetails?.includes("Resolved") || evt.actionDetails?.includes("Closed"))
+          // Calculate Resolution Time: from most recent "Admin Assigned" to "Case Resolved"
+          // This handles both cases: with or without chatroom interaction
+          if (s === "resolved" || s === "closed") {
+            const resolvedEvent = sortedEvents.find(evt => 
+              evt.actionTitle === "Case Resolved" || 
+              evt.actionTitle === "Case Closed" ||
+              evt.actionTitle === "Status Updated to Resolved" ||
+              evt.actionTitle === "Status Updated to Closed"
             );
             
             if (resolvedEvent) {
-              const assignedTime = Date.parse(assignedEvent.createdAt);
               const resolvedTime = Date.parse(resolvedEvent.createdAt);
-              if (!isNaN(assignedTime) && !isNaN(resolvedTime) && resolvedTime > assignedTime) {
-                const resolutionHrs = (resolvedTime - assignedTime) / (1000 * 60 * 60);
-                map[officerKey].resolutionTimes.push(resolutionHrs);
+              // Find the most recent "Admin Assigned" event before the resolved event
+              const assignedEvents = sortedEvents.filter(evt => 
+                evt.actionTitle === "Admin Assigned" && 
+                Date.parse(evt.createdAt) < resolvedTime
+              );
+              const mostRecentAssignment = assignedEvents[assignedEvents.length - 1];
+              
+              if (mostRecentAssignment) {
+                const assignedTime = Date.parse(mostRecentAssignment.createdAt);
+                if (!isNaN(assignedTime) && !isNaN(resolvedTime) && resolvedTime > assignedTime) {
+                  const resolutionHrs = (resolvedTime - assignedTime) / (1000 * 60 * 60);
+                  map[officerKey].resolutionTimes.push(resolutionHrs);
+                }
               }
             }
           }
@@ -2030,16 +1852,15 @@ function App() {
       }
     });
 
-    // Create list from all officers (including those with 0 cases)
-    const list = officerOptions.map((officer) => {
-      const item = map[officer._id];
+    // Create list from all officers seen in options or complaints (including those with 0 cases)
+    const list = Object.entries(map).map(([id, item]) => {
       const resolutionRate = item.total > 0 ? Math.round((item.resolved / item.total) * 1000) / 10 : 0;
       const avgResponseTime = item.responseTimes.length ? Math.round((item.responseTimes.reduce((a, b) => a + b, 0) / item.responseTimes.length) * 10) / 10 : 0;
       const avgResolutionTime = item.resolutionTimes.length ? Math.round((item.resolutionTimes.reduce((a, b) => a + b, 0) / item.resolutionTimes.length) * 10) / 10 : 0;
       const avgSat = item.sats.length ? Math.round((item.sats.reduce((a, b) => a + b, 0) / item.sats.length) * 10) / 10 : null;
       return {
-        id: officer._id,
-        name: officer.name,
+        id,
+        name: item.name || "Unknown",
         total: item.total,
         resolved: item.resolved,
         resolutionRate,
@@ -2323,15 +2144,8 @@ function App() {
   ]);
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col relative">
-      {/* Loading Overlay */}
-      {isLoading && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white p-4 rounded-lg flex items-center">
-            <FontAwesomeIcon icon={faSpinner} spin className="text-blue-600 text-2xl mr-3" />
-            <span className="text-gray-700">Applying filters...</span>
-          </div>
-        </div>
-      )}
+      {/* Initial Loading Overlay */}
+      {isLoading && <LoadingOverlay />}
       {/* Toast Notification */}
       {showToast && (
         <div className="fixed bottom-4 right-4 bg-green-500 text-white px-4 py-2 rounded-lg shadow-lg z-50 animate-fade-in-up">
@@ -2367,365 +2181,352 @@ function App() {
                 </button>
               </div>
             </div>
-            {/* Filter Section */}
-            <div className="bg-white shadow rounded-lg mb-6">
-              <div className="p-4 border-b border-gray-200">
-                <div className="flex justify-between items-center mb-4">
-                  <h2 className="text-lg font-medium text-gray-800">
-                    Filter Analytics
-                  </h2>
-                    <button
-                    onClick={() => setIsFilterCollapsed(!isFilterCollapsed)}
-                    className="text-gray-500 hover:text-gray-700 focus:outline-none cursor-pointer"
+
+            {/* Floating Filter Toggle Button */}
+            {isFilterCollapsed && (
+              <button
+                onClick={() => setIsFilterCollapsed(false)}
+                className="fixed top-24 right-6 z-40 bg-blue-600 hover:bg-blue-700 text-white rounded-full p-3 shadow-lg transition-all duration-200 hover:scale-110"
+                aria-label="Open filters"
+              >
+                <FontAwesomeIcon icon={faFilter} className="text-lg" />
+              </button>
+            )}
+
+            {/* Filter Drawer Backdrop */}
+            {!isFilterCollapsed && (
+              <div
+                className="fixed inset-0 bg-black bg-opacity-50 z-40 transition-opacity duration-300"
+                onClick={() => setIsFilterCollapsed(true)}
+                aria-hidden="true"
+              />
+            )}
+
+            {/* Filter Section - Right Side Drawer */}
+            <div
+              className={`fixed top-0 right-0 h-full w-full sm:w-96 bg-white shadow-2xl z-50 transform transition-transform duration-300 ease-in-out overflow-y-auto ${
+                isFilterCollapsed ? 'translate-x-full' : 'translate-x-0'
+              }`}
+            >
+              <div className="sticky top-0 bg-white border-b border-gray-200 p-5 z-10">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                      <FontAwesomeIcon icon={faFilter} className="text-blue-600" />
+                      Filter Analytics
+                    </h2>
+                    <p className="text-sm text-gray-500 mt-1">Refine your data view</p>
+                  </div>
+                  <button
+                    onClick={() => setIsFilterCollapsed(true)}
+                    className="text-gray-400 hover:text-gray-600 focus:outline-none cursor-pointer transition-colors"
+                    aria-label="Close filters"
                   >
-                      <FontAwesomeIcon icon={isFilterCollapsed ? faChevronDown : faChevronUp} className="text-sm" />
+                    <FontAwesomeIcon icon={faTimes} className="text-xl" />
                   </button>
                 </div>
-                {!isFilterCollapsed && (
-                  <>
-                    {/* Quick date presets */}
-                    <div className="flex flex-wrap items-center gap-2 mb-3">
-                      <span className="text-xs text-gray-500 mr-1">Quick range:</span>
-                      <button
-                        type="button"
-                        className="text-xs px-2 py-1 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-700 cursor-pointer"
-                        onClick={() => {
-                          const today = new Date();
-                          const from = new Date();
-                          from.setDate(today.getDate() - 6);
-                          setDateRange({ from: formatDate(from), to: formatDate(today) });
-                        }}
-                      >
-                        Last 7 days
-                      </button>
-                      <button
-                        type="button"
-                        className="text-xs px-2 py-1 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-700 cursor-pointer"
-                        onClick={() => {
-                          const today = new Date();
-                          const from = new Date();
-                          from.setDate(today.getDate() - 29);
-                          setDateRange({ from: formatDate(from), to: formatDate(today) });
-                        }}
-                      >
-                        Last 30 days
-                      </button>
-                      <button
-                        type="button"
-                        className="text-xs px-2 py-1 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-700 cursor-pointer"
-                        onClick={() => {
-                          const today = new Date();
-                          const from = new Date(today.getFullYear(), today.getMonth(), 1);
-                          setDateRange({ from: formatDate(from), to: formatDate(today) });
-                        }}
-                      >
-                        This month
-                      </button>
-                      <button
-                        type="button"
-                        className="text-xs px-2 py-1 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-700 cursor-pointer"
-                        onClick={() => {
-                          const today = new Date();
-                          const from = new Date(today.getFullYear(), 0, 1);
-                          setDateRange({ from: formatDate(from), to: formatDate(today) });
-                        }}
-                      >
-                        This year
-                      </button>
-                    </div>
-
-                    {/* Active filter chips */}
-                    {(hasCustomDateRange || selectedCategory !== "all" || selectedBlock !== "all" || selectedRoom !== "all" || selectedStatus || selectedPriority || selectedOfficer !== "all") && (
-                      <div className="flex flex-wrap gap-2 mb-4">
-                        {hasCustomDateRange && (
-                          <span className="inline-flex items-center text-xs bg-blue-50 text-blue-700 px-2 py-1 rounded-full">
-                            Date: {formatDMY(dateRange.from)} → {formatDMY(dateRange.to)}
-                              <button className="ml-2 text-blue-600 hover:text-blue-800" onClick={() => clearFilter("date")} aria-label="Clear date filter">
-                                <FontAwesomeIcon icon={faTimes} />
-                              </button>
-                          </span>
-                        )}
-                        {selectedCategory !== "all" && (
-                          <span className="inline-flex items-center text-xs bg-gray-100 text-gray-700 px-2 py-1 rounded-full">
-                            Category: {selectedCategory}
-                              <button className="ml-2 text-gray-500 hover:text-gray-700" onClick={() => clearFilter("category")} aria-label="Clear category filter">
-                                <FontAwesomeIcon icon={faTimes} />
-                              </button>
-                          </span>
-                        )}
-                        {selectedBlock !== "all" && (
-                          <span className="inline-flex items-center text-xs bg-gray-100 text-gray-700 px-2 py-1 rounded-full">
-                            Block: {selectedBlock}
-                              <button className="ml-2 text-gray-500 hover:text-gray-700" onClick={() => clearFilter("block")} aria-label="Clear block filter">
-                                <FontAwesomeIcon icon={faTimes} />
-                              </button>
-                          </span>
-                        )}
-                        {selectedRoom !== "all" && (
-                          <span className="inline-flex items-center text-xs bg-gray-100 text-gray-700 px-2 py-1 rounded-full">
-                            Room: {selectedRoom}
-                              <button className="ml-2 text-gray-500 hover:text-gray-700" onClick={() => clearFilter("room")} aria-label="Clear room filter">
-                                <FontAwesomeIcon icon={faTimes} />
-                              </button>
-                          </span>
-                        )}
-                        {selectedStatus && (
-                          <span className="inline-flex items-center text-xs bg-gray-100 text-gray-700 px-2 py-1 rounded-full">
-                            Status: {selectedStatus}
-                              <button className="ml-2 text-gray-500 hover:text-gray-700" onClick={() => clearFilter("status")} aria-label="Clear status filter">
-                                <FontAwesomeIcon icon={faTimes} />
-                              </button>
-                          </span>
-                        )}
-                        {selectedPriority && (
-                          <span className="inline-flex items-center text-xs bg-gray-100 text-gray-700 px-2 py-1 rounded-full">
-                            Priority: {selectedPriority}
-                              <button className="ml-2 text-gray-500 hover:text-gray-700" onClick={() => clearFilter("priority")} aria-label="Clear priority filter">
-                                <FontAwesomeIcon icon={faTimes} />
-                              </button>
-                          </span>
-                        )}
-                        {selectedOfficer !== "all" && (
-                          <span className="inline-flex items-center text-xs bg-gray-100 text-gray-700 px-2 py-1 rounded-full">
-                            Assigned: {(
-                              officerOptions.find((o) => String(o._id) === String(selectedOfficer))?.name || selectedOfficer
-                            )}
-                              <button className="ml-2 text-gray-500 hover:text-gray-700" onClick={() => clearFilter("officer")} aria-label="Clear officer filter">
-                                <FontAwesomeIcon icon={faTimes} />
-                              </button>
-                          </span>
-                        )}
-                      </div>
-                    )}
-                    {/* Unified responsive filter grid */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
-                      <div>
-                        <label
-                          htmlFor="date-from"
-                          className="block text-sm font-medium text-gray-700 mb-1"
-                        >
-                          From Date
-                        </label>
-                        <div className="relative">
-                          <FontAwesomeIcon icon={faCalendarAlt} className="text-gray-400 absolute left-3 top-2.5 pointer-events-none" />
-                          <input
-                            type="date"
-                            id="date-from"
-                            className="pl-9 h-10 border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 block w-full sm:text-sm"
-                            value={dateRange.from}
-                            onChange={(e) =>
-                              setDateRange({ ...dateRange, from: e.target.value })
-                            }
-                          />
-                        </div>
-                      </div>
-                      <div>
-                        <label
-                          htmlFor="date-to"
-                          className="block text-sm font-medium text-gray-700 mb-1"
-                        >
-                          To Date
-                        </label>
-                        <div className="relative">
-                          <FontAwesomeIcon icon={faCalendarCheck} className="text-gray-400 absolute left-3 top-2.5 pointer-events-none" />
-                          <input
-                            type="date"
-                            id="date-to"
-                            className="pl-9 h-10 border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 block w-full sm:text-sm"
-                            value={dateRange.to}
-                            onChange={(e) =>
-                              setDateRange({ ...dateRange, to: e.target.value })
-                            }
-                          />
-                        </div>
-                      </div>
-                      <div>
-                        <label
-                          htmlFor="category-filter"
-                          className="block text-sm font-medium text-gray-700 mb-1"
-                        >
-                          Category
-                        </label>
-                        <div className="relative">
-                          <FontAwesomeIcon icon={faTags} className="text-gray-400 absolute left-3 top-2.5 pointer-events-none" />
-                          <select
-                            id="category-filter"
-                            className="peer block w-full pl-9 pr-10 h-10 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md appearance-none"
-                            style={{ maxHeight: '300px', overflowY: 'auto' }}
-                            value={selectedCategory}
-                            onChange={(e) =>
-                              setSelectedCategory(e.target.value)
-                            }
-                          >
-                            <option value="all">All Categories</option>
-                            {categoryOptions.map((name) => (
-                              <option key={name} value={name}>
-                                {name}
-                              </option>
-                            ))}
-                          </select>
-                          <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none transition-transform duration-200 peer-focus:rotate-180">
-                            <FontAwesomeIcon icon={faChevronDown} className="text-gray-400 transition-colors duration-200 peer-focus:text-blue-500" />
-                          </div>
-                        </div>
-                      </div>
-                      <div>
-                        <label
-                          htmlFor="block-filter"
-                          className="block text-sm font-medium text-gray-700 mb-1"
-                        >
-                          Block
-                        </label>
-                        <div className="relative">
-                          <FontAwesomeIcon icon={faLayerGroup} className="text-gray-400 absolute left-3 top-2.5 pointer-events-none" />
-                          <select
-                            id="block-filter"
-                            className="peer block w-full pl-9 pr-10 h-10 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md appearance-none"
-                            style={{ maxHeight: '300px', overflowY: 'auto' }}
-                            value={selectedBlock}
-                            onChange={(e) => setSelectedBlock(e.target.value)}
-                          >
-                            <option value="all">All Blocks</option>
-                            {blockOptions.map((name) => (
-                              <option key={name} value={name}>
-                                {name}
-                              </option>
-                            ))}
-                          </select>
-                          <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none transition-transform duration-200 peer-focus:rotate-180">
-                            <FontAwesomeIcon icon={faChevronDown} className="text-gray-400 transition-colors duration-200 peer-focus:text-blue-500" />
-                          </div>
-                        </div>
-                      </div>
-                      {/* Room */}
-                      <div>
-                        <label
-                          htmlFor="room-filter"
-                          className="block text-sm font-medium text-gray-700 mb-1"
-                        >
-                          Room
-                        </label>
-                        <div className="relative">
-                          <FontAwesomeIcon icon={faDoorClosed} className="text-gray-400 absolute left-3 top-2.5 pointer-events-none" />
-                          <select
-                            id="room-filter"
-                            className="peer block w-full pl-9 pr-10 h-10 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md appearance-none"
-                            value={selectedRoom}
-                            onChange={(e) => setSelectedRoom(e.target.value)}
-                            disabled={selectedBlock === "all" || roomOptions.length === 0}
-                          >
-                            <option value="all">All Rooms</option>
-                            {roomOptions.map((name) => (
-                              <option key={name} value={name}>
-                                {name}
-                              </option>
-                            ))}
-                          </select>
-                          <div className={`absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none transition-transform duration-200 ${selectedBlock === "all" || roomOptions.length === 0 ? "opacity-40" : "peer-focus:rotate-180"}`}>
-                            <FontAwesomeIcon icon={faChevronDown} className="text-gray-400 transition-colors duration-200 peer-focus:text-blue-500" />
-                          </div>
-                        </div>
-                        {selectedBlock === "all" && (
-                          <p className="mt-1 text-xs text-gray-400">Select a block to choose rooms</p>
-                        )}
-                      </div>
-                      <div>
-                        <label
-                          htmlFor="status-filter"
-                          className="block text-sm font-medium text-gray-700 mb-1"
-                        >
-                          Status
-                        </label>
-                        <div className="relative">
-                          <FontAwesomeIcon icon={faInfoCircle} className="text-gray-400 absolute left-3 top-2.5 pointer-events-none" />
-                          <select
-                            id="status-filter"
-                            className="peer block w-full pl-9 pr-10 h-10 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md appearance-none"
-                            value={selectedStatus}
-                            onChange={(e) => setSelectedStatus(e.target.value)}
-                          >
-                            <option value="">All</option>
-                            <option value="Open">Open</option>
-                            <option value="In Progress">In Progress</option>
-                            <option value="Resolved">Resolved</option>
-                            <option value="Closed">Closed</option>
-                          </select>
-                          <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none transition-transform duration-200 peer-focus:rotate-180">
-                            <FontAwesomeIcon icon={faChevronDown} className="text-gray-400 transition-colors duration-200 peer-focus:text-blue-500" />
-                          </div>
-                        </div>
-                      </div>
-                      <div>
-                        <label
-                          htmlFor="priority-filter"
-                          className="block text-sm font-medium text-gray-700 mb-1"
-                        >
-                          Priority
-                        </label>
-                        <div className="relative">
-                          <FontAwesomeIcon icon={faExclamationTriangle} className="text-gray-400 absolute left-3 top-2.5 pointer-events-none" />
-                          <select
-                            id="priority-filter"
-                            className="peer block w-full pl-9 pr-10 h-10 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md appearance-none"
-                            value={selectedPriority}
-                            onChange={(e) =>
-                              setSelectedPriority(e.target.value)
-                            }
-                          >
-                            <option value="">All</option>
-                            <option value="High">High</option>
-                            <option value="Medium">Medium</option>
-                            <option value="Low">Low</option>
-                          </select>
-                          <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none transition-transform duration-200 peer-focus:rotate-180">
-                            <FontAwesomeIcon icon={faChevronDown} className="text-gray-400 transition-colors duration-200 peer-focus:text-blue-500" />
-                          </div>
-                        </div>
-                      </div>
-                      <div>
-                        <label
-                          htmlFor="officer-filter"
-                          className="block text-sm font-medium text-gray-700 mb-1"
-                        >
-                          Assigned To
-                        </label>
-                        <div className="relative">
-                          <FontAwesomeIcon icon={faUserShield} className="text-gray-400 absolute left-3 top-2.5 pointer-events-none" />
-                          <select
-                            id="officer-filter"
-                            className="peer block w-full pl-9 pr-10 h-10 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md appearance-none"
-                            style={{ maxHeight: '300px', overflowY: 'auto' }}
-                            value={selectedOfficer}
-                            onChange={(e) => setSelectedOfficer(e.target.value)}
-                          >
-                            <option value="all">All</option>
-                            <option value="Unassigned">Unassigned</option>
-                            {officerOptions.map((o) => (
-                              <option key={o._id} value={o._id}>
-                                {o.name}
-                              </option>
-                            ))}
-                          </select>
-                          <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none transition-transform duration-200 peer-focus:rotate-180">
-                            <FontAwesomeIcon icon={faChevronDown} className="text-gray-400 transition-colors duration-200 peer-focus:text-blue-500" />
-                          </div>
-                        </div>
-                      </div>
-                      {/* Reset button (visible on all tabs; stick to end/right of grid) */}
-                      <div className="col-span-full sm:col-start-[-1] justify-self-end">
-                        <button
-                          onClick={resetFilters}
-                          className="!rounded-button whitespace-nowrap inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none cursor-pointer"
-                        >
-                          <FontAwesomeIcon icon={faUndo} className="mr-2" />
-                          Reset Filters
-                        </button>
-                      </div>
-                    </div>
-                  </>
-                )}
               </div>
-              <div className="p-4 bg-gray-50 border-b border-gray-200">
+
+              <div className="p-5">
+                <div className="space-y-6">
+                  {/* Date Range - top priority */}
+                  <section className="border-b border-gray-200 pb-6">
+                    <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                      <FontAwesomeIcon icon={faCalendarAlt} className="text-blue-600" />
+                      Date Range
+                    </h3>
+                    <p className="text-xs text-gray-500 mb-3">Quick presets:</p>
+                    <div className="flex flex-wrap gap-2 mb-4">
+                      <button
+                        onClick={() => handleQuickDate(7)}
+                        className="px-3 py-1.5 text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-md transition-colors cursor-pointer"
+                      >
+                        Last 7 Days
+                      </button>
+                      <button
+                        onClick={() => handleQuickDate(30)}
+                        className="px-3 py-1.5 text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-md transition-colors cursor-pointer"
+                      >
+                        Last 30 Days
+                      </button>
+                      <button
+                        onClick={() => handleQuickDate('thisMonth')}
+                        className="px-3 py-1.5 text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-md transition-colors cursor-pointer"
+                      >
+                        This Month
+                      </button>
+                      <button
+                        onClick={() => handleQuickDate('thisYear')}
+                        className="px-3 py-1.5 text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-md transition-colors cursor-pointer"
+                      >
+                        This Year
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3 mt-3">
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1.5">From</label>
+                        <input
+                          type="date"
+                          value={dateRange.from}
+                          onChange={(e) => {
+                            setDateRange({ ...dateRange, from: e.target.value });
+                            setHasCustomDateRange(true);
+                          }}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm cursor-pointer"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1.5">To</label>
+                        <input
+                          type="date"
+                          value={dateRange.to}
+                          onChange={(e) => {
+                            setDateRange({ ...dateRange, to: e.target.value });
+                            setHasCustomDateRange(true);
+                          }}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm cursor-pointer"
+                        />
+                      </div>
+                    </div>
+                  </section>
+
+                  {/* Location */}
+                  <section className="border-b border-gray-200 pb-6">
+                    <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                      <FontAwesomeIcon icon={faMapMarkerAlt} className="text-blue-600" />
+                      Location
+                    </h3>
+                    <div className="space-y-3">
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1.5">Block</label>
+                        <select
+                          value={selectedBlock}
+                          onChange={(e) => {
+                            setSelectedBlock(e.target.value);
+                            setSelectedRoom('');
+                          }}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm cursor-pointer"
+                        >
+                          <option value="">All Blocks</option>
+                          {blocks.map((block) => (
+                            <option key={block} value={block}>
+                              {block}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1.5">Room</label>
+                        <select
+                          value={selectedRoom}
+                          onChange={(e) => setSelectedRoom(e.target.value)}
+                          disabled={!selectedBlock}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm disabled:bg-gray-100 disabled:cursor-not-allowed cursor-pointer"
+                        >
+                          <option value="">All Rooms</option>
+                          {filteredRooms.map((room) => (
+                            <option key={room} value={room}>
+                              {room}
+                            </option>
+                          ))}
+                        </select>
+                        {!selectedBlock && (
+                          <p className="text-xs text-gray-500 mt-1.5">
+                            Select a block to choose rooms
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </section>
+
+                  {/* Complaint Details */}
+                  <section className="border-b border-gray-200 pb-6">
+                    <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                      <FontAwesomeIcon icon={faClipboardList} className="text-blue-600" />
+                      Complaint Details
+                    </h3>
+                    <div className="space-y-3">
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1.5">Category</label>
+                        <select
+                          value={selectedCategory}
+                          onChange={(e) => setSelectedCategory(e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm cursor-pointer"
+                        >
+                          <option value="all">All Categories</option>
+                          {categories && categories.length > 0 ? (
+                            categories.map((cat) => (
+                              <option key={cat} value={cat}>
+                                {cat}
+                              </option>
+                            ))
+                          ) : (
+                            <option disabled>No categories available</option>
+                          )}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1.5">Status</label>
+                        <select
+                          value={selectedStatus}
+                          onChange={(e) => setSelectedStatus(e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm cursor-pointer"
+                        >
+                          <option value="">All Statuses</option>
+                          <option value="opened">Opened</option>
+                          <option value="inprogress">In Progress</option>
+                          <option value="resolved">Resolved</option>
+                          <option value="closed">Closed</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1.5">Priority</label>
+                        <select
+                          value={selectedPriority}
+                          onChange={(e) => setSelectedPriority(e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm cursor-pointer"
+                        >
+                          <option value="">All Priorities</option>
+                          <option value="low">Low</option>
+                          <option value="medium">Medium</option>
+                          <option value="high">High</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1.5">Assigned Officer</label>
+                        <select
+                          value={selectedOfficer}
+                          onChange={(e) => setSelectedOfficer(e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm cursor-pointer"
+                        >
+                          <option value="all">All Officers</option>
+                          {officers && officers.length > 0 ? (
+                            officers.map((officer) => (
+                              <option key={officer._id} value={officer._id}>
+                                {officer.name}
+                              </option>
+                            ))
+                          ) : (
+                            <option disabled>No officers available</option>
+                          )}
+                        </select>
+                      </div>
+                    </div>
+                  </section>
+
+                  {/* Applied Filters */}
+                  <section className="border-b border-gray-200 pb-6">
+                    <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                      <FontAwesomeIcon icon={faTags} className="text-blue-600" />
+                      Applied Filters
+                    </h3>
+                    <div className="flex flex-wrap gap-2">
+                      {hasCustomDateRange && (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-blue-50 text-blue-700 rounded-md text-xs font-medium">
+                          {dateRange.from} to {dateRange.to}
+                          <button
+                            onClick={() => clearFilter('dateRange')}
+                            className="hover:text-blue-900 cursor-pointer"
+                          >
+                            
+                          </button>
+                        </span>
+                      )}
+                      {selectedCategory && (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-purple-50 text-purple-700 rounded-md text-xs font-medium">
+                          {selectedCategory}
+                          <button
+                            onClick={() => clearFilter('category')}
+                            className="hover:text-purple-900 cursor-pointer"
+                          >
+                            
+                          </button>
+                        </span>
+                      )}
+                      {selectedBlock && (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-green-50 text-green-700 rounded-md text-xs font-medium">
+                          Block: {selectedBlock}
+                          <button
+                            onClick={() => clearFilter('block')}
+                            className="hover:text-green-900 cursor-pointer"
+                          >
+                            
+                          </button>
+                        </span>
+                      )}
+                      {selectedRoom && (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-teal-50 text-teal-700 rounded-md text-xs font-medium">
+                          Room: {selectedRoom}
+                          <button
+                            onClick={() => clearFilter('room')}
+                            className="hover:text-teal-900 cursor-pointer"
+                          >
+                            
+                          </button>
+                        </span>
+                      )}
+                      {selectedStatus && (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-yellow-50 text-yellow-700 rounded-md text-xs font-medium">
+                          Status: {selectedStatus}
+                          <button
+                            onClick={() => clearFilter('status')}
+                            className="hover:text-yellow-900 cursor-pointer"
+                          >
+                            
+                          </button>
+                        </span>
+                      )}
+                      {selectedPriority && (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-red-50 text-red-700 rounded-md text-xs font-medium">
+                          Priority: {selectedPriority}
+                          <button
+                            onClick={() => clearFilter('priority')}
+                            className="hover:text-red-900 cursor-pointer"
+                          >
+                            
+                          </button>
+                        </span>
+                      )}
+                      {selectedOfficer && selectedOfficer !== "all" && (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-indigo-50 text-indigo-700 rounded-md text-xs font-medium">
+                          Officer: {officers.find((o) => o._id === selectedOfficer)?.name || selectedOfficer}
+                          <button
+                            onClick={() => clearFilter('officer')}
+                            className="hover:text-indigo-900 cursor-pointer"
+                          >
+                            
+                          </button>
+                        </span>
+                      )}
+                      {!hasCustomDateRange &&
+                        !selectedCategory &&
+                        !selectedBlock &&
+                        !selectedRoom &&
+                        !selectedStatus &&
+                        !selectedPriority &&
+                        !selectedOfficer && (
+                          <p className="text-xs text-gray-500">No filters applied</p>
+                        )}
+                    </div>
+                  </section>
+                </div>
+              </div>
+
+              {/* Action Area - Sticky Footer */}
+              <div className="sticky bottom-0 bg-white border-t border-gray-200 p-4 shadow-lg">
+                <button
+                  onClick={resetFilters}
+                  className="w-full inline-flex items-center justify-center px-4 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 rounded-lg shadow-sm focus:outline-none cursor-pointer transition-colors"
+                >
+                  <FontAwesomeIcon icon={faUndo} className="mr-2" />
+                  Reset All Filters
+                </button>
+              </div>
+            </div>
+
+            {/* Tab Switcher */}
+            <div className="bg-white shadow rounded-lg mb-6">
+              <div className="p-4 border-b border-gray-200">
                 <div className="flex flex-wrap gap-2">
                   <button
                     onClick={() => setActiveTab("overview")}
@@ -2789,7 +2590,7 @@ function App() {
             {activeTab === "overview" && (
               <>
                 {/* Summary Cards */}
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+                <div className="grid grid-cols-1 md:grid-cols-5 gap-6 mb-6">
                   <div className="bg-white shadow rounded-lg p-6">
                     <div className="flex items-center">
                       <div className="flex-shrink-0 rounded-md bg-blue-100 p-3">
@@ -2901,9 +2702,36 @@ function App() {
                       </span>
                     </div>
                   </div>
+                  <div className="bg-white shadow rounded-lg p-6">
+                    <div className="flex items-center">
+                      <div className="flex-shrink-0 rounded-md bg-gray-100 p-3">
+                        <FontAwesomeIcon icon={faDoorClosed} className="text-gray-600 text-xl" />
+                      </div>
+                      <div className="ml-4">
+                        <h3 className="text-sm font-medium text-gray-500">
+                          Closed
+                        </h3>
+                        <p className="text-2xl font-semibold text-gray-900">
+                          {metrics.closed}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="mt-4 flex items-center text-sm">
+                      <span className="text-gray-900 font-medium">
+                        {metrics.total
+                          ? Math.round((metrics.closed / metrics.total) * 1000) /
+                            10
+                          : 0}
+                        %
+                      </span>
+                      <span className="text-gray-500 ml-2">
+                        of total complaints
+                      </span>
+                    </div>
+                  </div>
                 </div>
                 {/* Main Charts */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                <div className="grid grid-cols-1 gap-6 mb-6">
                   <div className="bg-white shadow rounded-lg p-6">
                     <h3 className="text-lg font-medium text-gray-900 mb-4">
                       Complaint Type Distribution
@@ -2917,24 +2745,6 @@ function App() {
                       <div className="h-[350px] flex items-center justify-center text-gray-500">
                         <div className="text-center">
                           <FontAwesomeIcon icon={faChartPie} className="text-4xl mb-2" />
-                          <p>No data available for the selected filters</p>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                  <div className="bg-white shadow rounded-lg p-6">
-                    <h3 className="text-lg font-medium text-gray-900 mb-4">
-                      Time-Based Trend Analysis
-                    </h3>
-                    <div
-                      ref={trendChartRef}
-                      className="w-full"
-                      style={{ height: "350px", display: hasData ? "block" : "none" }}
-                    ></div>
-                    {!hasData && (
-                      <div className="h-[350px] flex items-center justify-center text-gray-500">
-                        <div className="text-center">
-                          <FontAwesomeIcon icon={faChartLine} className="text-4xl mb-2" />
                           <p>No data available for the selected filters</p>
                         </div>
                       </div>
@@ -3047,8 +2857,8 @@ function App() {
                           {growthMetrics.map((g) => (
                             <li key={g.label} className="flex justify-between items-center">
                               <span className="text-sm text-gray-600">{g.label}:</span>
-                              <span className={`text-sm font-medium ${g.direction === 'up' ? 'text-green-600' : g.direction === 'down' ? 'text-red-600' : 'text-gray-600'}`}>
-                                {g.direction === 'down' ? '' : g.percent >= 0 ? '+' : ''}{g.percent}%
+                              <span className={`text-lg font-bold ${g.direction === 'up' ? 'text-green-600' : g.direction === 'down' ? 'text-red-600' : 'text-gray-600'}`}>
+                                {g.change >= 0 ? '+' : ''}{g.change}
                               </span>
                             </li>
                           ))}
@@ -3072,7 +2882,7 @@ function App() {
                 <div className="bg-white shadow rounded-lg p-6 mb-6">
                   <h4 className="text-md font-semibold text-gray-900 mb-4 flex items-center">
                     <FontAwesomeIcon icon={faLayerGroup} className="mr-2 text-purple-600" />
-                    Top 10 Blocks by Complaint Volume
+                    Blocks by Complaint Volume
                   </h4>
                   <div className="overflow-x-auto">
                     <table className="min-w-full divide-y divide-gray-200">
@@ -3111,7 +2921,7 @@ function App() {
                 <div className="bg-white shadow rounded-lg p-6 mb-6">
                   <h4 className="text-md font-semibold text-gray-900 mb-4 flex items-center">
                     <FontAwesomeIcon icon={faDoorClosed} className="mr-2 text-red-600" />
-                    Top 15 Rooms by Complaint Volume
+                    Rooms by Complaint Volume
                   </h4>
                   <div className="overflow-x-auto">
                     <table className="min-w-full divide-y divide-gray-200">
@@ -3154,6 +2964,13 @@ function App() {
                                     <div className="bg-green-500 h-1.5 rounded" style={{ width: `${room.total > 0 ? (room.resolved / room.total) * 100 : 0}%` }}></div>
                                   </div>
                                   <span className="text-xs font-medium text-gray-900 w-8">{room.resolved}</span>
+                                </div>
+                                <div className="flex items-center space-x-2">
+                                  <span className="text-xs text-gray-600 w-20">Closed:</span>
+                                  <div className="flex-1 bg-gray-200 rounded h-1.5">
+                                    <div className="bg-gray-500 h-1.5 rounded" style={{ width: `${room.total > 0 ? (room.closed / room.total) * 100 : 0}%` }}></div>
+                                  </div>
+                                  <span className="text-xs font-medium text-gray-900 w-8">{room.closed}</span>
                                 </div>
                               </div>
                             </td>
@@ -3362,13 +3179,14 @@ function App() {
                   )}
                 </div>
                 {/* Performance Benchmarks */}
+                {/** SLA target: 3 days (72 hours) response time */}
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
                   <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-4 border border-blue-200">
                     <div className="flex items-center justify-between mb-2">
                       <h4 className="text-sm font-semibold text-blue-900">SLA Target</h4>
                       <FontAwesomeIcon icon={faCheckCircle} className="text-blue-600" />
                     </div>
-                    <p className="text-2xl font-bold text-blue-900">24h</p>
+                    <p className="text-2xl font-bold text-blue-900">3d (72h)</p>
                     <p className="text-xs text-blue-700 mt-1">Response Time Goal</p>
                   </div>
                   <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-lg p-4 border border-green-200">
@@ -3378,10 +3196,10 @@ function App() {
                     </div>
                     <p className="text-2xl font-bold text-green-900">{officerStats.teamAvg.avgResponseTime ? `${officerStats.teamAvg.avgResponseTime.toFixed(1)}h` : '—'}</p>
                     <p className="text-xs text-green-700 mt-1">
-                      {officerStats.teamAvg.avgResponseTime > 24 ? (
-                        <span className="text-red-600 font-medium">⚠️ {(officerStats.teamAvg.avgResponseTime - 24).toFixed(1)}h over SLA</span>
+                      {officerStats.teamAvg.avgResponseTime > 72 ? (
+                        <span className="text-red-600 font-medium">⚠️ {(officerStats.teamAvg.avgResponseTime - 72).toFixed(1)}h over SLA</span>
                       ) : (
-                        <span className="text-green-700 font-medium">✓ {(24 - officerStats.teamAvg.avgResponseTime).toFixed(1)}h under SLA</span>
+                        <span className="text-green-700 font-medium">✓ {(72 - officerStats.teamAvg.avgResponseTime).toFixed(1)}h under SLA</span>
                       )}
                     </p>
                   </div>
@@ -3406,140 +3224,114 @@ function App() {
                 <div className="bg-white shadow rounded-lg overflow-hidden mb-6">
                   <div className="px-6 py-4 border-b border-gray-200">
                     <h3 className="text-lg font-medium text-gray-900">
-                      Detailed Performance Metrics
+                      Officer Performance Summary
                     </h3>
-                    <p className="text-sm text-gray-600 mt-1">Individual officer performance with SLA compliance indicators</p>
+                    <p className="text-sm text-gray-600 mt-1">Quick view of each officer's key metrics and overall rating</p>
                   </div>
                   <div className="overflow-x-auto">
                     <table className="min-w-full divide-y divide-gray-200">
-                      <thead className="bg-gray-50">
+                      <thead className="bg-blue-50">
                         <tr>
-                          <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
                             Officer
                           </th>
-                          <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Workload
+                          <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
+                            Cases
                           </th>
-                          <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
                             Resolution Rate
                           </th>
-                          <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Response Time
+                          <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
+                            Avg Response (hours)
                           </th>
-                          <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Resolution Time
+                          <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
+                            Rating
                           </th>
-                          <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Satisfaction
-                          </th>
-                          <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Performance
+                          <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
+                            Status
                           </th>
                         </tr>
                       </thead>
                       <tbody className="bg-white divide-y divide-gray-200">
                         {officerStats.list.length === 0 && (
                           <tr>
-                            <td colSpan={7} className="px-6 py-8 text-center text-sm text-gray-500">
+                            <td colSpan={6} className="px-6 py-8 text-center text-sm text-gray-500">
                               No officer performance data available for current filters.
                             </td>
                           </tr>
                         )}
                         {officerStats.list.map((officer) => {
-                          const responseStatus = officer.avgResponseTime <= 24 ? 'excellent' : officer.avgResponseTime <= 48 ? 'good' : 'needs-improvement';
+                          const responseStatus = officer.avgResponseTime <= 72 ? 'excellent' : officer.avgResponseTime <= 108 ? 'good' : 'needs-improvement';
                           const resolutionStatus = officer.resolutionRate >= 80 ? 'excellent' : officer.resolutionRate >= 60 ? 'good' : 'needs-improvement';
-                          const workloadPercent = officerStats.list.length > 0 ? (officer.total / Math.max(...officerStats.list.map(o => o.total))) * 100 : 0;
                           
                           return (
                             <tr key={officer.id} className="hover:bg-gray-50">
                               <td className="px-6 py-4 whitespace-nowrap">
-                                <div className="text-sm font-medium text-gray-900">{officer.name}</div>
-                                <div className="text-xs text-gray-500">{officer.total > 0 ? 'Active' : 'No cases'}</div>
+                                <div className="text-sm font-semibold text-gray-900">{officer.name}</div>
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap">
-                                <div className="text-sm font-medium text-gray-900">{officer.total} cases</div>
-                                <div className="w-24 bg-gray-200 rounded-full h-2 mt-1">
-                                  <div className="bg-blue-600 h-2 rounded-full" style={{ width: `${workloadPercent}%` }}></div>
-                                </div>
-                                <div className="text-xs text-gray-500 mt-1">{officer.resolved} resolved / {officer.total - officer.resolved} active</div>
+                                <div className="text-sm text-gray-900">{officer.total}</div>
+                                <div className="text-xs text-gray-500">Assigned</div>
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap">
                                 <div className="flex items-center">
-                                  <span className={`text-sm font-semibold ${resolutionStatus === 'excellent' ? 'text-green-700' : resolutionStatus === 'good' ? 'text-yellow-700' : 'text-red-700'}`}>
+                                  <span className={`text-sm font-bold ${resolutionStatus === 'excellent' ? 'text-green-700' : resolutionStatus === 'good' ? 'text-yellow-700' : 'text-red-700'}`}>
                                     {officer.resolutionRate}%
                                   </span>
-                                  {resolutionStatus === 'excellent' && <span className="ml-2 text-green-600">✓</span>}
-                                  {resolutionStatus === 'needs-improvement' && <span className="ml-2 text-red-600">⚠</span>}
                                 </div>
-                                <div className="text-xs text-gray-500 mt-1">
-                                  {resolutionStatus === 'excellent' ? 'Excellent' : resolutionStatus === 'good' ? 'Good' : 'Below Target'}
+                                <div className="text-xs text-gray-500 mt-0.5">
+                                  {officer.resolved}/{officer.total} resolved
                                 </div>
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap">
-                                <div className={`text-sm font-medium ${responseStatus === 'excellent' ? 'text-green-700' : responseStatus === 'good' ? 'text-yellow-700' : 'text-red-700'}`}>
+                                <div className={`text-sm font-semibold ${responseStatus === 'excellent' ? 'text-green-700' : responseStatus === 'good' ? 'text-yellow-700' : 'text-red-700'}`}>
                                   {officer.avgResponseTime ? `${officer.avgResponseTime.toFixed(1)}h` : '—'}
                                 </div>
                                 {officer.avgResponseTime && (
-                                  <div className="text-xs text-gray-500 mt-1">
-                                    {officer.avgResponseTime <= 24 ? (
-                                      <span className="text-green-600">✓ Within SLA</span>
+                                  <div className="text-xs mt-0.5">
+                                    {officer.avgResponseTime <= 72 ? (
+                                      <span className="text-green-600">✓ On target</span>
                                     ) : (
-                                      <span className="text-red-600">⚠ {(officer.avgResponseTime - 24).toFixed(1)}h over</span>
+                                      <span className="text-red-600">⚠ Slow</span>
                                     )}
                                   </div>
-                                )}
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap">
-                                <div className="text-sm font-medium text-gray-900">
-                                  {officer.avgResolutionTime ? `${(officer.avgResolutionTime / 24).toFixed(1)}d` : '—'}
-                                </div>
-                                {officer.avgResolutionTime && (
-                                  <div className="text-xs text-gray-500 mt-1">{officer.avgResolutionTime.toFixed(1)} hours</div>
                                 )}
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap">
                                 {officer.avgSat ? (
-                                  <div>
-                                    <div className="flex items-center text-yellow-400">
-                                      {[1, 2, 3, 4, 5].map((star) => (
-                                        <FontAwesomeIcon 
-                                          key={star} 
-                                          icon={star <= Math.round(officer.avgSat) ? faStarSolid : faStarRegular} 
-                                          className="text-xs"
-                                        />
-                                      ))}
-                                    </div>
-                                    <div className="text-xs text-gray-500 mt-1">{officer.avgSat.toFixed(1)}/5.0</div>
+                                  <div className="flex items-center">
+                                    <span className="text-sm font-semibold text-gray-900">{officer.avgSat.toFixed(1)}</span>
+                                    <span className="text-yellow-400 ml-1">★</span>
                                   </div>
                                 ) : (
-                                  <span className="text-sm text-gray-400">—</span>
+                                  <span className="text-sm text-gray-400">No data</span>
                                 )}
                               </td>
-                              <td className="px-6 py-4 whitespace-nowrap">
+                              <td className="px-6 py-4 whitespace-nowrap text-center">
                                 {officer.total > 0 ? (
                                   <div>
                                     {responseStatus === 'excellent' && resolutionStatus === 'excellent' ? (
-                                      <span className="px-2 py-1 text-xs font-medium bg-green-100 text-green-800 rounded-full">⭐ Excellent</span>
+                                      <span className="px-3 py-1 text-xs font-bold bg-green-100 text-green-800 rounded-full">⭐ Excellent</span>
                                     ) : responseStatus === 'needs-improvement' || resolutionStatus === 'needs-improvement' ? (
-                                      <span className="px-2 py-1 text-xs font-medium bg-red-100 text-red-800 rounded-full">⚠ Action Needed</span>
+                                      <span className="px-3 py-1 text-xs font-bold bg-red-100 text-red-800 rounded-full">⚠ Needs Help</span>
                                     ) : (
-                                      <span className="px-2 py-1 text-xs font-medium bg-yellow-100 text-yellow-800 rounded-full">✓ Good</span>
+                                      <span className="px-3 py-1 text-xs font-bold bg-blue-100 text-blue-800 rounded-full">✓ Good</span>
                                     )}
                                   </div>
                                 ) : (
-                                  <span className="text-xs text-gray-400">No data</span>
+                                  <span className="text-xs text-gray-400">Idle</span>
                                 )}
                               </td>
                             </tr>
                           );
                         })}
                         {officerStats.list.length > 0 && (
-                          <tr className="bg-gray-100 font-medium">
+                          <tr className="bg-blue-50 font-semibold">
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                               Team Average
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                              {officerStats.teamAvg.total.toFixed(1)} cases/officer
+                              {officerStats.teamAvg.total.toFixed(0)}
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                               {officerStats.teamAvg.resolutionRate}%
@@ -3775,3 +3567,4 @@ function App() {
   );
 }
 export default App;
+

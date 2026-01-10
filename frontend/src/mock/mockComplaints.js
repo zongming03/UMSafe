@@ -139,8 +139,7 @@ const USERNAMES = [
 
 const ADMINS = [
   { id: "68af04187c2e6f499854e2da", name: "Teoh Zong Ming" },
-  { id: "68af04187c2e6f499854e2db", name: "Chong Gin Khai" },
-  { id: "6931a3456abf5a33c813bf8c", name: "Saw Kent Ming" },
+  { id: "6943f3f3b7440331515e1d5e", name: "Saw Kent Ming" },
 ];
 
 const STATUSES = ["Opened", "InProgress", "Resolved"];

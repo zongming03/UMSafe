@@ -10,9 +10,9 @@ cloudinary.config({
 const storage = new CloudinaryStorage({
   cloudinary: cloudinary,
   params: {
-    folder: 'umsafe-profiles', // Folder name in Cloudinary
+    folder: 'umsafe-profiles',
     allowed_formats: ['jpg', 'jpeg', 'png', 'gif', 'webp'],
-    transformation: [{ width: 500, height: 500, crop: 'limit' }] // Optimize image size
+    transformation: [{ width: 500, height: 500, crop: 'limit' }]
   }
 });
 

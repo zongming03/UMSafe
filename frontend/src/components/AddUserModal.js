@@ -10,6 +10,7 @@ const AddUserModal = ({
   onSubmit,
   userForm,
   onFormChange,
+  canCreateSuperAdmin,
 }) => {
   // Escape hyphens inside character classes for broad browser compatibility
   const EMAIL_REGEX = /^[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}$/i;
@@ -134,6 +135,9 @@ const AddUserModal = ({
                         <option value="" disabled>
                           -- Select Role --
                         </option>
+                        {canCreateSuperAdmin && (
+                          <option value="superadmin">Super Admin</option>
+                        )}
                         <option value="admin">Admin</option>
                         <option value="officer">Officer</option>
                       </select>

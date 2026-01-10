@@ -11,7 +11,6 @@ const VerifyEmailPage = () => {
   useEffect(() => {
     const verifyEmail = async () => {
       try {
-        // Use configured API base, otherwise fall back to same-origin "/admin"
         const apiBase =
           process.env.REACT_APP_API_BASE_URL || `${window.location.origin}/admin`;
         const sanitizedBase = apiBase.replace(/\/$/, "");
@@ -37,21 +36,21 @@ const VerifyEmailPage = () => {
 
         if (data.success || response.ok) {
           setStatus("success");
-          setMessage("✅ Email verified successfully! Redirecting to login...");
+          setMessage("Email verified successfully! Redirecting to login...");
           setTimeout(() => {
             navigate("/login");
           }, 3000);
         } else {
           setStatus("error");
           setMessage(
-            data.msg || "❌ Failed to verify email. Token may have expired or is invalid."
+            data.msg || "Failed to verify email. Token may have expired or is invalid."
           );
         }
       } catch (error) {
         console.error("Email verification error:", error);
         setStatus("error");
         setMessage(
-          "❌ An error occurred during verification."
+          "An error occurred during verification."
         );
       }
     };

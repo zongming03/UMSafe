@@ -65,7 +65,6 @@ const { user, loading } = useContext(AuthContext);
       element: <VerifyEmailPage />,
     },
     {
-      // Fallback for older emails that used /admin/reset-password/:token
       path: "/admin/reset-password/:token",
       element: <ResetPasswordPage />,
     },

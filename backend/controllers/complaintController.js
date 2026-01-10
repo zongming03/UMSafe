@@ -1,6 +1,7 @@
 // controllers/complaintController.js
 import Report from '../models/Complaint.js';
 import User from '../models/User.js';
+import Chat from '../models/Chat.js';
 import sendEmail from '../utils/sendEmail.js';
 import { HOSTNAME } from '../config/urlConfig.js';
 import axios from 'axios';
@@ -526,11 +527,31 @@ const handleNewComplaintWebhook = async (req, res) => {
   }
 };
 
+// Get all messages for a specific chatroom
+const getChatroomMessages = async (req, res) => {
+  try {
+    const { reportId, chatroomId } = req.params;
+
+    if (!reportId || !chatroomId) {
+      return res.status(400).json({ message: 'reportId and chatroomId are required' });
+    }
+
+    // Fetch messages from MongoDB for this chatroom
+    const messages = await Chat.find({ reportId, chatroomId }).sort({ createdAt: 1 });
+
+    res.status(200).json({ messages });
+  } catch (error) {
+    console.error('Error fetching chatroom messages:', error);
+    res.status(500).json({ message: 'Failed to fetch messages', error: error.message });
+  }
+};
+
 export default {
   getAllComplaints,
   getComplaintById,
   updateComplaintStatus,
   assignComplaint,
   handleNewComplaintWebhook,
+  getChatroomMessages,
   notifyAdminsNewComplaint
 };

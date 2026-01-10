@@ -27,7 +27,6 @@ const LoadingOverlay = () => (
           <div className="h-0.5 w-full bg-gray-700 rounded-full overflow-hidden">
             <div className="h-full bg-gradient-to-r from-blue-500 via-blue-400 to-blue-500 animate-loading-bar"></div>
           </div>
-          <div className="absolute -right-2 top-1/2 -translate-y-1/2 w-2 h-2 bg-blue-400 rounded-full animate-pulse"></div>
         </div>
 
         

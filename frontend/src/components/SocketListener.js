@@ -29,7 +29,6 @@ const SocketListener = () => {
     const handleStatusChange = (payload) => {
       const id = payload?.complaintId || "complaint";
       const status = payload?.status || "updated";
-      toast(`Status update for ${id}: ${status}`);
     };
 
     const handleAssignment = (payload) => {

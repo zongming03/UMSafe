@@ -18,14 +18,13 @@ import DeleteCategoryModal from "../components/DeleteCategoryModal";
 import ErrorModal from "../components/ErrorModal";
 import BulkDeleteCategoryModal from "../components/BulkDeleteCategoryModal";
 import {
-  fetchCategories,
-  addCategory,
-  updateCategory,
-  deleteCategory,
-  bulkDeleteCategories,
-  fetchReports,
+  fetchRooms,
+  fetchFacultyCategories,
+  addFacultyCategory,
+  updateFacultyCategory,
+  deleteFacultyCategory,
+  bulkDeleteFacultyCategories,
 } from "../services/api";
-import mockComplaints from "../mock/mockComplaints";
 import LoadingOverlay from "../components/LoadingOverlay";
 
 const ComplaintCategory = () => {
@@ -46,6 +45,8 @@ const ComplaintCategory = () => {
   });
   const [currentPage, setCurrentPage] = useState(1);
   const [error, setError] = useState(null);
+  const [userFacultyName, setUserFacultyName] = useState("");
+  const [userFacultyId, setUserFacultyId] = useState("");
   const itemsPerPage = 8;
 
   const sortedCategories = React.useMemo(() => {
@@ -119,42 +120,21 @@ const ComplaintCategory = () => {
   };
 
   const fetchAndSetCategories = async () => {
+    if (!userFacultyId) {
+      console.log("Waiting for facultyId to be resolved...");
+      return;
+    }
+
     setIsLoading(true);
     try {
-      // Always fetch categories first
-      const categoriesRes = await fetchCategories();
-      const categoriesData = categoriesRes.data;
-      console.log("📂 Categories fetched:", categoriesData);
+      // Fetch categories for this faculty
+      const categoriesRes = await fetchFacultyCategories(userFacultyId);
+      const categoriesData = categoriesRes.data || [];
+      console.log("Faculty categories fetched:", categoriesData);
 
-      // Try fetching reports; if it fails, use mock data as fallback
-      let reportsData = null;
-      try {
-        const reportsRes = await fetchReports();
-        reportsData = reportsRes.data?.reports || reportsRes.data?.data || reportsRes.data || [];
-        console.log("📋 Reports fetched:", reportsData);
-      } catch (reportsError) {
-        console.warn("⚠️ Reports fetch failed, using mock complaints data as fallback", reportsError);
-        // Use mock complaints data as fallback
-        reportsData = mockComplaints || [];
-      }
-
-      const categoryComplaintsCount = {};
-      (reportsData || []).forEach(report => {
-        const categoryName = report.category?.name || report.category;
-        if (categoryName) {
-          categoryComplaintsCount[categoryName] = (categoryComplaintsCount[categoryName] || 0) + 1;
-        }
-      });
-      console.log("📊 Complaint counts by category:", categoryComplaintsCount);
-
-      const categoriesWithCount = categoriesData.map(category => ({
-        ...category,
-        complaintsCount: categoryComplaintsCount[category.name] || 0
-      }));
-
-      setCategories(categoriesWithCount);
+      setCategories(categoriesData);
     } catch (error) {
-      console.error("❌ Error fetching categories:", error);
+      console.error("Error fetching categories:", error);
       setError("Failed to fetch categories. Please try again.");
     } finally {
       setIsLoading(false);
@@ -167,6 +147,10 @@ const ComplaintCategory = () => {
       setError("Both category name and description are required.");
       return;
     }
+    if (!userFacultyId || !userFacultyName) {
+      setError("Faculty information not available. Please refresh the page.");
+      return;
+    }
     setIsLoading(true);
     setError(null);
     try {
@@ -174,13 +158,15 @@ const ComplaintCategory = () => {
       const categoryDescription = newCategory.description.slice(0, 200);
       const categoryPriority = (newCategory.priority || "low").trim();
       const newCategoryData = {
+        facultyId: userFacultyId,
+        facultyName: userFacultyName,
         name: categoryName,
         description: categoryDescription,
         priority: categoryPriority,
       };
       console.log("[AddCategory] Input:", newCategoryData);
 
-      const res = await addCategory(newCategoryData);
+      const res = await addFacultyCategory(newCategoryData);
       if (res && (res.status === 200 || res.status === 201)) {
         await fetchAndSetCategories();
         setIsAddModalOpen(false);
@@ -193,7 +179,8 @@ const ComplaintCategory = () => {
         error.response &&
         error.response.status === 400 &&
         error.response.data &&
-        error.response.data.msg === "Category already exists"
+        (error.response.data.msg === "Category already exists in this faculty" ||
+         error.response.data.msg === "Category already exists")
       ) {
         setError("Category already exists. Please use a different name.");
       } else {
@@ -241,7 +228,7 @@ const ComplaintCategory = () => {
         priority: currentCategory.priority || "low",
       };
    
-      const res = await updateCategory(currentCategory._id, updatedCategory);
+      const res = await updateFacultyCategory(userFacultyId, currentCategory._id, updatedCategory);
       if (res && (res.status === 200 || res.status === 201)) {
         await fetchAndSetCategories();
         setIsEditModalOpen(false);
@@ -259,7 +246,7 @@ const ComplaintCategory = () => {
     if (!currentCategory) return;
     setIsLoading(true);
     try {
-      const res = await deleteCategory(currentCategory._id);
+      const res = await deleteFacultyCategory(userFacultyId, currentCategory._id);
       if (res && res.status === 200) {
         await fetchAndSetCategories();
         if (paginatedCategories.length === 1 && currentPage > 1) {
@@ -279,7 +266,7 @@ const ComplaintCategory = () => {
     if (selectedCategories.length === 0) return;
     setIsLoading(true);
     try {
-      const res = await bulkDeleteCategories(selectedCategories);
+      const res = await bulkDeleteFacultyCategories(userFacultyId, selectedCategories);
       if (res && res.status === 200) {
         await fetchAndSetCategories();
         if (
@@ -315,8 +302,36 @@ const ComplaintCategory = () => {
   };
 
   useEffect(() => {
-    fetchAndSetCategories();
+    // Resolve logged-in user's faculty ID and name
+    (async () => {
+      try {
+        const userDataStr =
+          localStorage.getItem("user") || sessionStorage.getItem("user");
+        const currentUser = userDataStr ? JSON.parse(userDataStr) : null;
+        const currentUserFacultyId = currentUser?.facultyid;
+        if (!currentUserFacultyId) return;
+        
+        // Set faculty ID immediately
+        setUserFacultyId(String(currentUserFacultyId));
+        
+        const res = await fetchRooms();
+        const faculties = Array.isArray(res.data) ? res.data : [];
+        const faculty = faculties.find(
+          (f) => String(f._id) === String(currentUserFacultyId)
+        );
+        if (faculty?.name) setUserFacultyName(String(faculty.name));
+      } catch (e) {
+        console.warn("[Categories] Failed to resolve user faculty info", e);
+      }
+    })();
   }, []);
+
+  useEffect(() => {
+    // Fetch categories after user faculty ID is resolved
+    if (userFacultyId) {
+      fetchAndSetCategories();
+    }
+  }, [userFacultyId, userFacultyName]);
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
@@ -423,15 +438,6 @@ const ComplaintCategory = () => {
                       <th
                         scope="col"
                         className="category-table-th"
-                        onClick={() => handleSort("complaintsCount")}
-                      >
-                        <div className="flex items-center">
-                          Complaints {getSortIcon("complaintsCount")}
-                        </div>
-                      </th>
-                      <th
-                        scope="col"
-                        className="category-table-th"
                         onClick={() => handleSort("createdAt")}
                       >
                         <div className="flex items-center">
@@ -489,14 +495,6 @@ const ComplaintCategory = () => {
                             >
                               {category.priority}
                             </span>
-                          </td>
-
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="text-sm text-gray-500">
-                              <span className="bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-0.5 rounded-full">
-                                {category.complaintsCount}
-                              </span>
-                            </div>
                           </td>
 
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">

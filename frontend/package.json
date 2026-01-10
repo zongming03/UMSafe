@@ -25,7 +25,7 @@
     "socket.io-client": "^4.7.5",
     "web-vitals": "^2.1.4"
   },
-  "proxy": "https://639bc5d3aec7.ngrok-free.app",
+  "proxy": "https://epipetalous-portionable-yasmine.ngrok-free.dev/admin",
   "scripts": {
     "start": "react-scripts start",
     "build": "react-scripts build",

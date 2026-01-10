@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import * as echarts from "echarts";
-import MOCK_COMPLAINTS from "../mock/mockComplaints";
 import { useComplaintUpdates } from "../hooks/useComplaintUpdates";
-import { fetchReports } from "../services/api";
+import { fetchReports, closeReport, resolveReport } from "../services/reportsApi";
+import { fetchRooms } from "../services/api";
 
 import "../styles/Dashboard.css";
 import SummaryCard from "../components/SummaryCard";
@@ -173,10 +173,31 @@ const Dashboard = () => {
   const [adminsMap, setAdminsMap] = useState({});
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
+  const [allComplaints, setAllComplaints] = useState([]);
   const [complaints, setComplaints] = useState([]);
+  const [userFacultyName, setUserFacultyName] = useState("");
   const [isLoadingComplaints, setIsLoadingComplaints] = useState(true);
   const itemsPerPage = 6;
   const navigate = useNavigate();
+
+  // Resolve user's faculty name
+  useEffect(() => {
+    (async () => {
+      try {
+        const userDataStr = localStorage.getItem("user") || sessionStorage.getItem("user");
+        const currentUser = userDataStr ? JSON.parse(userDataStr) : null;
+        const facultyId = currentUser?.facultyid;
+        if (!facultyId) return;
+        const res = await fetchRooms();
+        const faculties = Array.isArray(res.data) ? res.data : [];
+        const fac = faculties.find((f) => String(f._id) === String(facultyId));
+        const facName = fac?.name || fac?.faculty || fac?.title;
+        if (facName) setUserFacultyName(String(facName));
+      } catch (e) {
+        console.warn("[Dashboard] Failed to resolve user faculty name", e);
+      }
+    })();
+  }, []);
 
   // Fetch complaints from API on mount
   useEffect(() => {
@@ -188,12 +209,12 @@ const Dashboard = () => {
         
         // Map API response to match component's expected format
         const mappedComplaints = reportsData.map(report => ({
-          id: report.id,
-          displayId: report.displayId || report.id,
+          id: report.id || report._id,
+          displayId: report.displayId || report.id || report._id,
           userId: report.userId,
           username: report.username,
-          adminId: report.adminId,
-          adminName: report.adminName || "Unassigned",
+          adminId: report.adminId || "Unassigned",
+            adminName: report.adminName || "Unassigned",
           status: report.status,
           title: report.title,
           description: report.description,
@@ -211,10 +232,10 @@ const Dashboard = () => {
         }));
         
         console.log("✅ Dashboard: Loaded complaints from API:", mappedComplaints.length);
-        setComplaints(mappedComplaints);
+        setAllComplaints(mappedComplaints);
       } catch (err) {
-        console.error("❌ Dashboard: Error fetching complaints, using mock data:", err);
-        setComplaints(MOCK_COMPLAINTS);
+        console.error("❌ Dashboard: Error fetching complaints:", err);
+        setAllComplaints([]);
       } finally {
         setIsLoadingComplaints(false);
       }
@@ -223,20 +244,35 @@ const Dashboard = () => {
     loadComplaints();
   }, []);
 
+  // Derive complaints filtered by user's faculty name
+  useEffect(() => {
+    const norm = (s) => String(s || "").trim().toLowerCase();
+    const normalizedUserFaculty = norm(userFacultyName);
+    if (!normalizedUserFaculty) {
+      setComplaints([]);
+      return;
+    }
+    const filtered = (allComplaints || []).filter((c) => {
+      const reportFaculty = norm(c?.facultyLocation?.faculty || c?.facultyLocation?.facultyName);
+      return reportFaculty && reportFaculty === normalizedUserFaculty;
+    });
+    setComplaints(filtered);
+  }, [allComplaints, userFacultyName]);
+
   // Real-time complaint updates
   useComplaintUpdates({
     onNewComplaint: (payload) => {
       // Refetch or add new complaint to list
-      setComplaints((prev) => [
-        { id: payload.complaintId, title: payload.title, status: 'Open', createdAt: payload.createdAt || new Date().toISOString() },
+      setAllComplaints((prev) => [
+        { id: payload.complaintId, title: payload.title, status: 'Open', createdAt: payload.createdAt || new Date().toISOString(), facultyLocation: payload.facultyLocation || {} },
         ...prev,
       ]);
     },
     onStatusChange: (payload) => {
       // Update complaint status in local state
-      setComplaints((prev) =>
+      setAllComplaints((prev) =>
         prev.map((c) =>
-          c.id === payload.complaintId || c.displayId === payload.complaintId
+          matchesComplaint(c, payload.complaintId)
             ? { ...c, status: payload.status }
             : c
         )
@@ -244,15 +280,17 @@ const Dashboard = () => {
     },
     onAssignment: (payload) => {
       // Update complaint assignment in local state
-      setComplaints((prev) =>
+      setAllComplaints((prev) =>
         prev.map((c) =>
-          c.id === payload.complaintId || c.displayId === payload.complaintId
+          matchesComplaint(c, payload.complaintId)
             ? { ...c, adminId: payload.adminId, adminName: payload.adminName || payload.adminId }
             : c
         )
       );
     },
   });
+
+  const matchesComplaint = (c, complaintId) => c.id === complaintId || c.displayId === complaintId || c._id === complaintId;
 
   const navigateToComplaint = (complaint) => {
     if (!complaint) return;
@@ -270,7 +308,7 @@ const Dashboard = () => {
     let previousStatus = null;
     setComplaints((prev) => {
       return prev.map((c) => {
-        if (c.id === complaintId) {
+        if (matchesComplaint(c, complaintId)) {
           previousStatus = c.status;
           return { ...c, status: newStatus };
         }
@@ -280,30 +318,23 @@ const Dashboard = () => {
 
     // Attempt to persist change to backend
     try {
-      const ngrokBase = (process.env.REACT_APP_NGROK_BASE_URL ).replace(/\/$/, "");
-      const res = await fetch(
-        `${ngrokBase}/complaints/${complaintId}/status`,
-        {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify({ status: newStatus }),
-        }
-      );
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-      // update local item with returned server values (if any)
-      if (data) {
-        setComplaints((prev) =>
-          prev.map((c) => (c.id === complaintId ? { ...c, ...data } : c))
-        );
+      // Call the appropriate partner API endpoint based on target status
+      if (newStatus === "Closed") {
+        await closeReport(complaintId, {});
+      } else if (newStatus === "Resolved") {
+        await resolveReport(complaintId, {});
+      } else {
+        throw new Error(`Unsupported kanban status: ${newStatus}`);
       }
+      
+      // Success: state already updated optimistically
+      console.log(`✅ Kanban move persisted: ${complaintId} -> ${newStatus}`);
     } catch (err) {
       console.warn("Failed to persist kanban move, rolling back:", err);
       // rollback to previous status
       setComplaints((prev) =>
         prev.map((c) =>
-          c.id === complaintId
+          matchesComplaint(c, complaintId)
             ? { ...c, status: previousStatus || "Opened" }
             : c
         )
@@ -369,6 +400,27 @@ const Dashboard = () => {
     return true;
   };
 
+  // Normalize day boundaries (hoisted as functions to avoid TDZ)
+  function normalizeDayStart(d) {
+    const x = new Date(d);
+    x.setHours(0, 0, 0, 0);
+    return x;
+  }
+
+  function normalizeDayEnd(d) {
+    const x = new Date(d);
+    x.setHours(23, 59, 59, 999);
+    return x;
+  }
+
+  const matchesTimeRange = (c, timeRangeLabel) => {
+    if (!timeRangeLabel || timeRangeLabel === "all") return true;
+    const { start, end } = getPeriodBounds(timeRangeLabel);
+    const created = c.createdAt ? Date.parse(c.createdAt) : NaN;
+    if (isNaN(created)) return false;
+    return created >= start.getTime() && created <= end.getTime();
+  };
+
   const filteredComplaints = complaints.filter((c) => {
     // search
     if (
@@ -387,6 +439,8 @@ const Dashboard = () => {
     if (!matchesPriorityFilter(c, f.priority)) return false;
     if (!matchesAssignedFilter(c, f.assignedTo)) return false;
     if (!matchesDateRange(c, f.dateFrom, f.dateTo)) return false;
+    // time range filter for table display
+    if (!matchesTimeRange(c, selectedTimeRange)) return false;
     return true;
   });
 
@@ -456,16 +510,6 @@ const Dashboard = () => {
     }
   };
   // --- Period helpers for percent change ---
-  const normalizeDayStart = (d) => {
-    const x = new Date(d);
-    x.setHours(0, 0, 0, 0);
-    return x;
-  };
-  const normalizeDayEnd = (d) => {
-    const x = new Date(d);
-    x.setHours(23, 59, 59, 999);
-    return x;
-  };
 
   function getPeriodBounds(rangeLabel, now = new Date()) {
     const end = new Date(now);
@@ -544,6 +588,24 @@ const Dashboard = () => {
     }).length;
   }
 
+  // Normalize status values into one of: Opened, InProgress, Resolved
+  const normalizeStatus = (raw) => {
+    if (!raw) return "Opened";
+    const s = String(raw).trim().toLowerCase();
+    if (s === "open" || s === "opened") return "Opened";
+    if (
+      s === "inprogress" ||
+      s === "in progress" ||
+      s === "in_progress" ||
+      s === "in-progress"
+    )
+      return "InProgress";
+    if (s === "resolved" || s === "resolve" || s === "closed")
+      return "Resolved";
+    // map any unknown/other status to Opened (no other labels allowed)
+    return "Opened";
+  };
+
   function countResolvedInRange(items, start, end) {
     const sT = start.getTime();
     const eT = end.getTime();
@@ -555,22 +617,45 @@ const Dashboard = () => {
     }).length;
   }
 
+  function countByStatusInRange(items, statusValue, start, end) {
+    const sT = start.getTime();
+    const eT = end.getTime();
+    return items.filter((it) => {
+      // Check if complaint was created in the range
+      const t = it.createdAt ? Date.parse(it.createdAt) : NaN;
+      if (isNaN(t) || t < sT || t > eT) return false;
+      
+      // Check if status matches
+      const normalized = normalizeStatus(it.status);
+      return normalized === statusValue;
+    }).length;
+  }
+
   function computeChange(current, previous) {
     const delta = current - previous;
-    if (!previous) {
-      if (!current) return { percent: 0, label: "0%", delta };
+    
+    // When previous is 0, we can't calculate percentage (division by zero)
+    // Show the absolute increase/decrease instead
+    if (!previous || previous === 0) {
+      if (delta === 0) {
+        return { percent: 0, label: "0%", delta: 0 };
+      }
+      // Show as absolute increase with indicator
       return {
-        percent: null,
-        label: `New (${delta > 0 ? `+${delta}` : delta})`,
+        percent: delta > 0 ? 999 : -999, // Use high number to indicate significant change
+        label: delta > 0 ? `+${delta} (new)` : `${delta} (new)`,
         delta,
       };
     }
+    
+    // Calculate real percentage (not capped at 100%)
     const rawPct = (delta / previous) * 100;
     const pct = Math.round(rawPct * 10) / 10; // one decimal
     const sign = pct > 0 ? "+" : "";
+    
     return {
       percent: pct,
-      label: `${sign}${pct}% (${delta > 0 ? `+${delta}` : delta})`,
+      label: `${sign}${pct}% (${delta > 0 ? "+" : ""}${delta})`,
       delta,
     };
   }
@@ -590,17 +675,31 @@ const Dashboard = () => {
   const totalPrevPeriod = countCreatedInRange(complaints, prevStart, prevEnd);
   const totalChange = computeChange(totalCurrentPeriod, totalPrevPeriod);
 
-  const openedCurrentPeriod = totalCurrentPeriod; // opened = created in period
-  const openedPrevPeriod = totalPrevPeriod;
-  const openedChange = computeChange(openedCurrentPeriod, openedPrevPeriod);
-
-  const resolvedCurrentPeriod = countResolvedInRange(
+  // Count complaints with "Opened" status in the period
+  const openedCurrentPeriod = countByStatusInRange(
     complaints,
+    "Opened",
     periodStart,
     periodEnd
   );
-  const resolvedPrevPeriod = countResolvedInRange(
+  const openedPrevPeriod = countByStatusInRange(
     complaints,
+    "Opened",
+    prevStart,
+    prevEnd
+  );
+  const openedChange = computeChange(openedCurrentPeriod, openedPrevPeriod);
+
+  // Count complaints with "Resolved" status in the period
+  const resolvedCurrentPeriod = countByStatusInRange(
+    complaints,
+    "Resolved",
+    periodStart,
+    periodEnd
+  );
+  const resolvedPrevPeriod = countByStatusInRange(
+    complaints,
+    "Resolved",
     prevStart,
     prevEnd
   );
@@ -608,24 +707,7 @@ const Dashboard = () => {
     resolvedCurrentPeriod,
     resolvedPrevPeriod
   );
-
-  // Normalize status values into one of: Opened, InProgress, Resolved
-  const normalizeStatus = (raw) => {
-    if (!raw) return "Opened";
-    const s = String(raw).trim().toLowerCase();
-    if (s === "open" || s === "opened") return "Opened";
-    if (
-      s === "inprogress" ||
-      s === "in progress" ||
-      s === "in_progress" ||
-      s === "in-progress"
-    )
-      return "InProgress";
-    if (s === "resolved" || s === "resolve" || s === "closed")
-      return "Resolved";
-    // map any unknown/other status to Opened (no other labels allowed)
-    return "Opened";
-  };
+  
   const getPriorityColor = (priority) => {
     switch (priority) {
       case "High":
@@ -760,14 +842,27 @@ const Dashboard = () => {
   useEffect(() => {
     const loadAdmins = async () => {
       try {
-        const apiBase = "http://localhost:5000/admin";
+        // Get token from storage
+        const token = localStorage.getItem("token") || sessionStorage.getItem("token");
+        const apiBase = (process.env.REACT_APP_API_BASE_URL).replace(/\/$/, "");
+        
+        const headers = {
+          "Content-Type": "application/json",
+        };
+        if (token) {
+          headers.Authorization = `Bearer ${token}`;
+        }
+
         const res = await fetch(
-          `${apiBase}/usersMobile/users`,
-          { credentials: "include" }
+          `${apiBase}/users`,
+          { 
+            credentials: "include",
+            headers,
+          }
         );
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
-        const admins = data.data || data || [];
+        const admins = Array.isArray(data.data) ? data.data : Array.isArray(data.users) ? data.users : Array.isArray(data) ? data : [];
         const map = {};
         admins.forEach((a) => {
           const id = a._id || a.id || a.userId;
@@ -824,20 +919,18 @@ const Dashboard = () => {
                 value={totalCurrentPeriod}
                 change={totalChange.label}
                 changeColor={
-                  totalChange.percent === null
+                  totalChange.percent > 0
                     ? "text-red-600"
-                    : totalChange.percent > 0
-                    ? "text-red-600"
-                    : "text-green-600"
+                    : totalChange.percent < 0
+                    ? "text-green-600"
+                    : "text-gray-600"
                 }
                 changeIcon={
-                  totalChange.percent === null ? (
+                  totalChange.percent > 0 ? (
                     <FontAwesomeIcon icon={faArrowUp} className="mr-1" />
-                  ) : totalChange.percent > 0 ? (
-                    <FontAwesomeIcon icon={faArrowUp} className="mr-1" />
-                  ) : (
+                  ) : totalChange.percent < 0 ? (
                     <FontAwesomeIcon icon={faArrowDown} className="mr-1" />
-                  )
+                  ) : null
                 }
               />
               <SummaryCard
@@ -847,20 +940,18 @@ const Dashboard = () => {
                 value={openedCurrentPeriod}
                 change={openedChange.label}
                 changeColor={
-                  openedChange.percent === null
+                  openedChange.percent > 0
                     ? "text-red-600"
-                    : openedChange.percent > 0
-                    ? "text-red-600"
-                    : "text-green-600"
+                    : openedChange.percent < 0
+                    ? "text-green-600"
+                    : "text-gray-600"
                 }
                 changeIcon={
-                  openedChange.percent === null ? (
+                  openedChange.percent > 0 ? (
                     <FontAwesomeIcon icon={faArrowUp} className="mr-1" />
-                  ) : openedChange.percent > 0 ? (
-                    <FontAwesomeIcon icon={faArrowUp} className="mr-1" />
-                  ) : (
+                  ) : openedChange.percent < 0 ? (
                     <FontAwesomeIcon icon={faArrowDown} className="mr-1" />
-                  )
+                  ) : null
                 }
               />
               <SummaryCard
@@ -870,20 +961,18 @@ const Dashboard = () => {
                 value={resolvedCurrentPeriod}
                 change={resolvedChange.label}
                 changeColor={
-                  resolvedChange.percent === null
+                  resolvedChange.percent > 0
                     ? "text-green-600"
-                    : resolvedChange.percent > 0
-                    ? "text-green-600"
-                    : "text-red-600"
+                    : resolvedChange.percent < 0
+                    ? "text-red-600"
+                    : "text-gray-600"
                 }
                 changeIcon={
-                  resolvedChange.percent === null ? (
+                  resolvedChange.percent > 0 ? (
                     <FontAwesomeIcon icon={faArrowUp} className="mr-1" />
-                  ) : resolvedChange.percent > 0 ? (
-                    <FontAwesomeIcon icon={faArrowUp} className="mr-1" />
-                  ) : (
+                  ) : resolvedChange.percent < 0 ? (
                     <FontAwesomeIcon icon={faArrowDown} className="mr-1" />
-                  )
+                  ) : null
                 }
               />
             </div>
@@ -1195,107 +1284,122 @@ const Dashboard = () => {
                     </thead>
 
                     <tbody className="complaint-table-body">
-                      {getCurrentPageComplaints().map((complaint) => (
-                        <tr
-                          key={complaint.id}
-                          className="hover:bg-gray-50 cursor-pointer"
-                          onClick={() => navigateToComplaint(complaint)}
-                        >
-                          <td className="complaint-table-row-id">
-                            {complaint.displayId}
-                          </td>
-                          {(() => {
-                            // Subject (truncated)
-                            const subj = complaint.title || "";
-                            const MAX = 50;
-                            const display =
-                              subj.length > MAX
-                                ? `${subj.slice(0, MAX - 1)}…`
-                                : subj;
-                            return (
-                              <>
-                                <td className="complaint-table-row-subject">
-                                  <span
-                                    className="inline-block max-w-xs truncate"
-                                    title={subj}
-                                  >
-                                    {display}
-                                  </span>
-                                </td>
-                                <td className="complaint-table-row-status">
-                                  {(() => {
-                                    const statusLabel = normalizeStatus(
-                                      complaint.status
-                                    );
-                                    return (
-                                      <span
-                                        className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(
-                                          statusLabel
-                                        )}`}
-                                      >
-                                        {statusLabel}
-                                      </span>
-                                    );
-                                  })()}
-                                </td>
-                              </>
-                            );
-                          })()}
-                          <td className="complaint-table-row-date">
-                            {formatDateShort(
-                              complaint.createdAt ||
-                                complaint.updatedAt ||
-                                complaint.date
-                            )}
-                          </td>
-                          <td className="complaint-table-row-status">
+                      {getCurrentPageComplaints().length > 0 ? (
+                        getCurrentPageComplaints().map((complaint) => (
+                          <tr
+                            key={complaint.id}
+                            className="hover:bg-gray-50 cursor-pointer"
+                            onClick={() => navigateToComplaint(complaint)}
+                          >
+                            <td className="complaint-table-row-id">
+                              {complaint.displayId}
+                            </td>
                             {(() => {
-                              const priorityLabel =
-                                complaint.priority ||
-                                complaint.category?.priority ||
-                                "";
+                              // Subject (truncated)
+                              const subj = complaint.title || "";
+                              const MAX = 50;
+                              const display =
+                                subj.length > MAX
+                                  ? `${subj.slice(0, MAX - 1)}…`
+                                  : subj;
                               return (
-                                <span
-                                  className={`font-medium ${getPriorityColor(
-                                    priorityLabel
-                                  )}`}
-                                >
-                                  {priorityLabel}
-                                </span>
+                                <>
+                                  <td className="complaint-table-row-subject">
+                                    <span
+                                      className="inline-block max-w-xs truncate"
+                                      title={subj}
+                                    >
+                                      {display}
+                                    </span>
+                                  </td>
+                                  <td className="complaint-table-row-status">
+                                    {(() => {
+                                      const statusLabel = normalizeStatus(
+                                        complaint.status
+                                      );
+                                      return (
+                                        <span
+                                          className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(
+                                            statusLabel
+                                          )}`}
+                                        >
+                                          {statusLabel}
+                                        </span>
+                                      );
+                                    })()}
+                                  </td>
+                                </>
                               );
                             })()}
-                          </td>
-                          <td className="complaint-table-row-assigned">
-                            {adminsMap[complaint.adminId] ||
-                              complaint.adminName ||
-                              complaint.assignedTo ||
-                              "Unassigned"}
-                          </td>
+                            <td className="complaint-table-row-date">
+                              {formatDateShort(
+                                complaint.createdAt ||
+                                  complaint.updatedAt ||
+                                  complaint.date
+                              )}
+                            </td>
+                            <td className="complaint-table-row-status">
+                              {(() => {
+                                const priorityLabel =
+                                  complaint.priority ||
+                                  complaint.category?.priority ||
+                                  "";
+                                return (
+                                  <span
+                                    className={`font-medium ${getPriorityColor(
+                                      priorityLabel
+                                    )}`}
+                                  >
+                                    {priorityLabel}
+                                  </span>
+                                );
+                              })()}
+                            </td>
+                            <td className="complaint-table-row-assigned">
+                              {adminsMap[complaint.adminId] ||
+                                complaint.adminName ||
+                                complaint.assignedTo ||
+                                "Unassigned"}
+                            </td>
 
-                          <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                            <div className="flex justify-end space-x-2">
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  navigateToComplaint(complaint);
-                                }}
-                                className="complaint-table-row-action-eye"
-                              >
-                                <FontAwesomeIcon icon={faEye} />
-                              </button>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  // TODO: implement delete flow
-                                }}
-                                className="complaint-table-row-action-trash"
-                              >
-                                <FontAwesomeIcon icon={faTrashAlt} />
-                              </button>
+                            <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                              <div className="flex justify-end space-x-2">
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    navigateToComplaint(complaint);
+                                  }}
+                                  className="complaint-table-row-action-eye"
+                                >
+                                  <FontAwesomeIcon icon={faEye} />
+                                </button>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    // TODO: implement delete flow
+                                  }}
+                                  className="complaint-table-row-action-trash"
+                                >
+                                  <FontAwesomeIcon icon={faTrashAlt} />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td colSpan="7" className="px-6 py-10 text-center">
+                            <div className="text-gray-500">
+                              <p className="text-lg font-medium">
+                                No reports found
+                              </p>
+                              <p className="text-sm mt-2">
+                                There are no reports submitted in <strong>{selectedTimeRange}</strong>
+                              </p>
                             </div>
                           </td>
                         </tr>
-                      ))}
+                      )}
                     </tbody>
                   </table>
                 </div>
