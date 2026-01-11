@@ -12,6 +12,7 @@ import categoryRoutes from './routes/categoryRoutes.js';
 import facultyCategoryRoutes from './routes/facultyCategoryRoutes.js';
 import analyticsRoutes from './routes/analyticsRoutes.js';
 import mobileRoutes from './routes/mobileRoutes.js';
+import uploadRoutes from './routes/uploadRoutes.js';
 import { initSocket } from './realtime/socket.js';
 import { registerPartnerProxy } from './routes/partnerProxy.js';
 
@@ -41,6 +42,7 @@ app.use('/admin/profile', profileRoutes);
 app.use('/admin/categories', categoryRoutes);
 app.use('/admin/faculty-categories', facultyCategoryRoutes);
 app.use('/admin/mobile', mobileRoutes);
+app.use('/admin/upload', uploadRoutes);
 
 // Partner API Proxy - handles /admin/reports and /admin/mobileAdmin
 const PARTNER_API_BASE_URL = (process.env.PARTNER_API_BASE_URL || '').trim();

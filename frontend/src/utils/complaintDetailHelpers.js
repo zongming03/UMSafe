@@ -13,6 +13,20 @@ export const normalizeStatus = (status) => {
   return status.charAt(0).toUpperCase() + status.slice(1);
 };
 
+/**
+ * Convert display status to API enum format
+ */
+export const statusToEnum = (status) => {
+  if (!status) return 'opened';
+  const lowerStatus = status.toLowerCase().trim();
+  if (lowerStatus === 'open' || lowerStatus === 'opened') return 'opened';
+  if (lowerStatus === 'inprogress' || lowerStatus === 'in progress' || lowerStatus === 'in-progress') return 'inProgress';
+  if (lowerStatus === 'resolved') return 'resolved';
+  if (lowerStatus === 'closed') return 'closed';
+  // Fallback
+  return 'opened';
+};
+
 export const getStatusColor = (status) => {
   const statusColors = {
     Open: "bg-yellow-100 text-yellow-800 border-yellow-200",
@@ -34,6 +48,7 @@ export const mapReportToComplaintDetail = (report) => ({
   username: report.username,
   adminId: report.adminId,
   adminName: report.adminName || "Unassigned",
+  acknowledgeAt: report.acknowledgeAt,
   status: report.status,
   title: report.title,
   description: report.description,

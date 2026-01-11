@@ -73,19 +73,31 @@ const QuickActionsCard = ({
 
           {isStatusDropdownOpen && (
             <div className="absolute z-20 mt-2 w-full bg-white rounded-lg shadow-md border border-gray-100">
-              {statusOptions.map((status) => (
-                <button
-                  key={status}
-                  onClick={() => handleStatusChange(status)}
-                  className={`w-full text-left px-4 py-2 text-sm rounded-md ${
-                    currentStatus === status
-                      ? "bg-blue-100 text-blue-700 font-medium"
-                      : "text-gray-700 hover:bg-gray-50"
-                  }`}
-                >
-                  {status}
-                </button>
-              ))}
+              {statusOptions.map((status) => {
+                // Check if this option should be disabled
+                const isDisabled = 
+                  (status === 'Closed' && currentStatus === 'Resolved') ||
+                  (status === 'Resolved' && currentStatus === 'Closed');
+                
+                return (
+                  <button
+                    key={status}
+                    onClick={() => !isDisabled && handleStatusChange(status)}
+                    disabled={isDisabled}
+                    className={`w-full text-left px-4 py-2 text-sm rounded-md ${
+                      currentStatus === status
+                        ? "bg-blue-100 text-blue-700 font-medium"
+                        : isDisabled
+                        ? "bg-gray-100 text-gray-400 cursor-not-allowed opacity-60"
+                        : "text-gray-700 hover:bg-gray-50"
+                    }`}
+                    title={isDisabled ? `Cannot change to ${status} - complaint is already in a terminated state (${currentStatus})` : ''}
+                  >
+                    {status}
+                    {isDisabled && ' (Locked)'}
+                  </button>
+                );
+              })}
             </div>
           )}
         </div>
@@ -168,6 +180,38 @@ const QuickActionsCard = ({
             </button>
             <div className="absolute hidden group-hover:block bg-gray-800 text-white text-xs rounded-lg py-2 px-3 bottom-full left-0 mb-2 w-48 z-10">
               Chatroom unavailable for anonymous complaints.
+              <div className="absolute top-full left-4 w-2 h-2 bg-gray-800 transform rotate-45"></div>
+            </div>
+          </div>
+        ) : assignedTo === "Not Assigned" ? (
+          <div title="Officer must be assigned before creating a chatroom" className="group relative">
+            <button
+              disabled
+              className="w-full flex items-center justify-between px-4 py-2 bg-gray-300 text-gray-500 rounded-lg text-sm font-medium cursor-not-allowed opacity-60"
+            >
+              <span className="flex items-center space-x-2">
+                <FontAwesomeIcon icon={faComments} />
+                <span>Chat with Student</span>
+              </span>
+            </button>
+            <div className="absolute hidden group-hover:block bg-gray-800 text-white text-xs rounded-lg py-2 px-3 bottom-full left-0 mb-2 w-48 z-10">
+              Assign an officer before creating a chatroom.
+              <div className="absolute top-full left-4 w-2 h-2 bg-gray-800 transform rotate-45"></div>
+            </div>
+          </div>
+        ) : complaint?.status === "Resolved" || complaint?.status === "Closed" ? (
+          <div title="Chatroom cannot be created for resolved or closed complaints" className="group relative">
+            <button
+              disabled
+              className="w-full flex items-center justify-between px-4 py-2 bg-gray-300 text-gray-500 rounded-lg text-sm font-medium cursor-not-allowed opacity-60"
+            >
+              <span className="flex items-center space-x-2">
+                <FontAwesomeIcon icon={faComments} />
+                <span>Chat with Student</span>
+              </span>
+            </button>
+            <div className="absolute hidden group-hover:block bg-gray-800 text-white text-xs rounded-lg py-2 px-3 bottom-full left-0 mb-2 w-48 z-10">
+              Chatroom cannot be created for {complaint?.status?.toLowerCase()} complaints.
               <div className="absolute top-full left-4 w-2 h-2 bg-gray-800 transform rotate-45"></div>
             </div>
           </div>

@@ -4,6 +4,7 @@ import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { fetchReports } from "../services/reportsApi";
 import { fetchRooms, fetchFacultyCategories } from "../services/api";
 import { useComplaintUpdates } from "../hooks/useComplaintUpdates";
+import { NotificationService } from "../utils/NotificationService";
 import {
   faFileExport,
   faFileCsv,
@@ -91,6 +92,7 @@ const ComplaintManagement = () => {
 
   // Real-time complaint updates
   useComplaintUpdates({
+    showNotifications: true,
     onNewComplaint: async (payload) => {
       console.log("📬 New complaint received via WebSocket:", payload);
 
@@ -306,6 +308,67 @@ const ComplaintManagement = () => {
     };
 
     loadComplaints();
+  }, []);
+
+  // 🔄 Poll for new complaints from partner API every 4 seconds
+  useEffect(() => {
+    const pollInterval = setInterval(async () => {
+      try {
+        const response = await fetchReports();
+        const reportsData =
+          response.data?.reports || response.data?.data || response.data || [];
+
+        const mappedComplaints = reportsData.map(mapReportToComplaint);
+
+        // Compare with existing complaints to find new ones
+        setComplaints((prevComplaints) => {
+          // Create a set of existing complaint IDs
+          const existingIds = new Set(prevComplaints.map((c) => c.id));
+
+          // Find new complaints
+          const newComplaints = mappedComplaints.filter(
+            (c) => !existingIds.has(c.id)
+          );
+
+          if (newComplaints.length > 0) {
+            console.log(
+              `📬 Polling: Found ${newComplaints.length} new complaint(s)`
+            );
+            // Add new complaints to the beginning of the list
+            return [...newComplaints, ...prevComplaints];
+          }
+
+          // Also check for status/assignment changes in existing complaints
+          let hasUpdates = false;
+          const updatedComplaints = prevComplaints.map((prevComplaint) => {
+            const updatedComplaint = mappedComplaints.find(
+              (c) => c.id === prevComplaint.id
+            );
+            if (
+              updatedComplaint &&
+              (prevComplaint.status !== updatedComplaint.status ||
+                prevComplaint.adminId !== updatedComplaint.adminId ||
+                prevComplaint.adminName !== updatedComplaint.adminName)
+            ) {
+              hasUpdates = true;
+              return updatedComplaint;
+            }
+            return prevComplaint;
+          });
+
+          if (hasUpdates) {
+            console.log("📝 Polling: Found status/assignment updates");
+            return updatedComplaints;
+          }
+
+          return prevComplaints;
+        });
+      } catch (error) {
+        console.warn("Polling error:", error);
+      }
+    }, 4000); // Poll every 4 seconds
+
+    return () => clearInterval(pollInterval);
   }, []);
 
   // Global click listener for dropdown menus

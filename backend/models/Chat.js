@@ -19,16 +19,15 @@ const chatSchema = new mongoose.Schema({
   },
   message: {
     type: String,
-    required: true,
+    required: false,
   },
-  attachments: [
-    {
-      name: String,
-      size: Number,
+  attachment: {
+    url: String,
+    type: {
       type: String,
-      url: String,
+      enum: ['image', 'video', 'pdf'],
     },
-  ],
+  },
   createdAt: {
     type: Date,
     default: Date.now,

@@ -1,15 +1,24 @@
 import React from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faHistory } from "@fortawesome/free-solid-svg-icons";
+import { faHistory, faPlus } from "@fortawesome/free-solid-svg-icons";
 
 // [{ id, actionTitle, actionDetails, initiatorName, createdAt }]
 // Gracefully handles legacy format where fields are date/action/user.
-const ActivityHistory = ({ history = [] }) => {
+const ActivityHistory = ({ history = [], onAddTimelineClick }) => {
   const safeItems = Array.isArray(history) ? history : [];
   return (
     <div className="bg-white rounded-lg shadow-md overflow-hidden">
-      <div className="px-6 py-4 border-b border-gray-200">
+      <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
         <h2 className="text-lg font-medium text-gray-900">Activity History</h2>
+        {onAddTimelineClick && (
+          <button
+            onClick={onAddTimelineClick}
+            className="inline-flex items-center gap-2 px-3 py-1.5 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 transition-colors"
+          >
+            <FontAwesomeIcon icon={faPlus} size="sm" />
+            Add Entry
+          </button>
+        )}
       </div>
       <div className="p-6">
         <div className="flow-root">

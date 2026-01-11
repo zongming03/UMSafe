@@ -215,6 +215,21 @@ const updateComplaintStatus = async (req, res) => {
       return res.status(404).json({ message: 'Complaint not found' });
     }
     
+    // Fetch student/submitter to get their faculty ID
+    let studentFacultyId = null;
+    let studentEmail = null;
+    if (complaint.user_id) {
+      try {
+        const student = await User.findById(complaint.user_id);
+        if (student) {
+          studentFacultyId = student.facultyid;
+          studentEmail = student.email;
+        }
+      } catch (e) {
+        console.warn('Failed to fetch student details:', e.message);
+      }
+    }
+    
     // Check if complaint is being reopened
     const newStatus = req.body.status?.toLowerCase();
     const isReopened = (previousStatus === 'resolved' || previousStatus === 'closed') && 
@@ -236,6 +251,38 @@ const updateComplaintStatus = async (req, res) => {
         }
       }
     }
+    
+    // Gather admin/officer/superadmin recipients within the same faculty
+    const gatherFacultyStaffRecipients = async (facultyId) => {
+      if (!facultyId) return { adminEmails: [], officerEmails: [], superAdminEmails: [] };
+      
+      try {
+        const superAdmins = await User.find({ 
+          facultyid: facultyId, 
+          role: 'superadmin', 
+          'notifications.emailNotifications': { $ne: false } 
+        });
+        const admins = await User.find({ 
+          facultyid: facultyId, 
+          role: 'admin', 
+          'notifications.emailNotifications': { $ne: false } 
+        });
+        const officers = await User.find({ 
+          facultyid: facultyId, 
+          role: 'officer', 
+          'notifications.emailNotifications': { $ne: false } 
+        });
+        
+        return {
+          superAdminEmails: superAdmins.map(u => u.email).filter(Boolean),
+          adminEmails: admins.map(u => u.email).filter(Boolean),
+          officerEmails: officers.map(u => u.email).filter(Boolean),
+        };
+      } catch (e) {
+        console.warn('Failed to gather faculty staff recipients:', e.message);
+        return { adminEmails: [], officerEmails: [], superAdminEmails: [] };
+      }
+    };
     
     const notifyUser = async (userRef, roleLabel) => {
       if (!userRef) return;
@@ -265,8 +312,43 @@ const updateComplaintStatus = async (req, res) => {
 
     // Notify assigned admin (try multiple possible fields)
     await notifyUser(complaint.admin_id || complaint.assignedTo || complaint.assignedToId || complaint.admin);
-    // Notify the reporter / submitter
-    await notifyUser(complaint.user_id || complaint.submittedBy || complaint.submitted_by || complaint.user || complaint.reporter, 'reporter');
+    
+    // Notify all staff (admin, superadmin, officer) within the same faculty
+    if (studentFacultyId) {
+      const { superAdminEmails, adminEmails, officerEmails } = await gatherFacultyStaffRecipients(studentFacultyId);
+      const allStaffEmails = [...new Set([...superAdminEmails, ...adminEmails, ...officerEmails])].filter(Boolean);
+      
+      if (allStaffEmails.length > 0) {
+        const complaintUrl = `${HOSTNAME}/complaints/${complaint._id}`;
+        const subject = `Complaint Status Update - ${complaint._id} - ${complaint.status}`;
+        const html = `<p>Complaint <strong>#${complaint._id}</strong> status has been updated to <strong>${complaint.status}</strong>.</p><p><a href="${complaintUrl}">View complaint</a></p><p>Regards,<br/>UMSafe</p>`;
+        
+        for (const email of allStaffEmails) {
+          try {
+            await sendEmail({ to: email, subject, text: html, html });
+            console.log(`📧 Faculty staff notification sent to ${email}`);
+          } catch (e) {
+            console.warn('Failed to send faculty staff notification to', email, e);
+          }
+        }
+      }
+    }
+    
+    // Notify the reporter / submitter (student)
+    if (studentEmail) {
+      const complaintUrl = `${HOSTNAME}/complaints/${complaint._id}`;
+      const subject = `Your Complaint Status Updated - ${complaint._id}`;
+      const statusIcon = complaint.status === 'Resolved' ? '✅' : complaint.status === 'In Progress' ? '⏳' : '📋';
+      const html = `<p>Hello,</p><p>Your complaint <strong>#${complaint._id}</strong> status has been updated to <strong>${statusIcon} ${complaint.status}</strong>.</p><p><a href="${complaintUrl}">View your complaint</a></p><p>Thank you for using UMSafe.<br/>Regards,<br/>UMSafe</p>`;
+      
+      try {
+        await sendEmail({ to: studentEmail, subject, text: html, html });
+        console.log(`📧 Student notification sent to ${studentEmail}`);
+      } catch (e) {
+        console.warn('Failed to send student notification to', studentEmail, e);
+      }
+    }
+    
     emitEvent('complaint:status', {
       complaintId: complaint._id?.toString(),
       status: complaint.status,
@@ -499,34 +581,6 @@ const assignComplaint = async (req, res) => {
   }
 };
 
-// Webhook endpoint for new complaint notifications from partner API
-const handleNewComplaintWebhook = async (req, res) => {
-  try {
-    const { complaintId, title, facultyId } = req.body;
-    
-    if (!complaintId || !title) {
-      return res.status(400).json({ message: 'Missing required fields: complaintId, title' });
-    }
-    
-    console.log(`📬 New complaint webhook received: ${complaintId}`);
-    
-    // Notify all admins
-    await notifyAdminsNewComplaint(complaintId, title, facultyId);
-
-    emitEvent('complaint:new', {
-      complaintId,
-      title,
-      facultyId,
-      createdAt: new Date().toISOString(),
-    });
-    
-    res.status(200).json({ message: 'Notification sent successfully' });
-  } catch (error) {
-    console.error('Error handling new complaint webhook:', error);
-    res.status(500).json({ message: error.message });
-  }
-};
-
 // Get all messages for a specific chatroom
 const getChatroomMessages = async (req, res) => {
   try {
@@ -551,7 +605,6 @@ export default {
   getComplaintById,
   updateComplaintStatus,
   assignComplaint,
-  handleNewComplaintWebhook,
   getChatroomMessages,
   notifyAdminsNewComplaint
 };

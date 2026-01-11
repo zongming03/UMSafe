@@ -1,6 +1,7 @@
 import { useEffect, useCallback } from "react";
 import { getSocket } from "../services/socket";
 import apiCache from "../utils/apiCache";
+import { NotificationService } from "../utils/NotificationService";
 
 /**
  * Custom hook to listen for real-time complaint updates via Socket.IO
@@ -9,20 +10,31 @@ import apiCache from "../utils/apiCache";
  * @param {Function} options.onNewComplaint - Callback when new complaint is created
  * @param {Function} options.onStatusChange - Callback when complaint status changes
  * @param {Function} options.onAssignment - Callback when complaint assignment changes
+ * @param {boolean} options.showNotifications - Whether to show toast notifications (default: true)
  */
 export const useComplaintUpdates = ({
   currentComplaintId,
   onNewComplaint,
   onStatusChange,
   onAssignment,
+  showNotifications = true,
 }) => {
   const handleNewComplaint = useCallback(
     (payload) => {
       // Invalidate cache when new complaint arrives
       apiCache.invalidate('reports_all');
+      
+      // Show notification for new complaint
+      if (showNotifications) {
+        NotificationService.showNewComplaintNotification({
+          title: payload.title || "New Complaint",
+          displayId: payload.displayId || payload.complaintId,
+        });
+      }
+      
       if (onNewComplaint) onNewComplaint(payload);
     },
-    [onNewComplaint]
+    [onNewComplaint, showNotifications]
   );
 
   const handleStatusChange = useCallback(
@@ -33,9 +45,19 @@ export const useComplaintUpdates = ({
       if (payload.complaintId) {
         apiCache.invalidate(`report_${payload.complaintId}`);
       }
+      
+      // Show notification for status change
+      if (showNotifications) {
+        NotificationService.showStatusChangeNotification(
+          payload.displayId || payload.complaintId,
+          payload.oldStatus || "Unknown",
+          payload.status || "Unknown"
+        );
+      }
+      
       if (onStatusChange) onStatusChange(payload);
     },
-    [onStatusChange, currentComplaintId]
+    [onStatusChange, currentComplaintId, showNotifications]
   );
 
   const handleAssignment = useCallback(
@@ -46,9 +68,18 @@ export const useComplaintUpdates = ({
       if (payload.complaintId) {
         apiCache.invalidate(`report_${payload.complaintId}`);
       }
+      
+      // Show notification for assignment change
+      if (showNotifications) {
+        NotificationService.showAssignmentNotification(
+          payload.displayId || payload.complaintId,
+          payload.adminName || "Unassigned"
+        );
+      }
+      
       if (onAssignment) onAssignment(payload);
     },
-    [onAssignment, currentComplaintId]
+    [onAssignment, currentComplaintId, showNotifications]
   );
 
   useEffect(() => {

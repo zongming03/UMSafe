@@ -1,5 +1,5 @@
 import jsPDF from "jspdf";
-import { toast } from "react-hot-toast";
+import toast from "react-hot-toast";
 import UMSafeLogo from "../assets/UMSafeLogo.png";
 
 // ====== Helper: Format date (no time) ======

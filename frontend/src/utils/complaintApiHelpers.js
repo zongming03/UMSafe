@@ -3,7 +3,7 @@
  */
 
 import { assignAdmin, revokeReport, resolveReport, closeReport } from "../services/reportsApi";
-import { toast } from "react-hot-toast";
+import toast from "react-hot-toast";
 
 export const refreshComplaintFromPartner = async (id, currentComplaint) => {
   try {
@@ -12,14 +12,21 @@ export const refreshComplaintFromPartner = async (id, currentComplaint) => {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     
+    // Extract the report from the response (could be nested in data.report or directly in data)
+    const reportData = data.report || data;
+    
     const normalized = {
       ...currentComplaint,
-      ...data,
-      timelineHistory: data.timelineHistory || data.timeline_history || currentComplaint.timelineHistory || [],
+      ...reportData,
+      // Ensure status is properly mapped
+      status: reportData.status,
+      timelineHistory: reportData.timelineHistory || reportData.timeline_history || currentComplaint.timelineHistory || [],
     };
+    
+    console.log(`✅ Refreshed complaint ${id}, new status:`, normalized.status);
     return normalized;
   } catch (err) {
-    console.warn('⚠️ Failed to refresh complaint after assign/revoke', err);
+    console.warn('⚠️ Failed to refresh complaint after status update', err);
     return currentComplaint;
   }
 };
@@ -75,14 +82,19 @@ export const revokeAssignedStaff = async (complaintId, onSuccess) => {
   }
 };
 
-export const updateComplaintStatus = async (complaintId, newStatus, onSuccess) => {
+export const updateComplaintStatus = async (complaintId, newStatus, onSuccess, reason) => {
   try {
     if (newStatus === 'Resolved') {
       await resolveReport(complaintId, {});
       console.log(`✅ Report ${complaintId} marked as Resolved`);
     } else if (newStatus === 'Closed') {
-      await closeReport(complaintId, {});
-      console.log(`✅ Report ${complaintId} marked as Closed`);
+      // Pass the reason in the payload as per CloseReportInputSchema
+      const payload = {
+        initiatorName: 'Admin',
+        reason: reason || 'No reason provided'
+      };
+      await closeReport(complaintId, payload);
+      console.log(`✅ Report ${complaintId} marked as Closed with reason:`, reason);
     } else {
       console.log(`ℹ️ No partner endpoint for status '${newStatus}', status not updated via API`);
       return;

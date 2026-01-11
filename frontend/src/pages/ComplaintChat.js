@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useContext } from "react";
 import "../styles/ComplaintChat.css";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import { toast } from "react-hot-toast";
 import {
   faInfoCircle,
   faFile,
@@ -20,6 +21,7 @@ import api from "../services/api.js";
 import { AuthContext } from "../context/AuthContext";
 import LoadingOverlay from "../components/LoadingOverlay";
 import { useChatUpdates } from "../hooks/useChatUpdates";
+import { NotificationService } from "../utils/NotificationService";
 
 const ComplaintChat = () => {
   const { reportId, chatroomId } = useParams();
@@ -30,6 +32,7 @@ const ComplaintChat = () => {
   const [loading, setLoading] = useState(true);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [attachments, setAttachments] = useState([]);
+  const [uploadingAttachments, setUploadingAttachments] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [adminIds, setAdminIds] = useState(new Set());
   const [adminProfiles, setAdminProfiles] = useState(new Map()); 
@@ -194,6 +197,93 @@ const ComplaintChat = () => {
     setHasFetchedMessages(false);
   }, [chatroomId]);
 
+  // 🔄 Poll for new messages from partner API every 3 seconds
+  useEffect(() => {
+    if (!reportId || !chatroomId || !hasFetchedMessages) return;
+
+    const pollInterval = setInterval(async () => {
+      try {
+        const response = await getChatMessages(reportId, chatroomId);
+        
+        let chats = [];
+        if (response?.chat) {
+          chats = Array.isArray(response.chat) ? response.chat : [response.chat];
+        } else if (response?.chats) {
+          chats = Array.isArray(response.chats) ? response.chats : [response.chats];
+        } else if (Array.isArray(response)) {
+          chats = response;
+        }
+
+        if (chats.length === 0) return;
+
+        // Map the fetched messages
+        const getAvatar = (senderId) => {
+          if (adminIds.has(senderId)) {
+            const adminProfile = adminProfiles.get(senderId);
+            if (adminProfile?.profileImage) {
+              return adminProfile.profileImage.startsWith('http')
+                ? adminProfile.profileImage
+                : `${((process.env.REACT_APP_API_BASE_URL).replace(/\/$/, "")).replace(/\/admin$/, "")}${adminProfile.profileImage}`;
+            }
+            return man;
+          }
+          return profile;
+        };
+
+        const mapped = chats.map((c, idx) => {
+          const single = c.attachment;
+          const plural = Array.isArray(c.attachments) ? c.attachments : [];
+
+          const normalizedAttachments = single
+            ? [{
+                url: single.url,
+                type: single.type,
+                name: single.name || (single.type?.toLowerCase() === 'pdf' ? `pdf${idx + 1}.pdf` : `${single.type || 'file'}${idx + 1}`),
+              }]
+            : plural.map((att, aIdx) => ({
+                ...att,
+                name: att.name || (att.type?.toLowerCase() === 'pdf' ? `pdf${aIdx + 1}.pdf` : `${att.type || 'file'}${aIdx + 1}`),
+              }));
+
+          return {
+            ...c,
+            timestamp: c.createdAt || c.updatedAt,
+            content: c.message || c.content,
+            isAdmin: adminIds.has(c.senderId),
+            avatar: getAvatar(c.senderId),
+            attachments: normalizedAttachments,
+          };
+        });
+
+        // Update messages if there are new ones (compare by ID or timestamp)
+        setMessages((prevMessages) => {
+          // Create a set of existing message IDs/timestamps to avoid duplicates
+          const existingIds = new Set(prevMessages.map(m => m.id || m.createdAt));
+          const newMessages = mapped.filter(m => !existingIds.has(m.id || m.createdAt));
+          
+          if (newMessages.length > 0) {
+            console.log(`📨 Polling: Found ${newMessages.length} new message(s)`);
+            
+            // Show notification for each new message (excluding system messages)
+            newMessages.forEach(msg => {
+              if (!msg.system && msg.content) {
+                const senderName = msg.senderName || (msg.isAdmin ? "Admin" : complaint?.username || "User");
+                NotificationService.showNewMessageNotification(senderName, msg.content);
+              }
+            });
+            
+            return [...prevMessages, ...newMessages];
+          }
+          return prevMessages;
+        });
+      } catch (error) {
+        console.warn("Polling error:", error);
+      }
+    }, 3000); // Poll every 3 seconds
+
+    return () => clearInterval(pollInterval);
+  }, [reportId, chatroomId, hasFetchedMessages, adminIds, adminProfiles]);
+
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
@@ -257,37 +347,52 @@ const ComplaintChat = () => {
   }, [showEmojiPicker]);
 
   // Real-time chat updates
-  useChatUpdates({
-    reportId,
-    chatroomId,
-    onNewMessage: (payload) => {
-      // Add new message to the chat
-      const newMessage = {
-        id: payload.messageId || `msg-${Date.now()}`,
-        senderId: payload.senderId,
-        senderName: payload.senderName || "Unknown",
-        content: payload.content || payload.message,
-        message: payload.content || payload.message,
-        timestamp: payload.timestamp || new Date().toISOString(),
-        createdAt: payload.timestamp || new Date().toISOString(),
-        isAdmin: payload.isAdmin || adminIds.has(payload.senderId),
-        avatar: payload.avatar,
-        attachments: payload.attachments || [],
-        system: false,
-      };
-      setMessages((prev) => [...prev, newMessage]);
+  useChatUpdates(
+    {
+      reportId,
+      chatroomId,
+      onNewMessage: (payload) => {
+        // Add new message to the chat
+        const newMessage = {
+          id: payload.messageId || `msg-${Date.now()}`,
+          senderId: payload.senderId,
+          senderName: payload.senderName || "Unknown",
+          content: payload.content || payload.message,
+          message: payload.content || payload.message,
+          timestamp: payload.timestamp || new Date().toISOString(),
+          createdAt: payload.timestamp || new Date().toISOString(),
+          isAdmin: payload.isAdmin || adminIds.has(payload.senderId),
+          avatar: payload.avatar,
+          attachments: payload.attachments || [],
+          system: false,
+        };
+        setMessages((prev) => [...prev, newMessage]);
+      },
+      onMessageDelivered: (payload) => {
+        // Update message delivery status
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === payload.messageId ? { ...msg, delivered: true } : msg
+          )
+        );
+      },
     },
-    onMessageDelivered: (payload) => {
-      // Update message delivery status
-      setMessages((prev) =>
-        prev.map((msg) =>
-          msg.id === payload.messageId ? { ...msg, delivered: true } : msg
-        )
-      );
-    },
-  });
+    {
+      showNotifications: true,
+      senderName: complaint?.username || complaint?.title || "User",
+    }
+  );
 
   const handleSendMessage = async () => {
+    // Check if complaint is in a terminal state (Resolved or Closed)
+    const complaintStatus = complaint?.status?.toLowerCase();
+    const isTerminalStatus = complaintStatus === 'resolved' || complaintStatus === 'closed';
+    
+    if (isTerminalStatus) {
+      toast.error(`Cannot send messages - this complaint is ${complaint.status}. The chatroom is read-only.`);
+      return;
+    }
+
     if (!message.trim() && attachments.length === 0) return;
 
     const currentUserId =
@@ -314,16 +419,16 @@ const ComplaintChat = () => {
       }
     });
 
-    const newMessage = {
-      id: crypto.randomUUID(),
-      senderId: currentUserId,
-      isAdmin: true,
-      // receiverId could be determined by chatroom participants; keep undefined for backend to resolve
-      message: message,
-      content: message, // Also include as 'content' for rendering compatibility
-      createdAt: new Date().toISOString(),
-      attachments: optimisticAttachments,
-    };
+  const newMessage = {
+    id: crypto.randomUUID(),
+    senderId: currentUserId,
+    isAdmin: true,
+    // receiverId could be determined by chatroom participants; keep undefined for backend to resolve
+    message: message,
+    content: message, // Also include as 'content' for rendering compatibility
+    createdAt: new Date().toISOString(),
+    attachments: optimisticAttachments,
+  };
 
   // Optimistically append message so UI feels responsive
   setMessages((prev) => [...prev, newMessage]);
@@ -332,70 +437,167 @@ const ComplaintChat = () => {
   const attachmentsToSend = attachments.slice();
   setAttachments([]);
 
-    // Persist: if chatroomId missing, create it first
-    setIsSending(true);
-    try {
-      let roomId = chatroomId;
-      if (!roomId) {
-        // 🔒 VALIDATION: Check if complaint is anonymous before attempting to create chatroom
-        if (complaint?.isAnonymous) {
-          alert("Chatroom cannot be created for anonymous complaints. The student must be identified first.");
-          setIsSending(false);
-          // Remove the optimistically added message since we're not sending
-          setMessages((prev) => prev.filter((msg) => msg.id !== newMessage.id));
-          return;
-        }
-
-        const res = await initiateChatroom(reportId);
-        roomId = res?.chatroom?.id;
-        if (roomId) {
-          // update URL so route param contains the new chatroomId and location.state carries updated complaint
-          const updatedComplaint = { ...(complaint || {}), chatroomId: roomId };
-          navigate(`/complaints/${reportId}/${roomId}`, { state: updatedComplaint });
-        }
+  // Persist: if chatroomId missing, create it first
+  setIsSending(true);
+  try {
+    let roomId = chatroomId;
+    if (!roomId) {
+      // 🔒 VALIDATION: Check if complaint is anonymous before attempting to create chatroom
+      if (complaint?.isAnonymous) {
+        alert("Chatroom cannot be created for anonymous complaints. The student must be identified first.");
+        setIsSending(false);
+        // Remove the optimistically added message since we're not sending
+        setMessages((prev) => prev.filter((msg) => msg.id !== newMessage.id));
+        return;
       }
 
-        if (roomId) {
-        // Build payload for partner API (must include senderId and receiverId, no attachments)
-        // receiverId is the user who filed the complaint (complaint.userId)
+      const res = await initiateChatroom(reportId);
+      roomId = res?.chatroom?.id;
+      if (roomId) {
+        // update URL so route param contains the new chatroomId and location.state carries updated complaint
+        const updatedComplaint = { ...(complaint || {}), chatroomId: roomId };
+        navigate(`/complaints/${reportId}/${roomId}`, { state: updatedComplaint });
+      }
+    }
+
+    if (roomId) {
+  
         const receiverId = complaint?.userId || "student-001";
         
-        // send message to backend; if attachmentsToSend contains File objects, send as FormData
         const hasFiles = attachmentsToSend && attachmentsToSend.length > 0 && attachmentsToSend[0] instanceof File;
+        let uploadedAttachments = [];
+        
         if (hasFiles) {
-          const form = new FormData();
-          form.append("message", newMessage.message);
-          form.append("senderId", currentUserId);
-          form.append("receiverId", receiverId);
-          // append files with key 'files' (backend should read from req.files.files or similar)
-          attachmentsToSend.forEach((file) => form.append("files", file));
-          const response = await sendMessage(reportId, roomId, form);
-          console.log("✅ Message sent successfully - Response:", response);
+          try {
+            // Upload files to Cloudinary via backend
+            console.log("📤 Uploading files to Cloudinary...");
+            setUploadingAttachments(true);
+            const uploadForm = new FormData();
+            attachmentsToSend.forEach((file) => uploadForm.append("files", file));
+            
+            // Upload to Cloudinary endpoint
+            const uploadResponse = await api.post("/upload/cloudinary", uploadForm);
+            
+            uploadedAttachments = uploadResponse.data?.files || [];
+            console.log("✅ Files uploaded to Cloudinary successfully:", uploadedAttachments);
+            setUploadingAttachments(false);
+            
+            if (!uploadedAttachments.length) {
+              throw new Error('No files returned from Cloudinary upload');
+            }
+          } catch (uploadErr) {
+            console.error("❌ File upload to Cloudinary failed:", uploadErr);
+            setUploadingAttachments(false);
+            const errorMsg = uploadErr.response?.data?.error || uploadErr.message || 'File upload failed';
+            toast.error(`Failed to upload to Cloudinary: ${errorMsg}`);
+            // Continue with message send even if file upload fails
+          }
+        }
+        
+        // Build payload with senderId, receiverId, and optional attachment
+        // Partner API schema: { senderId, receiverId, message?, attachment? }
+        // attachment: { url (required), type: "image"|"video"|"pdf" (required) }
+        
+        // Helper to map MIME type to partner API type enum
+        const getMimeTypeCategory = (mimeType) => {
+          if (!mimeType) return null;
+          if (mimeType.startsWith('image/')) return 'image';
+          if (mimeType.startsWith('video/')) return 'video';
+          if (mimeType.includes('pdf')) return 'pdf';
+          return null; // Unsupported type
+        };
+        
+        // If we have files, send message with first attachment only
+        // (Partner API accepts one attachment per message)
+        if (uploadedAttachments.length > 0) {
+
+          const firstFile = uploadedAttachments[0];
+          const attachmentType = getMimeTypeCategory(firstFile.mimetype);
           
-          // Update the message with the actual chat ID from backend
-          if (response?.chat) {
-            setMessages((prev) => {
-              const updated = [...prev];
-              const lastIndex = updated.length - 1;
-              if (lastIndex >= 0 && updated[lastIndex].id === newMessage.id) {
-                // Merge the response with the optimistic message, keeping optimistic content as fallback
-                updated[lastIndex] = {
-                  ...updated[lastIndex],
-                  ...response.chat,
-                  content: response.chat.message || updated[lastIndex].content, // Ensure content is always available for rendering
-                  message: response.chat.message || updated[lastIndex].message,
+          if (attachmentType) {
+            // Send with attachment
+            const payload = {
+              senderId: currentUserId,
+              receiverId: receiverId,
+              message: newMessage.message || undefined, // Only include if not empty
+              attachment: {
+                url: firstFile.url || firstFile.path,
+                type: attachmentType,
+              },
+            };
+            // Remove undefined fields to match strict schema
+            if (!payload.message) delete payload.message;
+            
+            const response = await sendMessage(reportId, roomId, payload);
+            console.log("✅ Message sent successfully - Response:", response);
+            
+            // Queue remaining files as separate messages without text
+            for (let i = 1; i < uploadedAttachments.length; i++) {
+              const file = uploadedAttachments[i];
+              const fileType = getMimeTypeCategory(file.mimetype);
+              if (fileType) {
+                const followUpPayload = {
+                  senderId: currentUserId,
+                  receiverId: receiverId,
+                  attachment: {
+                    url: file.url || file.path,
+                    type: fileType,
+                  },
                 };
+                await sendMessage(reportId, roomId, followUpPayload);
+                console.log("📎 Additional file sent");
               }
-              return updated;
-            });
+            }
+            
+            // Update the message with the actual chat ID from backend
+            if (response?.chat) {
+              setMessages((prev) => {
+                const updated = [...prev];
+                const lastIndex = updated.length - 1;
+                if (lastIndex >= 0 && updated[lastIndex].id === newMessage.id) {
+                  updated[lastIndex] = {
+                    ...updated[lastIndex],
+                    ...response.chat,
+                    content: response.chat.message || updated[lastIndex].content,
+                    message: response.chat.message || updated[lastIndex].message,
+                  };
+                }
+                return updated;
+              });
+            }
+          } else {
+            // Unsupported file type - send message without attachment
+            console.warn("⚠️ Unsupported file type, sending message without attachment");
+            const payload = {
+              senderId: currentUserId,
+              receiverId: receiverId,
+              message: newMessage.message,
+            };
+            const response = await sendMessage(reportId, roomId, payload);
+            console.log("✅ Message sent successfully (without attachment) - Response:", response);
+            
+            if (response?.chat) {
+              setMessages((prev) => {
+                const updated = [...prev];
+                const lastIndex = updated.length - 1;
+                if (lastIndex >= 0 && updated[lastIndex].id === newMessage.id) {
+                  updated[lastIndex] = {
+                    ...updated[lastIndex],
+                    ...response.chat,
+                    content: response.chat.message || updated[lastIndex].content,
+                    message: response.chat.message || updated[lastIndex].message,
+                  };
+                }
+                return updated;
+              });
+            }
           }
         } else {
-          // Attachments are metadata only (no file objects)
-          // Build payload with senderId and receiverId for partner API
+          // No files - just send message
           const payload = {
-            message: newMessage.message,
             senderId: currentUserId,
             receiverId: receiverId,
+            message: newMessage.message,
           };
           const response = await sendMessage(reportId, roomId, payload);
           console.log("✅ Message sent successfully - Response:", response);
@@ -509,6 +711,9 @@ const ComplaintChat = () => {
     "😁","😂","🤣","😃","😄","😅","😆","😉","😊","😇","🙂","🙃","😍","😘","😗","😙","😚","😋","😜","😝","😛","🤑","🤗","🤭","🤫","🤔","🤐","🤨","😐","😑","😶","🔥","😌","😔","😪","🤤","😴","😷","🤒","🤕","🤢","🤮","🤧","🥵","🥶","🥴","😵","🤯","🤠","🥳","😎","🤓","🧐","😕","😟","🙁","☹️","😯","😳","😦","😧","😨","😰","😢","😭","😱","😖","😣","😞","😓","😩","😫","😤","😡","😠","🤬","💀","☠️","💩","🤡","👹","👺","👻","👽","🤖","💋","💌","💘","💝","💖","💗","💓","💕","💞","💐","🌸","🌹","🌺","🌻","🌼","🌷","🌱","🌿","🍀","🌵","🎄","🌴","🌲","🌳","🌾","🍁","🍂","🍃","☀️","🌤️","⛅","🌥️","🌦️","🌧️","⛈️","🌩️","🌨️","❄️","⚡","🔥","💧","🌊","⭐","🌟","✨","⚽","🏀","🏈","⚾","🎾","🏐","🎱","🏓","🏸","🥅","🏒","🏑","🏏","🎯","🎲","🎮","🎧","🎤","🎵","🎶","🎷","🎸","🎹","�","📷","🎬","🎨","✈️","🚗","🚕","🚙","🚌","🚎","🏎️","🚓","🚑","🚒","🚲","🚂","🚀","🛸","🛰️"
   ];
 
+  const complaintStatus = complaint?.status?.toLowerCase();
+  const isTerminalStatus = complaintStatus === 'resolved' || complaintStatus === 'closed';
+
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
       {/* Chat Header */}
@@ -521,6 +726,18 @@ const ComplaintChat = () => {
         /* lastActive removed per request */
         onBack={() => navigate(-1)}
       />
+
+      {/* Read-Only Banner for Resolved/Closed Complaints */}
+      {isTerminalStatus && (
+        <div className="bg-yellow-50 border-b border-yellow-200 px-6 py-3">
+          <div className="max-w-3xl mx-auto flex items-center gap-2 text-yellow-800">
+            <FontAwesomeIcon icon={faInfoCircle} className="text-yellow-600" />
+            <span className="text-sm font-medium">
+              This chatroom is read-only because the complaint status is <strong>{complaint.status}</strong>. You can view messages but cannot send new ones.
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* Main Chat Area */}
       <div
@@ -682,31 +899,44 @@ const ComplaintChat = () => {
                   key={index}
                   className="flex items-center bg-gray-100 px-3 py-1 rounded-lg border border-gray-200"
                 >
-                  <span className="mr-2">
-                    {file.type.includes("image") ? (
-                      <FontAwesomeIcon
-                        icon={faImage}
-                        className="text-blue-500"
-                      />
-                    ) : file.type.includes("pdf") ? (
-                      <FontAwesomeIcon
-                        icon={faFilePdf}
-                        className="text-red-500"
-                      />
-                    ) : (
-                      <FontAwesomeIcon
-                        icon={faFile}
-                        className="text-gray-500"
-                      />
-                    )}
-                  </span>
+                  {uploadingAttachments ? (
+                    <span className="mr-2 animate-spin">
+                      <svg className="w-4 h-4 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                    </span>
+                  ) : (
+                    <span className="mr-2">
+                      {file.type.includes("image") ? (
+                        <FontAwesomeIcon
+                          icon={faImage}
+                          className="text-blue-500"
+                        />
+                      ) : file.type.includes("pdf") ? (
+                        <FontAwesomeIcon
+                          icon={faFilePdf}
+                          className="text-red-500"
+                        />
+                      ) : (
+                        <FontAwesomeIcon
+                          icon={faFile}
+                          className="text-gray-500"
+                        />
+                      )}
+                    </span>
+                  )}
                   <span className="text-sm truncate max-w-xs">{file.name}</span>
-                  <button
-                    onClick={() => removeAttachment(index)}
-                    className="!rounded-button whitespace-nowrap ml-2 text-gray-500 hover:text-gray-700 cursor-pointer"
-                  >
-                    <FontAwesomeIcon icon={faTimes} />
-                  </button>
+                  {uploadingAttachments ? (
+                    <span className="ml-2 text-xs text-blue-600">Uploading...</span>
+                  ) : (
+                    <button
+                      onClick={() => removeAttachment(index)}
+                      className="!rounded-button whitespace-nowrap ml-2 text-gray-500 hover:text-gray-700 cursor-pointer"
+                    >
+                      <FontAwesomeIcon icon={faTimes} />
+                    </button>
+                  )}
                 </div>
               ))}
             </div>
@@ -715,7 +945,15 @@ const ComplaintChat = () => {
             <div className="relative">
               <button
                 ref={emojiButtonRef}
-                onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+                onClick={() => {
+                  const complaintStatus = complaint?.status?.toLowerCase();
+                  const isTerminalStatus = complaintStatus === 'resolved' || complaintStatus === 'closed';
+                  if (isTerminalStatus) {
+                    toast.error(`Cannot send messages - this complaint is ${complaint.status}. The chatroom is read-only.`);
+                    return;
+                  }
+                  setShowEmojiPicker(!showEmojiPicker);
+                }}
                 className="!rounded-button whitespace-nowrap p-3 text-gray-500 hover:text-gray-700 cursor-pointer"
               >
                 <FontAwesomeIcon icon={faSmile} className="text-lg" />
@@ -747,7 +985,15 @@ const ComplaintChat = () => {
               multiple
             />
             <button
-              onClick={() => fileInputRef.current?.click()}
+              onClick={() => {
+                const complaintStatus = complaint?.status?.toLowerCase();
+                const isTerminalStatus = complaintStatus === 'resolved' || complaintStatus === 'closed';
+                if (isTerminalStatus) {
+                  toast.error(`Cannot send attachments - this complaint is ${complaint.status}. The chatroom is read-only.`);
+                  return;
+                }
+                fileInputRef.current?.click();
+              }}
               className="!rounded-button whitespace-nowrap p-3 text-gray-500 hover:text-gray-700 cursor-pointer"
             >
               <FontAwesomeIcon icon={faPaperclip} className="text-lg" />
@@ -756,8 +1002,9 @@ const ComplaintChat = () => {
               value={message}
               onChange={(e) => setMessage(e.target.value)}
               onKeyDown={handleKeyPress}
-              className="flex-1 py-3 px-4 focus:outline-none text-gray-700 resize-none border-none"
-              placeholder="Type a message..."
+              disabled={complaint?.status?.toLowerCase() === 'resolved' || complaint?.status?.toLowerCase() === 'closed'}
+              className="flex-1 py-3 px-4 focus:outline-none text-gray-700 resize-none border-none disabled:bg-gray-100 disabled:cursor-not-allowed"
+              placeholder={complaint?.status?.toLowerCase() === 'resolved' || complaint?.status?.toLowerCase() === 'closed' ? `Chatroom is read-only (${complaint.status})` : "Type a message..."}
               rows={1}
               style={{ minHeight: "44px", maxHeight: "120px" }}
             ></textarea>

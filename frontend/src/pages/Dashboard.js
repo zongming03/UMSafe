@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import * as echarts from "echarts";
 import { useComplaintUpdates } from "../hooks/useComplaintUpdates";
+import { NotificationService } from "../utils/NotificationService";
 import { fetchReports, closeReport, resolveReport } from "../services/reportsApi";
 import { fetchRooms } from "../services/api";
 
@@ -79,9 +80,17 @@ const Dashboard = () => {
         }
       }
 
+      // Treat Closed separately from Resolved for trend display
+      const normalizeForTrend = (status) => {
+        const raw = String(status || '').trim().toLowerCase();
+        if (raw === 'closed' || raw === 'close') return 'Closed';
+        return normalizeStatus(status);
+      };
+
       const openSeries = [];
       const inProgressSeries = [];
       const resolvedSeries = [];
+      const closedSeries = [];
 
       buckets.forEach(([bs, be]) => {
         const createdInBucket = complaints.filter((it) => {
@@ -89,20 +98,24 @@ const Dashboard = () => {
           return !isNaN(t) && t >= bs && t <= be;
         });
         const openCount = createdInBucket.filter(
-          (c) => normalizeStatus(c.status) === "Opened"
+          (c) => normalizeForTrend(c.status) === "Opened"
         ).length;
         const inProgCount = createdInBucket.filter(
-          (c) => normalizeStatus(c.status) === "InProgress"
+          (c) => normalizeForTrend(c.status) === "InProgress"
         ).length;
         const resCount = createdInBucket.filter(
-          (c) => normalizeStatus(c.status) === "Resolved"
+          (c) => normalizeForTrend(c.status) === "Resolved"
+        ).length;
+        const closedCount = createdInBucket.filter(
+          (c) => normalizeForTrend(c.status) === "Closed"
         ).length;
         openSeries.push(openCount);
         inProgressSeries.push(inProgCount);
         resolvedSeries.push(resCount);
+        closedSeries.push(closedCount);
       });
 
-      return { labels, openSeries, inProgressSeries, resolvedSeries };
+      return { labels, openSeries, inProgressSeries, resolvedSeries, closedSeries };
     };
 
     const data = buildChartData(range || selectedTimeRange);
@@ -131,8 +144,15 @@ const Dashboard = () => {
             data: data.resolvedSeries,
             itemStyle: { color: "#34D399" },
           },
+          {
+            name: "Closed",
+            type: "bar",
+            stack: "total",
+            data: data.closedSeries,
+            itemStyle: { color: "#f30000ff" },
+          },
         ],
-        legend: { data: ["Open", "In Progress", "Resolved"] },
+        legend: { data: ["Open", "In Progress", "Resolved", "Closed"] },
         tooltip: { trigger: "axis" },
         grid: { left: "3%", right: "4%", bottom: "3%", containLabel: true },
       },
@@ -244,6 +264,87 @@ const Dashboard = () => {
     loadComplaints();
   }, []);
 
+  // 🔄 Poll for new complaints from partner API every 4 seconds
+  useEffect(() => {
+    const pollInterval = setInterval(async () => {
+      try {
+        const response = await fetchReports();
+        const reportsData = response.data?.reports || response.data?.data || response.data || [];
+
+        const mappedComplaints = reportsData.map(report => ({
+          id: report.id || report._id,
+          displayId: report.displayId || report.id || report._id,
+          userId: report.userId,
+          username: report.username,
+          adminId: report.adminId || "Unassigned",
+          adminName: report.adminName || "Unassigned",
+          status: report.status,
+          title: report.title,
+          description: report.description,
+          category: report.category || {},
+          media: report.media || [],
+          latitude: report.latitude,
+          longitude: report.longitude,
+          facultyLocation: report.facultyLocation || {},
+          isAnonymous: report.isAnonymous,
+          isFeedbackProvided: report.isFeedbackProvided,
+          chatroomId: report.chatroomId || "",
+          createdAt: report.createdAt,
+          updatedAt: report.updatedAt,
+          timelineHistory: report.timelineHistory || []
+        }));
+
+        // Compare with existing complaints to find new ones or updates
+        setAllComplaints((prevComplaints) => {
+          // Create a set of existing complaint IDs
+          const existingIds = new Set(prevComplaints.map((c) => c.id));
+
+          // Find new complaints
+          const newComplaints = mappedComplaints.filter(
+            (c) => !existingIds.has(c.id)
+          );
+
+          if (newComplaints.length > 0) {
+            console.log(
+              `📬 Dashboard Polling: Found ${newComplaints.length} new complaint(s)`
+            );
+            // Add new complaints to the beginning of the list
+            return [...newComplaints, ...prevComplaints];
+          }
+
+          // Also check for status/assignment changes in existing complaints
+          let hasUpdates = false;
+          const updatedComplaints = prevComplaints.map((prevComplaint) => {
+            const updatedComplaint = mappedComplaints.find(
+              (c) => c.id === prevComplaint.id
+            );
+            if (
+              updatedComplaint &&
+              (prevComplaint.status !== updatedComplaint.status ||
+                prevComplaint.adminId !== updatedComplaint.adminId ||
+                prevComplaint.adminName !== updatedComplaint.adminName)
+            ) {
+              hasUpdates = true;
+              return updatedComplaint;
+            }
+            return prevComplaint;
+          });
+
+          if (hasUpdates) {
+            console.log("📝 Dashboard Polling: Found status/assignment updates");
+            return updatedComplaints;
+          }
+
+          return prevComplaints;
+        });
+      } catch (error) {
+        console.warn("Dashboard polling error:", error);
+      }
+    }, 4000); // Poll every 4 seconds
+
+    return () => clearInterval(pollInterval);
+  }, []);
+
   // Derive complaints filtered by user's faculty name
   useEffect(() => {
     const norm = (s) => String(s || "").trim().toLowerCase();
@@ -261,6 +362,7 @@ const Dashboard = () => {
 
   // Real-time complaint updates
   useComplaintUpdates({
+    showNotifications: true, // Show notifications on Dashboard (main page)
     onNewComplaint: (payload) => {
       // Refetch or add new complaint to list
       setAllComplaints((prev) => [
@@ -359,7 +461,6 @@ const Dashboard = () => {
       );
     if (sf === "resolved")
       return raw.includes("resolved") || raw.includes("resolve");
-    // fallback: check exact match
     return raw === sf;
   };
 
@@ -486,6 +587,12 @@ const Dashboard = () => {
   );
   const maxPageButtons = 5;
 
+  const getDisplayStatusLabel = (status) => {
+    const raw = String(status || '').trim().toLowerCase();
+    if (raw === 'closed' || raw === 'close') return 'Closed';
+    return normalizeStatus(status);
+  };
+
   // Calculate start and end page numbers for pagination
   let startPage = Math.max(1, currentPage - Math.floor(maxPageButtons / 2));
   let endPage = startPage + maxPageButtons - 1;
@@ -494,7 +601,7 @@ const Dashboard = () => {
     startPage = Math.max(1, endPage - maxPageButtons + 1);
   }
   const getStatusColor = (status) => {
-    const s = normalizeStatus(status);
+    const s = getDisplayStatusLabel(status);
     switch (s) {
       case "Opened":
         return "bg-yellow-100 text-yellow-800";
@@ -503,7 +610,7 @@ const Dashboard = () => {
       case "Resolved":
         return "bg-green-100 text-green-800";
       case "Closed":
-        return "bg-gray-100 text-gray-800";
+        return "bg-red-100 text-red-800";
       default:
         // default to Opened to avoid other labels
         return "bg-yellow-100 text-yellow-800";
@@ -1314,7 +1421,7 @@ const Dashboard = () => {
                                   </td>
                                   <td className="complaint-table-row-status">
                                     {(() => {
-                                      const statusLabel = normalizeStatus(
+                                      const statusLabel = getDisplayStatusLabel(
                                         complaint.status
                                       );
                                       return (

@@ -1,5 +1,6 @@
 import { useEffect, useCallback } from "react";
 import { getSocket } from "../services/socket";
+import { NotificationService } from "../utils/NotificationService";
 
 /**
  * Custom hook to listen for real-time chat updates via Socket.IO
@@ -7,18 +8,32 @@ import { getSocket } from "../services/socket";
  * @param {string} chatroomId - The chatroom ID
  * @param {Function} onNewMessage - Callback when new message is received
  * @param {Function} onMessageDelivered - Callback when message is delivered
+ * @param {Object} options - Additional options
+ * @param {boolean} options.showNotifications - Whether to show toast notifications (default: true)
+ * @param {string} options.senderName - Name of the sender to display in notification
  */
-export const useChatUpdates = ({
-  reportId,
-  chatroomId,
-  onNewMessage,
-  onMessageDelivered,
-}) => {
+export const useChatUpdates = (
+  {
+    reportId,
+    chatroomId,
+    onNewMessage,
+    onMessageDelivered,
+  },
+  { showNotifications = true, senderName = "User" } = {}
+) => {
   const handleNewMessage = useCallback(
     (payload) => {
+      // Show notification for new message
+      if (showNotifications && payload.message && !payload.system) {
+        NotificationService.showNewMessageNotification(
+          senderName,
+          payload.message
+        );
+      }
+      
       if (onNewMessage) onNewMessage(payload);
     },
-    [onNewMessage]
+    [onNewMessage, showNotifications, senderName]
   );
 
   const handleMessageDelivered = useCallback(

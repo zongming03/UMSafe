@@ -58,6 +58,23 @@ export const getReportHistories = async (reportId, skipCache = false) => {
 };
 
 /**
+ * POST /reports/{reportId}/histories - Add new timeline entry to report
+ * Expects: { status, initiator, actionTitle, actionDetails? }
+ */
+export const addReportHistory = async (reportId, historyData) => {
+  if (!reportId) {
+    throw new Error("Report ID is required to add history");
+  }
+  
+  const result = await api.post(`/reports/${reportId}/histories`, historyData);
+  
+  // Invalidate history cache to fetch fresh data
+  apiCache.invalidate(`report_histories_${reportId}`);
+  
+  return result;
+};
+
+/**
  * PATCH /reports/{reportId}/assign-admin - Assign admin to report
  */
 export const assignAdmin = async (reportId, data) => {
@@ -105,6 +122,18 @@ export const resolveReport = async (reportId, data) => {
   return result;
 };
 
+/**
+ * PATCH /reports/{reportId}/acknowledge - Acknowledge report by assigned admin
+ */
+export const acknowledgeReport = async (reportId, data) => {
+  const result = await api.patch(`/reports/${reportId}/acknowledge`, data);
+  // Invalidate related caches
+  apiCache.invalidate('reports_all');
+  apiCache.invalidate(`report_${reportId}`);
+  apiCache.invalidate(`report_histories_${reportId}`);
+  return result;
+};
+
 // ==================== Chatroom Management ====================
 
 /**
@@ -125,11 +154,38 @@ export const initiateChatroom = async (reportId) => {
 };
 
 /**
- * GET /reports/:reportId/chatrooms/:chatroomId/chats - Get chat messages
+ * GET /reports/{reportId}/feedbacks - Fetch student feedback for a resolved report
+ * Returns feedback data including ratings and comments
+ * Expected response: { reportFeedback: { id, reportId, q1Rating, q2Rating, overallComment, createdAt, updatedAt, version } }
  */
-export const getChatMessages = (reportId, chatroomId) =>
-  api.get(`/reports/${reportId}/chatrooms/${chatroomId}/chats`)
-     .then((res) => res.data);
+export const fetchReportFeedback = async (reportId, skipCache = false) => {
+  if (!reportId) {
+    throw new Error("Report ID is required to fetch feedback");
+  }
+
+  const cacheKey = `report_feedback_${reportId}`;
+  
+  if (skipCache) {
+    apiCache.invalidate(cacheKey);
+  }
+  
+  const cached = apiCache.get(cacheKey, 30000);
+  if (cached) return cached;
+  
+  const result = await api.get(`/reports/${reportId}/feedbacks`);
+  apiCache.set(cacheKey, result);
+  return result;
+};
+
+/**
+ * GET /reports/:reportId/chatrooms/:chatroomId/chats - Get chat messages
+ * Supports optional `since` query to fetch only new messages.
+ */
+export const getChatMessages = (reportId, chatroomId, since) => {
+  const url = `/reports/${reportId}/chatrooms/${chatroomId}/chats`;
+  const config = since ? { params: { since } } : undefined;
+  return api.get(url, config).then((res) => res.data);
+};
 
 /**
  * POST /reports/:reportId/chatrooms/:chatroomId/chats - Send chat message
@@ -159,12 +215,15 @@ const reportsApi = {
   fetchReports,
   getReport,
   getReportHistories,
+  addReportHistory,
   assignAdmin,
   revokeReport,
   closeReport,
   resolveReport,
+  acknowledgeReport,
   fetchChatrooms,
   initiateChatroom,
+  fetchReportFeedback,
   getChatMessages,
   sendMessage,
 };

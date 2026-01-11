@@ -16,15 +16,18 @@ import ComplaintsSidebar from "../components/ComplaintsSidebar";
 import CollapsibleMainMenu from "../components/CollapsibleMainMenu";
 import CreateChatroomModal from "../components/CreateChatroomModal";
 import ViewUserDetailsModal from "../components/ViewUserDetailsModal";
+import AddTimelineModal from "../components/AddTimelineModal";
+import CloseReportModal from "../components/CloseReportModal";
 import { useLocation, useParams, useNavigate } from "react-router-dom";
 import {getUsersByFacultyForMobile, getUserDetails} from "../services/api";
-import { getReport, getReportHistories, initiateChatroom } from "../services/reportsApi";
+import { getReport, getReportHistories, initiateChatroom, addReportHistory, acknowledgeReport } from "../services/reportsApi";
 import { toast } from "react-hot-toast";
 import { useComplaintUpdates } from "../hooks/useComplaintUpdates";
 
 
 import {
   normalizeStatus,
+  statusToEnum,
   getStatusColor,
   mapReportToComplaintDetail,
   normalizeStaffMembers,
@@ -56,6 +59,9 @@ const ComplaintDetails = () => {
   const [isComplaintsSidebarOpen, setIsComplaintsSidebarOpen] = useState(false);
   const [showChatroomModal, setShowChatroomModal] = useState(false);
   const [showUserDetailsModal, setShowUserDetailsModal] = useState(false);
+  const [showAddTimelineModal, setShowAddTimelineModal] = useState(false);
+  const [isAddingTimeline, setIsAddingTimeline] = useState(false);
+  const [isAcknowledging, setIsAcknowledging] = useState(false);
   const [userDetails, setUserDetails] = useState(null);
   const [isLoadingUserDetails, setIsLoadingUserDetails] = useState(false);
 
@@ -102,6 +108,7 @@ const ComplaintDetails = () => {
   
   useComplaintUpdates({
     currentComplaintId: complaint?.id || complaint?.displayId || params?.id,
+    showNotifications: false,
     onStatusChange: (payload) => {
       console.log("📡 Received status change event:", payload);
       const matchesId = payload.complaintId === complaint?.id || 
@@ -113,12 +120,16 @@ const ComplaintDetails = () => {
         const mappedStatus = normalizeStatus(payload.status);
         const targetId = complaint?.id || complaint?.displayId || params?.id;
 
+        // Update complaint object
         setComplaint((prev) => {
           if (!prev) return prev;
           const updated = { ...prev, status: payload.status };
           console.log("Updated complaint with new status:", payload.status);
           return updated;
         });
+
+        // Update the currentStatus state for immediate UI update
+        setCurrentStatus(mappedStatus);
 
         // Keep sidebar list in sync
         if (targetId && allComplaints && allComplaints.length) {
@@ -128,13 +139,15 @@ const ComplaintDetails = () => {
           }));
         }
 
-        setCurrentStatus(mappedStatus);
-
+        // Refresh full complaint data and histories
         if (targetId) {
           (async () => {
             const refreshed = await refreshComplaintFromPartner(targetId, complaint || {});
             if (refreshed) {
               setComplaint(refreshed);
+              // Re-sync status after refresh
+              const refreshedStatus = normalizeStatus(refreshed.status);
+              setCurrentStatus(refreshedStatus);
             }
             await fetchAndSetHistories(targetId);
           })();
@@ -217,9 +230,10 @@ const ComplaintDetails = () => {
   useEffect(() => {
     if (complaint?.status) {
       const mappedStatus = normalizeStatus(complaint.status);
+      console.log(`📊 Complaint status changed, updating UI: ${complaint.status} → ${mappedStatus}`);
       setCurrentStatus(mappedStatus);
     }
-  }, [complaint]);
+  }, [complaint?.status]);
 
   const statusOptions = ["Resolved", "Closed"];
 
@@ -241,6 +255,7 @@ const ComplaintDetails = () => {
   });
   const [isGenerating, setIsGenerating] = useState(false);
   const [isCloseConfirmationOpen, setIsCloseConfirmationOpen] = useState(false);
+  const [isCloseReportModalOpen, setIsCloseReportModalOpen] = useState(false);
   const [statusPendingConfirmation, setStatusPendingConfirmation] = useState(null);
 
   const statusRef = useRef(null);
@@ -267,6 +282,12 @@ const ComplaintDetails = () => {
         return;
       }
 
+      // 🔒 VALIDATION: Prevent chatroom if no officer is assigned
+      if (!complaintAdminId || complaintAdminId === "") {
+        toast.error("Please assign an officer to this complaint before creating a chatroom.");
+        return;
+      }
+
       const reportId = complaint.id;
 
       // ✅ If chatroom already exists, navigate directly
@@ -290,6 +311,12 @@ const ComplaintDetails = () => {
       // 🔒 VALIDATION: Prevent chatroom creation for anonymous complaints
       if (isAnonymous) {
         toast.error("Chatroom cannot be created for anonymous complaints. The student must be identified first.");
+        return;
+      }
+
+      // 🔒 VALIDATION: Prevent chatroom creation if no officer is assigned
+      if (!complaintAdminId || complaintAdminId === "") {
+        toast.error("Chatroom cannot be created without an assigned officer. Please assign an officer first.");
         return;
       }
 
@@ -363,6 +390,105 @@ const ComplaintDetails = () => {
   const handleCloseUserDetailsModal = () => {
     setShowUserDetailsModal(false);
     setUserDetails(null);
+  };
+
+  const handleAddTimelineClick = () => {
+    // Check if the complaint has been acknowledged before allowing timeline addition
+    if (!complaint?.acknowledgeAt) {
+      toast.error("You must acknowledge this report before adding timeline entries.");
+      return;
+    }
+    setShowAddTimelineModal(true);
+  };
+
+  const handleAddTimeline = async (timelineData) => {
+    // Double-check acknowledgment before proceeding
+    if (!complaint?.acknowledgeAt) {
+      toast.error("You must acknowledge this report before adding timeline entries.");
+      return;
+    }
+    
+    setIsAddingTimeline(true);
+    try {
+      // Get reportId with multiple fallbacks
+      const reportId = complaint?.id || complaint?.backendId || complaint?.displayId || params?.id;
+      console.log("📝 Complaint object:", {
+        id: complaint?.id,
+        backendId: complaint?.backendId,
+        displayId: complaint?.displayId,
+        paramsId: params?.id
+      });
+      console.log("📝 Selected report ID:", reportId);
+      console.log("📝 Timeline data received:", timelineData);
+      
+      if (!reportId) {
+        throw new Error("Report ID is required");
+      }
+
+      // Include reportId in the timeline data for backend processing
+      const dataWithReportId = {
+        status: timelineData.status,
+        initiator: timelineData.initiator,
+        actionTitle: timelineData.actionTitle,
+        actionDetails: timelineData.actionDetails,
+        reportId: reportId
+      };
+      
+      console.log("📤 Sending to backend:", dataWithReportId);
+
+      // Timeline data already includes the current status from the modal
+      await addReportHistory(reportId, dataWithReportId);
+      
+      toast.success("Timeline entry added successfully!");
+      
+      // Refresh the history to show the new entry
+      await fetchAndSetHistories(reportId);
+    } catch (error) {
+      console.error("Failed to add timeline entry:", error);
+      toast.error(error.message || "Failed to add timeline entry");
+      throw error;
+    } finally {
+      setIsAddingTimeline(false);
+    }
+  };
+
+  const handleAcknowledge = async () => {
+    if (!isUserAssigned) {
+      toast.error("Only the assigned officer can acknowledge this report.");
+      return;
+    }
+
+    if (complaint?.acknowledgeAt) {
+      toast.success("Already acknowledged.");
+      return;
+    }
+
+    const reportId = complaint?.id || complaint?.displayId || params?.id;
+    if (!reportId) {
+      toast.error("Report ID is missing.");
+      return;
+    }
+
+    const initiatorName = storedUser?.name || "Admin";
+    const acknowledgeAt = new Date().toISOString();
+
+    setIsAcknowledging(true);
+    try {
+      const res = await acknowledgeReport(reportId, { initiatorName, acknowledgeAt });
+      const updated = res?.data?.report || res?.data;
+      if (updated) {
+        const mapped = mapReportToComplaintDetail(updated);
+        setComplaint(mapped);
+      }
+
+      await fetchAndSetHistories(reportId);
+      toast.success("Report acknowledged.");
+    } catch (err) {
+      console.error("Failed to acknowledge report:", err);
+      toast.error(err?.response?.data?.error || err.message || "Failed to acknowledge");
+    } finally {
+      setIsAcknowledging(false);
+    }
   };
 
   useEffect(() => {
@@ -450,21 +576,38 @@ const ComplaintDetails = () => {
       return;
     }
 
+    // Check if acknowledgement is required for Resolved/Closed status
+    if (isTerminalStatus && !complaint?.acknowledgeAt) {
+      try { 
+        toast.error('You must acknowledge this report before changing status to Resolved or Closed'); 
+      } catch (e) {}
+      setIsStatusDropdownOpen(false);
+      return;
+    }
+
     // Require confirmation before closing (canceling) the case
     if (status === 'Closed') {
       setStatusPendingConfirmation(status);
-      setIsCloseConfirmationOpen(true);
+      setIsCloseReportModalOpen(true);
       setIsStatusDropdownOpen(false);
       return;
     }
 
     if (status !== currentStatus) {
+      // Optimistically update the UI first
       setCurrentStatus(status);
       updateHistory(`Status changed to "${status}"`);
       
       const onSuccess = async () => {
+        // Refresh from backend
         const refreshed = await refreshComplaintFromPartner(complaint.id, complaint);
-        setComplaint(refreshed);
+        if (refreshed) {
+          // Update complaint state with refreshed data
+          setComplaint(refreshed);
+          // Ensure status is synced with the refreshed data
+          const refreshedStatus = normalizeStatus(refreshed.status);
+          setCurrentStatus(refreshedStatus);
+        }
         await fetchAndSetHistories(complaint.id);
       };
       
@@ -473,29 +616,46 @@ const ComplaintDetails = () => {
     setIsStatusDropdownOpen(false);
   };
 
-  const handleConfirmClose = () => {
+  const handleConfirmClose = async (reason) => {
     if (statusPendingConfirmation === 'Closed' && statusPendingConfirmation !== currentStatus) {
+      // Optimistically update the UI first
       setCurrentStatus('Closed');
-      updateHistory('Case closed and cancelled');
+      updateHistory(`Case closed with reason: ${reason}`);
       
       const onSuccess = async () => {
+        // Refresh from backend
         const refreshed = await refreshComplaintFromPartner(complaint.id, complaint);
-        setComplaint(refreshed);
+        if (refreshed) {
+          // Update complaint state with refreshed data
+          setComplaint(refreshed);
+          // Ensure status is synced with the refreshed data
+          const refreshedStatus = normalizeStatus(refreshed.status);
+          setCurrentStatus(refreshedStatus);
+        }
         await fetchAndSetHistories(complaint.id);
       };
       
-      updateComplaintStatus(complaint.id, 'Closed', onSuccess);
+      // Pass the reason in the payload
+      updateComplaintStatus(complaint.id, 'Closed', onSuccess, reason);
     }
-    setIsCloseConfirmationOpen(false);
+    setIsCloseReportModalOpen(false);
     setStatusPendingConfirmation(null);
   };
 
   const handleCancelClose = () => {
-    setIsCloseConfirmationOpen(false);
+    setIsCloseReportModalOpen(false);
     setStatusPendingConfirmation(null);
   };
 
   const handleAssignChange = (staff) => {
+    // Prevent reassignment if complaint is in terminated state (Resolved or Closed)
+    const isTerminated = currentStatus === 'Resolved' || currentStatus === 'Closed';
+    if (isTerminated) {
+      toast.error(`Cannot reassign officer for ${currentStatus.toLowerCase()} (terminated) complaints.`);
+      setIsAssignDropdownOpen(false);
+      return;
+    }
+
     if (staff.adminId !== assignedToId) {
       setAssignedToId(staff.adminId);
       setAssignedToName(staff.name);
@@ -622,9 +782,29 @@ const ComplaintDetails = () => {
                 attachments={displayedAttachments}
               />
 
+              {/* Acknowledge banner (only assigned admin/officer and not yet acknowledged) */}
+              {isUserAssigned && !complaint?.acknowledgeAt && (
+                <div className="mt-4 bg-blue-50 border border-blue-200 rounded-lg p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 shadow-sm">
+                  <div>
+                    <p className="text-sm font-semibold text-blue-900">Acknowledge this report</p>
+                    <p className="text-xs text-blue-800">Confirm you have received and started handling this complaint.</p>
+                  </div>
+                  <button
+                    onClick={handleAcknowledge}
+                    disabled={isAcknowledging}
+                    className="inline-flex items-center justify-center px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md border border-blue-700 hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+                  >
+                    {isAcknowledging ? "Acknowledging..." : "Acknowledge"}
+                  </button>
+                </div>
+              )}
+
               {/* Activity History */}
               {canViewAnonymousDetails ? (
-                <ActivityHistory history={complaintHistory} />
+                <ActivityHistory 
+                  history={complaintHistory}
+                  onAddTimelineClick={isUserAssigned && complaint?.acknowledgeAt && currentStatus !== 'Resolved' && currentStatus !== 'Closed' ? handleAddTimelineClick : null}
+                />
               ) : (
                 <div className="bg-white rounded-lg shadow-md p-6 border border-gray-100">
                   <h3 className="text-lg font-semibold text-gray-900 mb-2">Anonymous Complaint</h3>
@@ -654,6 +834,13 @@ const ComplaintDetails = () => {
                   assignedTo={assignedToName}
                   handleAssignChange={handleAssignChange}
                   handleRevokeAssignment={() => {
+                    // Prevent revocation if complaint is in terminated state (Resolved or Closed)
+                    const isTerminated = currentStatus === 'Resolved' || currentStatus === 'Closed';
+                    if (isTerminated) {
+                      toast.error(`Cannot revoke assignment for ${currentStatus.toLowerCase()} (terminated) complaints.`);
+                      return;
+                    }
+
                     const onSuccess = async () => {
                       setAssignedToId('');
                       setAssignedToName('Unassigned');
@@ -710,57 +897,26 @@ const ComplaintDetails = () => {
         isLoading={isLoadingUserDetails}
       />
 
-      {/* Close Case Confirmation Modal */}
-      {isCloseConfirmationOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
-            {/* Modal Header */}
-            <div className="bg-red-50 px-6 py-4 border-b border-red-100 flex items-center gap-3">
-              <div className="text-2xl text-red-600">⚠️</div>
-              <div>
-                <h2 className="text-lg font-semibold text-red-900">Close & Cancel Case</h2>
-                <p className="text-sm text-red-700">This action cannot be undone</p>
-              </div>
-            </div>
+      {/* Add Timeline Modal */}
+      <AddTimelineModal
+        isOpen={showAddTimelineModal}
+        onClose={() => setShowAddTimelineModal(false)}
+        onSubmit={handleAddTimeline}
+        isLoading={isAddingTimeline}
+        userName={storedUser?.name || "Admin"}
+        currentStatus={statusToEnum(currentStatus)}
+      />
 
-            {/* Modal Content */}
-            <div className="px-6 py-4">
-              <p className="text-gray-700 mb-2">
-                Are you sure you want to <span className="font-semibold text-red-600">close and cancel</span> this complaint?
-              </p>
-              <div className="bg-red-50 border border-red-200 rounded-lg p-3 mt-4">
-                <p className="text-sm text-red-800">
-                  <span className="font-semibold">Closing a case means:</span>
-                </p>
-                <ul className="text-sm text-red-700 mt-2 ml-4 list-disc space-y-1">
-                  <li>The case is cancelled and archived</li>
-                  <li>No further actions can be taken</li>
-                  <li>The reported issue is marked as resolved externally</li>
-                </ul>
-              </div>
-              <p className="text-xs text-gray-500 mt-4">
-                Complaint ID: <span className="font-mono">{complaint?.displayId}</span>
-              </p>
-            </div>
-
-            {/* Modal Footer */}
-            <div className="bg-gray-50 px-6 py-4 flex gap-3 justify-end rounded-b-lg border-t border-gray-200">
-              <button
-                onClick={handleCancelClose}
-                className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors font-medium"
-              >
-                Keep Open
-              </button>
-              <button
-                onClick={handleConfirmClose}
-                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-semibold shadow-md hover:shadow-lg"
-              >
-                Confirm Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Close Report Modal - Requires reason */}
+      <CloseReportModal
+        isOpen={isCloseReportModalOpen}
+        onClose={() => {
+          setIsCloseReportModalOpen(false);
+          setStatusPendingConfirmation(null);
+        }}
+        onConfirm={handleConfirmClose}
+        reportId={complaint?.displayId || complaint?.id}
+      />
     </div>
   );
 };
