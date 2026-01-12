@@ -416,6 +416,7 @@ const assignComplaint = async (req, res) => {
 
           emitEvent('complaint:assignment', {
             complaintId: reportId,
+            displayId: reportId, // For partner reports, reportId is already the displayId (RPT-xxx)
             adminId: null,
             adminName: previousAdmin?.name || 'Unassigned',
             updatedBy: req.user?.id,
@@ -425,6 +426,7 @@ const assignComplaint = async (req, res) => {
           if (previousAdmin?._id) {
             emitToUser(previousAdmin._id, 'complaint:assignment', {
               complaintId: reportId,
+              displayId: reportId,
               adminId: null,
               adminName: 'Unassigned',
             });
@@ -487,6 +489,7 @@ const assignComplaint = async (req, res) => {
 
           emitEvent('complaint:assignment', {
             complaintId: reportId,
+            displayId: reportId, // For partner reports, reportId is already the displayId (RPT-xxx)
             adminId,
             adminName: assignedUser?.name || 'Assigned',
             updatedBy: req.user?.id,
@@ -496,6 +499,7 @@ const assignComplaint = async (req, res) => {
           if (adminId) {
             emitToUser(adminId, 'complaint:assignment', {
               complaintId: reportId,
+              displayId: reportId,
               adminId,
               adminName: assignedUser?.name || 'You',
             });
@@ -546,6 +550,7 @@ const assignComplaint = async (req, res) => {
     if (complaint) {
       emitEvent('complaint:assignment', {
         complaintId: complaint._id?.toString(),
+        displayId: complaint.displayId || complaint._id?.toString(),
         adminId: complaint.admin_id || null,
         adminName: assignedUser?.name || 'Unassigned',
         updatedBy: req.user?.id,
@@ -555,6 +560,7 @@ const assignComplaint = async (req, res) => {
       if (complaint.admin_id) {
         emitToUser(complaint.admin_id, 'complaint:assignment', {
           complaintId: complaint._id?.toString(),
+          displayId: complaint.displayId || complaint._id?.toString(),
           adminId: complaint.admin_id,
           adminName: assignedUser?.name || 'You',
         });

@@ -11,6 +11,7 @@ import {
   faSmile,
   faPaperclip,
   faPaperPlane,
+  faArrowUp,
 } from "@fortawesome/free-solid-svg-icons";
 import profile from "../assets/profile.png";
 import man from "../assets/man.png";
@@ -36,10 +37,11 @@ const ComplaintChat = () => {
   const [isSending, setIsSending] = useState(false);
   const [adminIds, setAdminIds] = useState(new Set());
   const [adminProfiles, setAdminProfiles] = useState(new Map()); 
-  const [currentUserProfile, setCurrentUserProfile] = useState(null); // Full profile data with latest profileImage
+  const [currentUserProfile, setCurrentUserProfile] = useState(null);
   const [hasFetchedMessages, setHasFetchedMessages] = useState(false);
   const [videoModalOpen, setVideoModalOpen] = useState(false);
   const [selectedVideo, setSelectedVideo] = useState(null);
+  const [showBackToTop, setShowBackToTop] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
   const complaint = location.state;
@@ -66,6 +68,52 @@ const ComplaintChat = () => {
   const emojiPickerRef = useRef(null);
   const emojiButtonRef = useRef(null);
   const localObjectUrlsRef = useRef([]);
+
+  // Handle scroll to show/hide back-to-top button (supports window or container scroll)
+  useEffect(() => {
+    const container = chatContainerRef.current;
+
+    const computeShouldShow = () => {
+      const containerScrollable = !!container && container.scrollHeight > container.clientHeight;
+      if (containerScrollable) {
+        const scrollTop = container.scrollTop;
+        const shouldShow = scrollTop > 150;
+
+        setShowBackToTop(shouldShow);
+      } else {
+        const scrollTop = window.scrollY || document.documentElement.scrollTop || document.body.scrollTop || 0;
+        const shouldShow = scrollTop > 150;
+
+        setShowBackToTop(shouldShow);
+      }
+    };
+
+    // Initial check
+    computeShouldShow();
+
+    const containerHandler = () => computeShouldShow();
+    const windowHandler = () => computeShouldShow();
+
+    if (container) {
+      container.addEventListener('scroll', containerHandler, { passive: true });
+    }
+    window.addEventListener('scroll', windowHandler, { passive: true });
+
+    return () => {
+      if (container) container.removeEventListener('scroll', containerHandler);
+      window.removeEventListener('scroll', windowHandler);
+    };
+  }, []);
+
+  const scrollToTop = () => {
+    const container = chatContainerRef.current;
+    const containerScrollable = container && container.scrollHeight > container.clientHeight;
+    if (containerScrollable && container.scrollTop > 0) {
+      container.scrollTo({ top: 0, behavior: 'smooth' });
+    } else {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
 
   useEffect(() => {
     const loadAdmins = async () => {
@@ -379,7 +427,7 @@ const ComplaintChat = () => {
     },
     {
       showNotifications: true,
-      senderName: complaint?.username || complaint?.title || "User",
+      reportDisplayId: complaint?.displayId || reportId,
     }
   );
 
@@ -425,7 +473,7 @@ const ComplaintChat = () => {
     isAdmin: true,
     // receiverId could be determined by chatroom participants; keep undefined for backend to resolve
     message: message,
-    content: message, // Also include as 'content' for rendering compatibility
+    content: message, 
     createdAt: new Date().toISOString(),
     attachments: optimisticAttachments,
   };
@@ -676,8 +724,24 @@ const ComplaintChat = () => {
       else fileName += '.bin';
     }
     
+    // For Cloudinary URLs, ensure they have the fl_attachment flag for proper downloads
+    let downloadUrl = attachment.url;
+    if (downloadUrl.includes('cloudinary.com') && !downloadUrl.includes('fl_attachment')) {
+      const urlParts = downloadUrl.split('/upload/');
+      if (urlParts.length === 2) {
+        downloadUrl = urlParts[0] + '/upload/fl_attachment/' + urlParts[1];
+      }
+    }
+    
+    // For PDFs from Cloudinary, open in new tab to allow browser viewing or downloading
+    if (contentType.includes('pdf') && downloadUrl.includes('cloudinary.com')) {
+      // Create URL with fl_attachment for download or viewer can choose to view
+      window.open(downloadUrl, '_blank');
+      return;
+    }
+    
     // Fetch and download the file
-    fetch(attachment.url)
+    fetch(downloadUrl)
       .then(res => res.blob())
       .then(blob => {
         const url = window.URL.createObjectURL(blob);
@@ -692,7 +756,7 @@ const ComplaintChat = () => {
       .catch(err => {
         console.error('Download failed:', err);
         // Fallback: open in new tab if download fails
-        window.open(attachment.url, '_blank');
+        window.open(downloadUrl, '_blank');
       });
   };
 
@@ -1022,6 +1086,20 @@ const ComplaintChat = () => {
           </div>
         </div>
       </div>
+
+      {/* Back to Top Button */}
+      <button
+        onClick={scrollToTop}
+        className="fixed bottom-32 right-8 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white rounded-full p-3 shadow-2xl transition-all duration-300 z-[9999] hover:scale-110 border-2 border-white"
+        aria-label="Back to top"
+        style={{ 
+          boxShadow: '0 10px 40px rgba(37, 99, 235, 0.4), 0 0 0 4px rgba(255, 255, 255, 0.8)',
+          width: '48px',
+          height: '48px'
+        }}
+      >
+        <FontAwesomeIcon icon={faArrowUp} className="text-xl" />
+      </button>
 
       {/* Video Modal */}
       {videoModalOpen && selectedVideo && (

@@ -86,7 +86,6 @@ const fetchReportDetailsIfNeeded = async (partnerBaseUrl, reportId, existing) =>
   // Always fetch full report with user details for email notifications
   if (!reportId) return existing;
   
-  console.log('🔄 Fetching full report details with user data for reportId:', reportId);
   
   try {
     const res = await axios.get(`${partnerBaseUrl.replace(/\/$/, '')}/reports/${reportId}`, {
@@ -157,6 +156,21 @@ const studentStatusUpdateEmail = (reportId, reportData, newStatus) => {
 const chatroomEmail = (reportId, reportData) => ({
   subject: `Chatroom Created - ${reportData?.displayId || reportId}`,
   html: `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Chatroom Created</title></head><body style="margin:0; padding:0; font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color:#f5f5f5;"><table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f5f5f5; padding:20px;"><tr><td align="center"><table width="600" cellpadding="0" cellspacing="0" style="background-color:#ffffff; border-radius:8px; box-shadow:0 2px 8px rgba(0,0,0,0.1);"><tr><td style="background:linear-gradient(135deg, #3B82F6 0%, #1E40AF 100%); padding:30px; border-radius:8px 8px 0 0;"><h1 style="margin:0; color:#ffffff; font-size:24px; font-weight:600;">💬 UMSafe Report System</h1></td></tr><tr><td style="padding:40px 30px;"><h2 style="margin:0 0 20px 0; color:#1F2937; font-size:20px; font-weight:600;">Chatroom Initiated</h2><p style="margin:0 0 25px 0; color:#4B5563; font-size:16px; line-height:1.6;">A chatroom has been created for direct communication with the student regarding this report.</p><div style="background-color:#F3F4F6; border-left:4px solid #3B82F6; padding:20px; margin:25px 0; border-radius:4px;"><table width="100%" cellpadding="8" cellspacing="0"><tr><td style="color:#6B7280; font-size:14px; width:140px;">Report ID:</td><td style="color:#1F2937; font-size:14px; font-weight:600;">${reportData?.displayId || reportId}</td></tr><tr><td style="color:#6B7280; font-size:14px;">Title:</td><td style="color:#1F2937; font-size:14px; font-weight:500;">${reportData?.title || 'N/A'}</td></tr><tr><td style="color:#6B7280; font-size:14px;">Action:</td><td><span style="background-color:#3B82F6; color:#ffffff; padding:4px 12px; border-radius:12px; font-size:12px; font-weight:600;">Chatroom Created</span></td></tr></table></div><p style="margin:25px 0 0 0; color:#6B7280; font-size:14px; line-height:1.6;">You can now communicate directly with the student. Please log in to the UMSafe system to access the chatroom.</p></td></tr><tr><td style="background-color:#F9FAFB; padding:20px 30px; border-radius:0 0 8px 8px; border-top:1px solid #E5E7EB;"><p style="margin:0; color:#9CA3AF; font-size:12px; text-align:center;">© ${new Date().getFullYear()} UMSafe - University Maintenance & Safety System<br/>This is an automated notification. Please do not reply to this email.</p></td></tr></table></td></tr></table></body></html>`,
+});
+
+const studentAssignmentEmail = (reportId, reportData, adminName = 'Officer') => ({
+  subject: `Your Report Assigned - ${reportData?.displayId || reportId}`,
+  html: `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Report Assigned</title></head><body style="margin:0; padding:0; font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color:#f5f5f5;"><table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f5f5f5; padding:20px;"><tr><td align="center"><table width="600" cellpadding="0" cellspacing="0" style="background-color:#ffffff; border-radius:8px; box-shadow:0 2px 8px rgba(0,0,0,0.1);"><tr><td style="background:linear-gradient(135deg, #3B82F6 0%, #2563EB 100%); padding:30px; border-radius:8px 8px 0 0;"><h1 style="margin:0; color:#ffffff; font-size:24px; font-weight:600;">👮 Report Assigned</h1></td></tr><tr><td style="padding:40px 30px;"><p style="margin:0 0 20px 0; color:#4B5563; font-size:16px; line-height:1.6;">An officer (<strong>${adminName}</strong>) has been assigned to your report. They will reach out if additional information is required.</p><div style="background-color:#EFF6FF; border-left:4px solid #3B82F6; padding:20px; margin:25px 0; border-radius:4px;"><table width="100%" cellpadding="8" cellspacing="0"><tr><td style="color:#1E40AF; font-size:14px; width:140px;">Report ID:</td><td style="color:#1F2937; font-size:14px; font-weight:600;">${reportData?.displayId || reportId}</td></tr><tr><td style="color:#1E40AF; font-size:14px;">Title:</td><td style="color:#1F2937; font-size:14px; font-weight:500;">${reportData?.title || 'N/A'}</td></tr><tr><td style="color:#1E40AF; font-size:14px;">Action:</td><td><span style="background-color:#3B82F6; color:#ffffff; padding:4px 12px; border-radius:12px; font-size:12px; font-weight:600;">Assigned</span></td></tr></table></div><p style="margin:25px 0 0 0; color:#6B7280; font-size:14px; line-height:1.6;">You can view updates by logging in to the UMSafe system.</p></td></tr><tr><td style="background-color:#F9FAFB; padding:20px 30px; border-radius:0 0 8px 8px; border-top:1px solid #E5E7EB;"><p style="margin:0; color:#9CA3AF; font-size:12px; text-align:center;">© ${new Date().getFullYear()} UMSafe - University Maintenance & Safety System</p></td></tr></table></td></tr></table></body></html>`,
+});
+
+const studentRevokeEmail = (reportId, reportData) => ({
+  subject: `Report Assignment Updated - ${reportData?.displayId || reportId}`,
+  html: `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Assignment Revoked</title></head><body style="margin:0; padding:0; font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color:#f5f5f5;"><table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f5f5f5; padding:20px;"><tr><td align="center"><table width="600" cellpadding="0" cellspacing="0" style="background-color:#ffffff; border-radius:8px; box-shadow:0 2px 8px rgba(0,0,0,0.1);"><tr><td style="background:linear-gradient(135deg, #F59E0B 0%, #D97706 100%); padding:30px; border-radius:8px 8px 0 0;"><h1 style="margin:0; color:#ffffff; font-size:24px; font-weight:600;">📋 Assignment Updated</h1></td></tr><tr><td style="padding:40px 30px;"><p style="margin:0 0 20px 0; color:#4B5563; font-size:16px; line-height:1.6;">The officer assignment for your report has been updated. It is currently unassigned. We will notify you once a new officer is assigned.</p><div style="background-color:#FEF3C7; border-left:4px solid #F59E0B; padding:20px; margin:25px 0; border-radius:4px;"><table width="100%" cellpadding="8" cellspacing="0"><tr><td style="color:#92400E; font-size:14px; width:140px;">Report ID:</td><td style="color:#1F2937; font-size:14px; font-weight:600;">${reportData?.displayId || reportId}</td></tr><tr><td style="color:#92400E; font-size:14px;">Title:</td><td style="color:#1F2937; font-size:14px; font-weight:500;">${reportData?.title || 'N/A'}</td></tr><tr><td style="color:#92400E; font-size:14px;">Action:</td><td><span style="background-color:#F59E0B; color:#ffffff; padding:4px 12px; border-radius:12px; font-size:12px; font-weight:600;">Officer Unassigned</span></td></tr></table></div><p style="margin:25px 0 0 0; color:#6B7280; font-size:14px; line-height:1.6;">You can view updates by logging in to the UMSafe system.</p></td></tr><tr><td style="background-color:#F9FAFB; padding:20px 30px; border-radius:0 0 8px 8px; border-top:1px solid #E5E7EB;"><p style="margin:0; color:#9CA3AF; font-size:12px; text-align:center;">© ${new Date().getFullYear()} UMSafe - University Maintenance & Safety System</p></td></tr></table></td></tr></table></body></html>`,
+});
+
+const studentChatroomEmail = (reportId, reportData) => ({
+  subject: `Chatroom Created - ${reportData?.displayId || reportId}`,
+  html: `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Chatroom Created</title></head><body style="margin:0; padding:0; font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color:#f5f5f5;"><table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f5f5f5; padding:20px;"><tr><td align="center"><table width="600" cellpadding="0" cellspacing="0" style="background-color:#ffffff; border-radius:8px; box-shadow:0 2px 8px rgba(0,0,0,0.1);"><tr><td style="background:linear-gradient(135deg, #3B82F6 0%, #1E40AF 100%); padding:30px; border-radius:8px 8px 0 0;"><h1 style="margin:0; color:#ffffff; font-size:24px; font-weight:600;">💬 Chatroom Initiated</h1></td></tr><tr><td style="padding:40px 30px;"><p style="margin:0 0 20px 0; color:#4B5563; font-size:16px; line-height:1.6;">A chatroom has been created so you can communicate directly with the officer regarding your report.</p><div style="background-color:#F3F4F6; border-left:4px solid #3B82F6; padding:20px; margin:25px 0; border-radius:4px;"><table width="100%" cellpadding="8" cellspacing="0"><tr><td style="color:#6B7280; font-size:14px; width:140px;">Report ID:</td><td style="color:#1F2937; font-size:14px; font-weight:600;">${reportData?.displayId || reportId}</td></tr><tr><td style="color:#6B7280; font-size:14px;">Title:</td><td style="color:#1F2937; font-size:14px; font-weight:500;">${reportData?.title || 'N/A'}</td></tr><tr><td style="color:#6B7280; font-size:14px;">Action:</td><td><span style="background-color:#3B82F6; color:#ffffff; padding:4px 12px; border-radius:12px; font-size:12px; font-weight:600;">Chatroom Created</span></td></tr></table></div><p style="margin:25px 0 0 0; color:#6B7280; font-size:14px; line-height:1.6;">Please log in to the UMSafe system to access the chatroom.</p></td></tr><tr><td style="background-color:#F9FAFB; padding:20px 30px; border-radius:0 0 8px 8px; border-top:1px solid #E5E7EB;"><p style="margin:0; color:#9CA3AF; font-size:12px; text-align:center;">© ${new Date().getFullYear()} UMSafe - University Maintenance & Safety System</p></td></tr></table></td></tr></table></body></html>`,
 });
 
 const gatherRecipients = async (User, adminId, facultyId = null) => {
@@ -292,11 +306,25 @@ const sendNotificationEmailsAndEvents = async ({ req, r, reportId, reportData })
     const facultyId = getFacultyId();
     const { superAdminEmails, adminEmails, officerEmails, assignedOfficerEmail } = await gatherRecipients(User, req.body.adminId, facultyId);
     const recipientEmails = [...new Set([...superAdminEmails, ...adminEmails, ...officerEmails, assignedOfficerEmail].filter(Boolean))];
+    
+    // Send email to staff
     const email = assignmentEmail(reportId, reportData, req.body.adminName || 'Officer');
     await sendEmailIfAny(sendEmail, recipientEmails, email.subject, email.html);
     console.log(`📧 Assignment notification sent to: ${recipientEmails.length} recipients (superadmins, admins, officers in faculty ${facultyId || 'N/A'})`);
-    emitEvent('complaint:assignment', { complaintId: reportId, adminId: req.body.adminId, adminName: req.body.adminName || 'Officer', status: reportData?.status });
-    if (reportData?.status) emitEvent('complaint:status', { complaintId: reportId, status: reportData.status });
+    
+    // Send email to student (extract from partner API user.email)
+    const studentEmail = getStudentEmail();
+    console.log('📬 Student email extracted for ASSIGN:', studentEmail || 'NOT FOUND');
+    if (studentEmail) {
+      const sEmail = studentAssignmentEmail(reportId, reportData, req.body.adminName || 'Officer');
+      await sendEmailIfAny(sendEmail, [studentEmail], sEmail.subject, sEmail.html);
+      console.log(`📧 Assignment notification sent to student: ${studentEmail}`);
+    } else {
+      console.warn('⚠️ Student email not found in report data for assignment notification');
+    }
+    
+    emitEvent('complaint:assignment', { complaintId: reportId, displayId: reportId, adminId: req.body.adminId, adminName: req.body.adminName || 'Officer', status: reportData?.status });
+    if (reportData?.status) emitEvent('complaint:status', { complaintId: reportId, displayId: reportId, status: reportData.status });
     return;
   }
 
@@ -305,11 +333,25 @@ const sendNotificationEmailsAndEvents = async ({ req, r, reportId, reportData })
     const facultyId = getFacultyId();
     const { superAdminEmails, adminEmails, officerEmails, assignedOfficerEmail } = await gatherRecipients(User, reportData?.adminId, facultyId);
     const recipientEmails = [...new Set([...superAdminEmails, ...adminEmails, ...officerEmails, assignedOfficerEmail].filter(Boolean))];
+    
+    // Send email to staff
     const email = revokeEmail(reportId, reportData);
     await sendEmailIfAny(sendEmail, recipientEmails, email.subject, email.html);
     console.log(`📧 Revoke notification sent to: ${recipientEmails.length} recipients (superadmins, admins, officers in faculty ${facultyId || 'N/A'})`);
-    emitEvent('complaint:assignment', { complaintId: reportId, adminId: null, adminName: null, status: reportData?.status });
-    if (reportData?.status) emitEvent('complaint:status', { complaintId: reportId, status: reportData.status });
+    
+    // Send email to student (extract from partner API user.email)
+    const studentEmail = getStudentEmail();
+    console.log('📬 Student email extracted for REVOKE:', studentEmail || 'NOT FOUND');
+    if (studentEmail) {
+      const sEmail = studentRevokeEmail(reportId, reportData);
+      await sendEmailIfAny(sendEmail, [studentEmail], sEmail.subject, sEmail.html);
+      console.log(`📧 Revoke notification sent to student: ${studentEmail}`);
+    } else {
+      console.warn('⚠️ Student email not found in report data for revoke notification');
+    }
+    
+    emitEvent('complaint:assignment', { complaintId: reportId, displayId: reportId, adminId: null, adminName: null, status: reportData?.status });
+    if (reportData?.status) emitEvent('complaint:status', { complaintId: reportId, displayId: reportId, status: reportData.status });
     return;
   }
 
@@ -376,9 +418,23 @@ const sendNotificationEmailsAndEvents = async ({ req, r, reportId, reportData })
     const facultyId = getFacultyId();
     const { superAdminEmails, adminEmails, officerEmails, assignedOfficerEmail } = await gatherRecipients(User, reportData?.adminId, facultyId);
     const recipientEmails = [...new Set([...superAdminEmails, ...adminEmails, ...officerEmails, assignedOfficerEmail].filter(Boolean))];
+    
+    // Send email to staff
     const email = chatroomEmail(reportId, reportData);
     await sendEmailIfAny(sendEmail, recipientEmails, email.subject, email.html);
     console.log(`📧 Chatroom creation notification sent to: ${recipientEmails.length} recipients (superadmins, admins, officers in faculty ${facultyId || 'N/A'})`);
+    
+    // Send email to student (extract from partner API user.email)
+    const studentEmail = getStudentEmail();
+    console.log('📬 Student email extracted for CHATROOM:', studentEmail || 'NOT FOUND');
+    if (studentEmail) {
+      const sEmail = studentChatroomEmail(reportId, reportData);
+      await sendEmailIfAny(sendEmail, [studentEmail], sEmail.subject, sEmail.html);
+      console.log(`📧 Chatroom notification sent to student: ${studentEmail}`);
+    } else {
+      console.warn('⚠️ Student email not found in report data for chatroom notification');
+    }
+    
     emitEvent('complaint:chatroom', { complaintId: reportId, chatroomId: r.data?.chatroom?.id });
   }
 };

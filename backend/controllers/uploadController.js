@@ -63,9 +63,28 @@ export const uploadFilesToCloudinary = async (req, res) => {
     const uploadedFiles = req.files.map((file) => {
       let url = file.path; // CloudinaryStorage provides 'path' with the secure URL
       
-      // Add file extension for PDFs and other documents
-      if (file.mimetype === 'application/pdf' && !url.endsWith('.pdf')) {
-        url = url + '.pdf';
+      // For PDFs and raw files, ensure the URL has proper format for downloads
+      if (file.mimetype === 'application/pdf') {
+        // Ensure PDF extension is present
+        if (!url.endsWith('.pdf')) {
+          // Extract the public_id and add .pdf extension
+          const urlParts = url.split('/upload/');
+          if (urlParts.length === 2) {
+            url = urlParts[0] + '/upload/fl_attachment/' + urlParts[1] + '.pdf';
+          }
+        } else {
+          // Add fl_attachment flag to make it downloadable
+          const urlParts = url.split('/upload/');
+          if (urlParts.length === 2 && !url.includes('fl_attachment')) {
+            url = urlParts[0] + '/upload/fl_attachment/' + urlParts[1];
+          }
+        }
+      } else if (file.resource_type === 'raw') {
+        // For other raw files, add fl_attachment flag
+        const urlParts = url.split('/upload/');
+        if (urlParts.length === 2 && !url.includes('fl_attachment')) {
+          url = urlParts[0] + '/upload/fl_attachment/' + urlParts[1];
+        }
       }
 
       return {

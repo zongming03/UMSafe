@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import * as echarts from "echarts";
 import { useComplaintUpdates } from "../hooks/useComplaintUpdates";
-import { NotificationService } from "../utils/NotificationService";
 import { fetchReports, closeReport, resolveReport } from "../services/reportsApi";
 import { fetchRooms } from "../services/api";
 
@@ -749,20 +748,20 @@ const Dashboard = () => {
       }
       // Show as absolute increase with indicator
       return {
-        percent: delta > 0 ? 999 : -999, // Use high number to indicate significant change
-        label: delta > 0 ? `+${delta} (new)` : `${delta} (new)`,
+        percent: delta > 0 ? 999 : -999, 
+        label: delta > 0 ? `+${delta}` : `${delta}`,
         delta,
       };
     }
     
     // Calculate real percentage (not capped at 100%)
     const rawPct = (delta / previous) * 100;
-    const pct = Math.round(rawPct * 10) / 10; // one decimal
+    const pct = Math.round(rawPct * 10) / 10; 
     const sign = pct > 0 ? "+" : "";
     
     return {
       percent: pct,
-      label: `${sign}${pct}% (${delta > 0 ? "+" : ""}${delta})`,
+      label: `${sign}${delta}`,
       delta,
     };
   }

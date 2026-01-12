@@ -11,11 +11,11 @@ const facultyBlockRoomSchema = new Schema(
     },
     latitude: {
       type: Number,
-      required: true,
+      default: null,
     },
     longitude: {
       type: Number,
-      required: true,
+      default: null,
     },
   },
   {

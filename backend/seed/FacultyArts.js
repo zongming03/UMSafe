@@ -1,0 +1,90 @@
+import FacultyModel from "../models/Room.js";
+
+const FacultyArts = new FacultyModel({
+  name: "Faculty of Arts And Social Sciences",
+  faculty_blocks: [
+    {
+      name: "Bangunan Siswarama",
+      faculty_block_rooms: [
+        { name: "Maybank", latitude: 3.121186, longitude: 101.652613 },
+        { name: "Klinik Kesihatan Pelajar", latitude: 3.121205, longitude: 101.652598 },
+        { name: "Surau", latitude: 3.121172, longitude: 101.652631 },
+        { name: "Penjabat Jabatan Asia Timur", latitude: 3.121198, longitude: 101.652645 },
+        { name: "Bilik Sakura", latitude: 3.121210, longitude: 101.652620 },
+        { name: "Bilik Samurei", latitude: 3.121165, longitude: 101.652605 },
+        { name: "Makmal Komputer FSSS", latitude: 3.121190, longitude: 101.652580 },
+        { name: "Bilik Pensyarah", latitude: 3.121175, longitude: 101.652655 },
+        { name: "Bilik Pascasiswazah", latitude: 3.121220, longitude: 101.652635 },
+      ],
+    },
+    {
+      name: "Bangunan Sejarah",
+      faculty_block_rooms: [
+        { name: "Bilik Mesyuarat", latitude: 3.121155, longitude: 101.652590 },
+        { name: "Bilik Seminar 1", latitude: 3.121170, longitude: 101.652575 },
+        { name: "Bilik Gerakan Kedai Jalanan", latitude: 3.121145, longitude: 101.652625 },
+        { name: "Bilik Serbaguna", latitude: 3.121160, longitude: 101.652640 },
+        { name: "Bilik Sumber", latitude: 3.121185, longitude: 101.652565 },
+        { name: "Pantri", latitude: 3.121195, longitude: 101.652610 },
+        { name: "Bilik Stor", latitude: 3.121150, longitude: 101.652600 },
+        { name: "Bilik Internet", latitude: 3.121180, longitude: 101.652585 },
+        { name: "Bilik Seminar 3", latitude: 3.121165, longitude: 101.652650 },
+        { name: "Bilik Seminar 4", latitude: 3.121200, longitude: 101.652595 },
+        { name: "Bilik Seminar 5", latitude: 3.121140, longitude: 101.652615 },
+      ],
+    },
+    {
+      name: "Bangunan 3 Dimensi",
+      faculty_block_rooms: [
+        { name: "Bilik Pensyarah", latitude: 3.121230, longitude: 101.652660 },
+        { name: "Bilik Seminar 7", latitude: 3.121215, longitude: 101.652585 },
+        { name: "Bilik Seminar 8", latitude: 3.121235, longitude: 101.652605 },
+        { name: "Makmal FSSS 12", latitude: 3.121225, longitude: 101.652625 },
+        { name: "Bilik Project Kerjasama UM-EFEO", latitude: 3.121240, longitude: 101.652595 },
+        { name: "Bilik Mesyuarat", latitude: 3.121250, longitude: 101.652615 },
+        { name: "Bilik Tetamu JPT", latitude: 3.121245, longitude: 101.652640 },
+        { name: "BSJPT", latitude: 3.121260, longitude: 101.652620 },
+        { name: "Bilik Tesis HPT", latitude: 3.121255, longitude: 101.652575 },
+        { name: "Bilik Editor JPT", latitude: 3.121220, longitude: 101.652655 },
+        { name: "Bilik Seminar 9", latitude: 3.121265, longitude: 101.652600 },
+        { name: "Bilik Seminar 10", latitude: 3.121270, longitude: 101.652630 },
+        { name: "Bilik Seminar 11", latitude: 3.121275, longitude: 101.652610 },
+        { name: "Bilik Sumber", latitude: 3.121280, longitude: 101.652645 },
+      ],
+    },
+    {
+      name: "Bangunan Pentadbiran",
+      faculty_block_rooms: [
+        { name: "Dataran Sastera", latitude: 3.121125, longitude: 101.652555 },
+        { name: "Cafe FSSS", latitude: 3.121135, longitude: 101.652545 },
+        { name: "Penjabat Dekan FSSS", latitude: 3.121120, longitude: 101.652570 },
+        { name: "Bilik Mesyuarat Dekan 1", latitude: 3.121130, longitude: 101.652580 },
+        { name: "Dewan Kuliah E", latitude: 3.121115, longitude: 101.652595 },
+        { name: "Dewan Kuliah D", latitude: 3.121110, longitude: 101.652615 },
+        { name: "Stor Alatan", latitude: 3.121105, longitude: 101.652560 },
+        { name: "Bilik Mesyuarat Jabatan Geografi", latitude: 3.121100, longitude: 101.652585 },
+        { name: "Makmal Komputer 1", latitude: 3.121095, longitude: 101.652605 },
+        { name: "Makmal Komputer 2", latitude: 3.121090, longitude: 101.652625 },
+      ],
+    },
+    {
+      name: "Bangunan Anjung Ilmu",
+      faculty_block_rooms: [
+        { name: "Penjabat CiTRA", latitude: 3.121285, longitude: 101.652670 },
+        { name: "Bilik Seminar 2", latitude: 3.121290, longitude: 101.652650 },
+        { name: "Studio Muzik", latitude: 3.121295, longitude: 101.652630 },
+        { name: "Surau", latitude: 3.121300, longitude: 101.652680 },
+        { name: "Bilik Seminar 1", latitude: 3.121305, longitude: 101.652660 },
+        { name: "Bilik Pensyarah", latitude: 3.121310, longitude: 101.652640 },
+        { name: "Bilik Pascasiswa RPG", latitude: 3.121315, longitude: 101.652690 },
+        { name: "Bilik Suntingan", latitude: 3.121320, longitude: 101.652670 },
+        { name: "Bilik Kamera", latitude: 3.121325, longitude: 101.652650 },
+        { name: "Bilik Tayangan", latitude: 3.121330, longitude: 101.652630 },
+        { name: "Studio Utama", latitude: 3.121335, longitude: 101.652610 },
+        { name: "Bilik Ketua Jabatan", latitude: 3.121340, longitude: 101.652625 },
+      ],
+    },
+  ],
+});
+
+export default FacultyArts;

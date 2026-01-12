@@ -22,6 +22,26 @@ export const fetchReports = async (skipCache = false) => {
 };
 
 /**
+ * GET /admin/reports?includeFeedback=true - Fetch all reports with embedded feedback (cached for 30s)
+ * Note: This endpoint is expected to proxy the partner source and may ignore faculty filtering server-side.
+ * Client will filter by user faculty after fetching.
+ */
+export const fetchAdminReports = async (includeFeedback = true, skipCache = false) => {
+  const cacheKey = `admin_reports_${includeFeedback ? 'with_feedback' : 'no_feedback'}`;
+
+  if (skipCache) {
+    apiCache.invalidate(cacheKey);
+  }
+
+  const cached = apiCache.get(cacheKey, 30000);
+  if (cached) return cached;
+
+  const result = await api.get("/admin/reports", { params: { includeFeedback } });
+  apiCache.set(cacheKey, result);
+  return result;
+};
+
+/**
  * GET /reports/{id} - Get single report details (cached for 20s)
  */
 export const getReport = async (reportId, skipCache = false) => {
@@ -213,6 +233,7 @@ export const sendMessage = async (reportId, chatroomId, messageData) => {
 // Default export for convenience
 const reportsApi = {
   fetchReports,
+  fetchAdminReports,
   getReport,
   getReportHistories,
   addReportHistory,

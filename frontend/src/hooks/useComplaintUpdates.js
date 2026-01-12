@@ -1,4 +1,4 @@
-import { useEffect, useCallback } from "react";
+import { useEffect, useCallback, useRef } from "react";
 import { getSocket } from "../services/socket";
 import apiCache from "../utils/apiCache";
 import { NotificationService } from "../utils/NotificationService";
@@ -19,6 +19,8 @@ export const useComplaintUpdates = ({
   onAssignment,
   showNotifications = true,
 }) => {
+  // Track previous status for each complaint to show old → new transitions
+  const complaintStatusMapRef = useRef(new Map());
   const handleNewComplaint = useCallback(
     (payload) => {
       // Invalidate cache when new complaint arrives
@@ -40,18 +42,30 @@ export const useComplaintUpdates = ({
   const handleStatusChange = useCallback(
     (payload) => {
       console.log(`📡 Status change event received for complaint: ${payload.complaintId}, current complaint: ${currentComplaintId}`);
+      
+      const complaintId = payload.complaintId;
+      const newStatus = payload.status;
+      
+      // Get old status from our tracking map
+      const oldStatus = complaintStatusMapRef.current.get(complaintId) || payload.oldStatus || "Unknown";
+      
+      // Update the map with new status
+      if (newStatus) {
+        complaintStatusMapRef.current.set(complaintId, newStatus);
+      }
+      
       // Invalidate cache when status changes
       apiCache.invalidate('reports_all');
-      if (payload.complaintId) {
-        apiCache.invalidate(`report_${payload.complaintId}`);
+      if (complaintId) {
+        apiCache.invalidate(`report_${complaintId}`);
       }
       
       // Show notification for status change
       if (showNotifications) {
         NotificationService.showStatusChangeNotification(
-          payload.displayId || payload.complaintId,
-          payload.oldStatus || "Unknown",
-          payload.status || "Unknown"
+          payload.displayId || complaintId,
+          oldStatus,
+          newStatus || "Unknown"
         );
       }
       

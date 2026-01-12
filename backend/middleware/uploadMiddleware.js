@@ -34,6 +34,7 @@ const cloudinaryStorage = new CloudinaryStorage({
     // Determine resource type based on file mimetype
     let resourceType = 'raw'; // Default to raw for documents
     let folder = 'umsafe-chat';
+    let format = null;
     
     if (file.mimetype.startsWith('video/')) {
       resourceType = 'video';
@@ -42,12 +43,21 @@ const cloudinaryStorage = new CloudinaryStorage({
     } else {
       // PDFs and other documents use 'raw'
       resourceType = 'raw';
-      folder = 'attachment'; // Use attachment folder for raw files
+      folder = 'umsafe-attachments';
+      
+      // For PDFs, preserve the extension
+      if (file.mimetype === 'application/pdf') {
+        format = 'pdf';
+      }
     }
 
     return {
       folder: folder,
       resource_type: resourceType,
+      format: format, // Preserve format for PDFs
+      public_id: file.originalname ? file.originalname.split('.')[0] + '-' + Date.now() : undefined,
+      // Add flags to make PDFs downloadable and viewable
+      flags: resourceType === 'raw' ? 'attachment' : undefined,
     };
   },
 });

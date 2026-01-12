@@ -782,8 +782,8 @@ const ComplaintDetails = () => {
                 attachments={displayedAttachments}
               />
 
-              {/* Acknowledge banner (only assigned admin/officer and not yet acknowledged) */}
-              {isUserAssigned && !complaint?.acknowledgeAt && (
+              {/* Acknowledge banner (only assigned admin/officer and not yet acknowledged and not Resolved/Closed) */}
+              {isUserAssigned && !complaint?.acknowledgeAt && currentStatus !== 'Resolved' && currentStatus !== 'Closed' && (
                 <div className="mt-4 bg-blue-50 border border-blue-200 rounded-lg p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 shadow-sm">
                   <div>
                     <p className="text-sm font-semibold text-blue-900">Acknowledge this report</p>

@@ -240,3 +240,166 @@ export async function getComplaintTrends(req, res) {
     res.status(500).json({ msg: 'Failed to load trends' });
   }
 }
+
+// Get category trend comparison
+export async function getCategoryTrendComparison(req, res) {
+  try {
+    const { startDate, endDate } = req.body;
+    
+    if (!startDate || !endDate) {
+      return res.status(400).json({ msg: 'startDate and endDate are required' });
+    }
+
+    const Complaint = require('../models/Complaint');
+    
+    // Parse dates
+    const selectedStart = new Date(startDate);
+    const selectedEnd = new Date(endDate);
+    
+    // Calculate the duration (in milliseconds)
+    const duration = selectedEnd.getTime() - selectedStart.getTime();
+    
+    // Calculate previous period dates
+    const previousStart = new Date(selectedStart.getTime() - duration);
+    const previousEnd = new Date(selectedStart.getTime());
+    
+    // MongoDB aggregation pipeline
+    const result = await Complaint.aggregate([
+      {
+        $facet: {
+          currentPeriod: [
+            {
+              $match: {
+                createdAt: {
+                  $gte: selectedStart,
+                  $lte: selectedEnd
+                }
+              }
+            },
+            {
+              $group: {
+                _id: {
+                  $cond: [
+                    { $eq: [{ $type: '$category' }, 'object'] },
+                    '$category.name',
+                    '$category'
+                  ]
+                },
+                count: { $sum: 1 }
+              }
+            },
+            {
+              $project: {
+                category: '$_id',
+                currentCount: '$count',
+                _id: 0
+              }
+            }
+          ],
+          previousPeriod: [
+            {
+              $match: {
+                createdAt: {
+                  $gte: previousStart,
+                  $lt: previousEnd
+                }
+              }
+            },
+            {
+              $group: {
+                _id: {
+                  $cond: [
+                    { $eq: [{ $type: '$category' }, 'object'] },
+                    '$category.name',
+                    '$category'
+                  ]
+                },
+                count: { $sum: 1 }
+              }
+            },
+            {
+              $project: {
+                category: '$_id',
+                previousCount: '$count',
+                _id: 0
+              }
+            }
+          ]
+        }
+      },
+      {
+        $project: {
+          merged: {
+            $map: {
+              input: '$currentPeriod',
+              as: 'current',
+              in: {
+                category: '$$current.category',
+                currentCount: '$$current.currentCount',
+                previousCount: {
+                  $let: {
+                    vars: {
+                      prevItem: {
+                        $arrayElemAt: [
+                          {
+                            $filter: {
+                              input: '$previousPeriod',
+                              as: 'prev',
+                              cond: { $eq: ['$$prev.category', '$$current.category'] }
+                            }
+                          },
+                          0
+                        ]
+                      }
+                    },
+                    in: { $ifNull: ['$$prevItem.previousCount', 0] }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        $unwind: '$merged'
+      },
+      {
+        $replaceRoot: {
+          newRoot: {
+            $mergeObjects: [
+              '$merged',
+              {
+                difference: { $subtract: ['$merged.currentCount', '$merged.previousCount'] },
+                percentageChange: {
+                  $cond: [
+                    { $eq: ['$merged.previousCount', 0] },
+                    null,
+                    {
+                      $multiply: [
+                        {
+                          $divide: [
+                            { $subtract: ['$merged.currentCount', '$merged.previousCount'] },
+                            '$merged.previousCount'
+                          ]
+                        },
+                        100
+                      ]
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        $sort: { difference: -1 }
+      }
+    ]);
+
+    res.json({ data: result });
+  } catch (err) {
+    console.error('Error in getCategoryTrendComparison:', err);
+    res.status(500).json({ msg: 'Failed to load category trend data' });
+  }
+}

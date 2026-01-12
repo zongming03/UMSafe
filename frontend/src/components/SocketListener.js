@@ -32,20 +32,20 @@ const SocketListener = () => {
     };
 
     const handleAssignment = (payload) => {
-      const id = payload?.complaintId || "complaint";
+      const id = payload?.displayId || payload?.complaintId || "complaint";
       const assigneeId = payload?.adminId;
       const assigneeName = payload?.adminName || assigneeId || "Unassigned";
       const currentUserId = user?.id || user?._id;
 
       if (!assigneeId) {
-        toast(`Complaint ${id} is now unassigned`);
+        toast(`Complaint #${id} is now unassigned`);
         return;
       }
 
       if (currentUserId && String(currentUserId) === String(assigneeId)) {
-        toast.success(`Complaint ${id} assigned to you`);
+        toast.success(`Complaint #${id} assigned to you`);
       } else {
-        toast(`Complaint ${id} assigned to ${assigneeName}`);
+        toast(`Complaint #${id} assigned to ${assigneeName}`);
       }
     };
 

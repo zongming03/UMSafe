@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useRef, useMemo, useContext } from "react";
 import * as echarts from "echarts";
 import api from "../services/api";
-import { fetchReports, getReportHistories } from "../services/reportsApi";
+import { fetchReports, fetchAdminReports, getReportHistories, fetchReportFeedback } from "../services/reportsApi";
 import { fetchFacultyCategories } from "../services/api";
 import { AuthContext } from "../context/AuthContext";
 import { useLocation } from "react-router-dom";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import { pipeline } from "@xenova/transformers";
 import {
   faSpinner,
   faCheckCircle,
@@ -111,6 +112,7 @@ function App() {
   const [selectedStatus, setSelectedStatus] = useState("");
   const [selectedPriority, setSelectedPriority] = useState("");
   const [selectedOfficer, setSelectedOfficer] = useState("all");
+  const [selectedPreset, setSelectedPreset] = useState(null);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("overview");
@@ -121,6 +123,7 @@ function App() {
   const [roomOptions, setRoomOptions] = useState([]);
   const [officerOptions, setOfficerOptions] = useState([]); 
   const [userFacultyName, setUserFacultyName] = useState("");
+  const [categoryTrendData, setCategoryTrendData] = useState([]);
   const profileRef = useRef(null);
   const notificationRef = useRef(null);
   const complaintChartRef = useRef(null);
@@ -131,10 +134,23 @@ function App() {
   const ageChartRef = useRef(null);
   const filterRefetchTimer = useRef(null);
   const historiesCacheRef = useRef(new Map()); 
+  const feedbackCacheRef = useRef(new Map());
   const location = useLocation();
   const initialDataRef = useRef(null);
   const [preferLocationData, setPreferLocationData] = useState(false);
   const [notifications, setNotifications] = useState([]);
+  
+  // AI-powered feedback analysis state
+  const [aiThemeMetrics, setAiThemeMetrics] = useState({
+    effectiveSolution: 0,
+    ineffectiveSolution: 0,
+    fastResponse: 0,
+    slowResponse: 0,
+    politeStaff: 0,
+    rudeStaff: 0,
+    total: 0,
+    isAnalyzing: false
+  });
 
   // ============================================================================
   // EVENT HANDLERS
@@ -853,6 +869,70 @@ function App() {
     return enriched;
   };
 
+  // Attach feedback via API (cached) so Student Feedback Analysis can use up-to-date data
+  const attachFeedbacks = async (list) => {
+    if (!Array.isArray(list) || list.length === 0) return [];
+    const enriched = await Promise.all(
+      list.map(async (c) => {
+        try {
+          const id = c.id || c._id || c.reportId || c.displayId;
+          // If complaint already has feedback populated, keep it
+          const hasFeedback = c.feedback && (c.feedback.q1Rating || c.feedback.q2Rating || c.feedback.overallComment);
+          if (!id || hasFeedback) {
+            return { ...c, isFeedbackProvided: Boolean(hasFeedback) };
+          }
+
+          // Use cache if available
+          if (feedbackCacheRef.current.has(id)) {
+            const fb = feedbackCacheRef.current.get(id);
+            const provided = Boolean(fb && (fb.q1Rating || fb.q2Rating || fb.overallComment));
+            return { ...c, feedback: fb || c.feedback, isFeedbackProvided: provided };
+          }
+
+          // Fetch from API
+          const res = await fetchReportFeedback(id);
+          const data = res?.data || {};
+          // Support multiple possible response shapes
+          const rf = data.reportFeedback || data.feedback || data.data || data;
+          let latest = rf;
+          if (Array.isArray(rf)) {
+            latest = rf
+              .slice()
+              .sort((a, b) => {
+                const ta = Date.parse(a.updatedAt || a.createdAt || 0);
+                const tb = Date.parse(b.updatedAt || b.createdAt || 0);
+                return tb - ta;
+              })[0] || null;
+          }
+
+          const feedbackObj = latest
+            ? {
+                q1Rating: Number(latest.q1Rating ?? latest.question1 ?? latest.q1 ?? 0) || 0,
+                q2Rating: Number(latest.q2Rating ?? latest.question2 ?? latest.q2 ?? 0) || 0,
+                overallComment: String(latest.overallComment ?? latest.question3 ?? latest.comment ?? "") || "",
+                createdAt: latest.createdAt || null,
+                updatedAt: latest.updatedAt || null,
+              }
+            : null;
+
+          if (feedbackObj) {
+            feedbackCacheRef.current.set(id, feedbackObj);
+   
+          }
+          const provided = Boolean(
+            feedbackObj && (feedbackObj.q1Rating || feedbackObj.q2Rating || feedbackObj.overallComment)
+          );
+
+          return { ...c, feedback: feedbackObj || c.feedback, isFeedbackProvided: provided };
+        } catch (_) {
+          // On failure, return original complaint
+          return c;
+        }
+      })
+    );
+    return enriched;
+  };
+
   // Fetch complaints from backend and apply client-side filters
   const fetchComplaints = async (
     showToastFlag = false,
@@ -881,10 +961,11 @@ function App() {
       );
       const filtered = filterData(base);
       const withHistories = await attachHistories(filtered);
-      console.log("[Analytics] fetchComplaints filtered count:", withHistories.length);
-      setComplaints(withHistories);
-      setHasData(withHistories.length > 0);
-      updateChartsWithData(withHistories);
+      const withFeedback = await attachFeedbacks(withHistories);
+      console.log("[Analytics] fetchComplaints filtered count:", withFeedback.length);
+      setComplaints(withFeedback);
+      setHasData(withFeedback.length > 0);
+      updateChartsWithData(withFeedback);
       setLastUpdatedAt(new Date());
       setIsLoading(false);
       if (showToastFlag) {
@@ -893,16 +974,18 @@ function App() {
       return;
     }
     try {
-      const res = await fetchReports();
+      // Prefer bulk endpoint with embedded feedback; fallback to base reports
+      const res = await fetchAdminReports(true).catch(() => fetchReports());
       const data = res.data?.reports || res.data?.data || res.data || [];
-      console.log("[Analytics] Fetched reports from API:", data.length);
+      console.log("[Analytics] Fetched reports (admin/bulk) from API:", data.length);
 
       const filtered = filterData(data);
       const withHistories = await attachHistories(filtered);
+      const withFeedback = await attachFeedbacks(withHistories);
 
-      setComplaints(withHistories);
-      setHasData(withHistories.length > 0);
-      updateChartsWithData(withHistories);
+      setComplaints(withFeedback);
+      setHasData(withFeedback.length > 0);
+      updateChartsWithData(withFeedback);
       setLastUpdatedAt(new Date());
     } catch (err) {
       console.error("Failed to load complaints for analytics:", err);
@@ -917,6 +1000,8 @@ function App() {
     }
   };
 
+
+
   const resetFilters = () => {
     // reset filter state
     const defaultRange = getDefaultDateRange();
@@ -928,6 +1013,8 @@ function App() {
     setSelectedStatus("");
     setSelectedPriority("");
     setSelectedOfficer("all");
+    setSelectedPreset(null);
+    setHasCustomDateRange(false);
 
     // reset DOM inputs (if present)
     const dateFromInput = document.getElementById("date-from");
@@ -969,12 +1056,7 @@ function App() {
     }
     const hasRouterData = Array.isArray(locComplaints);
     initialDataRef.current = hasRouterData ? locComplaints : [];
-    console.log(
-      "[Analytics] Seed complaints (router?",
-      hasRouterData,
-      ") count:",
-      Array.isArray(initialDataRef.current) ? initialDataRef.current.length : 0
-    );
+
     const run = async () => {
       const filtered = filterData(initialDataRef.current);
       const withHistories = await attachHistories(filtered);
@@ -1227,22 +1309,9 @@ function App() {
             if (!isNaN(nextTs)) {
               const respHrs = (nextTs - assignTsAny) / (1000 * 60 * 60);
               officerMap[officer].responseTimes.push(respHrs);
-              console.log("[Performance] Response time (fallback)", {
-                reportId: c.id || c._id || c.displayId,
-                officerId: officer,
-                officerName,
-                assignedAt: lastAnyAssign.createdAt,
-                nextEvent: nextEvt.actionTitle,
-                nextEventAt: nextEvt.createdAt,
-                hours: Number(respHrs.toFixed(2)),
-              });
               return true;
             }
           }
-          console.log(
-            "[Performance] Response time unavailable — no chat or subsequent event",
-            { reportId: c.id || c._id || c.displayId, officerId: officer, officerName }
-          );
           return false;
         };
 
@@ -1256,17 +1325,6 @@ function App() {
             const assignTs = Date.parse(lastAssign.createdAt);
             if (!isNaN(assignTs) && !isNaN(chatTs) && chatTs > assignTs) {
               const respHrs = (chatTs - assignTs) / (1000 * 60 * 60);
-              console.log(
-                "[Performance] Response time:",
-                {
-                  reportId: c.id || c._id || c.displayId,
-                  officerId: officer,
-                  officerName,
-                  assignedAt: lastAssign.createdAt,
-                  chatInitiatedAt: chatEvt.createdAt,
-                  hours: Number(respHrs.toFixed(2)),
-                }
-              );
               officerMap[officer].responseTimes.push(respHrs);
             } else {
               // Chat exists but predates this officer's latest assignment — use fallback
@@ -1354,7 +1412,10 @@ function App() {
     const today = new Date();
     let from, to;
     
-    if (preset === 'thisMonth') {
+     if (preset === 'today') {
+       from = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+       to = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+     } else if (preset === 'thisMonth') {
       from = new Date(today.getFullYear(), today.getMonth(), 1);
       to = new Date(today.getFullYear(), today.getMonth() + 1, 0);
     } else if (preset === 'thisYear') {
@@ -1373,6 +1434,31 @@ function App() {
       to: formatDate(to)
     });
     setHasCustomDateRange(true);
+    setSelectedPreset(preset);
+  };
+
+  // Ensure date range is valid (no future dates, from <= to)
+  const handleDateChange = (key, value) => {
+    const todayStr = formatDate(new Date());
+    let nextFrom = key === 'from' ? value : dateRange.from;
+    let nextTo = key === 'to' ? value : dateRange.to;
+
+    // Clamp to today (no future dates)
+    if (nextFrom && nextFrom > todayStr) nextFrom = todayStr;
+    if (nextTo && nextTo > todayStr) nextTo = todayStr;
+
+    // Keep range ordered
+    if (nextFrom && nextTo && nextFrom > nextTo) {
+      if (key === 'from') {
+        nextTo = nextFrom;
+      } else {
+        nextFrom = nextTo;
+      }
+    }
+
+    setDateRange({ from: nextFrom, to: nextTo });
+    setHasCustomDateRange(true);
+    setSelectedPreset(null);
   };
 
   const clearFilter = (key) => {
@@ -1413,7 +1499,7 @@ function App() {
     charts: true,
     performance: true,
     filename: `Analytics_Report_${new Date().toISOString().split("T")[0]}`,
-    orientation: "landscape",
+    orientation: "portrait",
   });
   const [isExporting, setIsExporting] = useState(false);
   const exportToPDF = () => {
@@ -1455,6 +1541,7 @@ function App() {
         filterData,
         complaints,
         metrics,
+        locationStats,
         officerStats,
         feedbackMetrics,
         trendChartImage,
@@ -1609,66 +1696,268 @@ function App() {
     }
   }, [complaints, dateRange.from, dateRange.to, selectedCategory, selectedBlock, selectedRoom, selectedOfficer, selectedStatus, selectedPriority, officerOptions]);
 
-  // Dynamic growth metrics (Year/Quarter/Month/Week over same preceding period)
+  // Dynamic growth metrics - Unique insights not shown elsewhere
   const growthMetrics = useMemo(() => {
     const base = complaints || [];
     const now = dateRange?.to ? new Date(dateRange.to) : new Date();
     const oneDay = 24 * 60 * 60 * 1000;
-    const countBetween = (start, end) => {
+    
+    const getComplaintsBetween = (start, end) => {
       const sTs = start.getTime();
       const eTs = end.getTime() + (oneDay - 1);
       return base.filter((c) => {
         const ts = c.createdAt ? Date.parse(c.createdAt) : Date.parse(c.created_at || 0);
         return !isNaN(ts) && ts >= sTs && ts <= eTs;
-      }).length;
+      });
     };
-    const build = (label, days) => {
-      const endCurrent = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      const startCurrent = new Date(endCurrent.getTime() - (days - 1) * oneDay);
-      const endPrev = new Date(startCurrent.getTime() - oneDay);
-      const startPrev = new Date(endPrev.getTime() - (days - 1) * oneDay);
-      const current = countBetween(startCurrent, endCurrent);
-      const previous = countBetween(startPrev, endPrev);
-      
+    
+    // Helper to calculate top category trend (most complained about category)
+    const getTopCategoryCount = (complaints) => {
+      const categoryMap = {};
+      complaints.forEach(c => {
+        const cat = c.category?.name || c.category_id?.name || c.category || 'Unknown';
+        categoryMap[cat] = (categoryMap[cat] || 0) + 1;
+      });
+      const sorted = Object.entries(categoryMap).sort((a, b) => b[1] - a[1]);
+      return sorted.length > 0 ? sorted[0][1] : 0;
+    };
+    
+    // Helper to calculate average priority score (for escalation trends)
+    const getAvgPriority = (complaints) => {
+      if (complaints.length === 0) return 0;
+      const priorityMap = { 'high': 3, 'medium': 2, 'low': 1 };
+      const total = complaints.reduce((sum, c) => {
+        const priority = c.priority?.toLowerCase() || c.category?.priority?.toLowerCase() || 'low';
+        return sum + (priorityMap[priority] || 1);
+      }, 0);
+      return (total / complaints.length);
+    };
+    
+    // Helper to calculate workload distribution (variance in officer assignments)
+    const getWorkloadVariance = (complaints) => {
+      if (complaints.length === 0) return 0;
+      const officerMap = {};
+      complaints.forEach(c => {
+        const officer = c.adminId || c.assignedTo || c.assigned_to || 'Unassigned';
+        if (officer && officer !== 'Unassigned') {
+          officerMap[officer] = (officerMap[officer] || 0) + 1;
+        }
+      });
+      if (Object.keys(officerMap).length === 0) return 0;
+      const cases = Object.values(officerMap);
+      const avg = cases.reduce((a, b) => a + b, 0) / cases.length;
+      const variance = cases.reduce((sum, val) => sum + Math.pow(val - avg, 2), 0) / cases.length;
+      return Math.sqrt(variance); // Standard deviation shows uneven workload
+    };
+    
+    // Helper to calculate recurring location issues (complaints from same room/block)
+    const getRecurringLocationCount = (complaints) => {
+      const locationMap = {};
+      complaints.forEach(c => {
+        const loc = `${c.facultyLocation?.block || 'Unknown'}-${c.facultyLocation?.room || 'Unknown'}`;
+        locationMap[loc] = (locationMap[loc] || 0) + 1;
+      });
+      // Count locations with 2+ complaints (recurring issues)
+      return Object.values(locationMap).filter(count => count >= 2).length;
+    };
+    
+    const build = (label, currentComplaints, previousComplaints, valueFunc) => {
+      const current = valueFunc(currentComplaints);
+      const previous = valueFunc(previousComplaints);
       const change = current - previous;
       
       let direction = 'flat';
-      if (current > previous) {
+      if (change > 0.5) {
         direction = 'up';
-      } else if (current < previous) {
+      } else if (change < -0.5) {
         direction = 'down';
       }
       
-      let displayText = '';
-      if (previous === 0 && current === 0) {
-        displayText = '0 → 0';
-      } else if (previous === 0) {
-        displayText = `0 → ${current}`;
-      } else {
-        displayText = `${change >= 0 ? '+' : ''}${change}`;
-      }
+      let displayText = `${current.toFixed(1)}`;
       
       return { label, current, previous, change, displayText, direction };
     };
+    
+    // Split data into current and previous periods
+    const endCurrent = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const startCurrent = new Date(endCurrent.getTime() - (30 - 1) * oneDay); // Last 30 days
+    const endPrev = new Date(startCurrent.getTime() - oneDay);
+    const startPrev = new Date(endPrev.getTime() - (30 - 1) * oneDay); // Previous 30 days
+    
+    const currentPeriod = getComplaintsBetween(startCurrent, endCurrent);
+    const previousPeriod = getComplaintsBetween(startPrev, endPrev);
+    
     return [
-      build('Year-over-Year', 365),
-      build('Quarter-over-Quarter', 90),
-      build('Month-over-Month', 30),
-      build('Week-over-Week', 7),
+      build('Top Category Volume', currentPeriod, previousPeriod, getTopCategoryCount),
+      build('Priority Escalation (1-3)', currentPeriod, previousPeriod, getAvgPriority),
+      build('Workload Variance', currentPeriod, previousPeriod, getWorkloadVariance),
+      build('Recurring Location Issues', currentPeriod, previousPeriod, getRecurringLocationCount),
     ];
   }, [complaints, dateRange.to]);
 
   const feedbackComplaints = useMemo(() => {
-    return (complaints || []).filter(
+    const withFeedback = (complaints || []).filter(
       (c) => c.isFeedbackProvided === true && c.feedback && (c.feedback.q1Rating || c.feedback.q2Rating || c.feedback.overallComment)
     );
+
+    return withFeedback;
   }, [complaints]);
 
+  // AI-powered feedback analysis function
+  const analyzeFeedbackAI = async (complaints) => {
+    try {
+      console.log('[AI Analysis] Starting analysis for', complaints.length, 'complaints');
+      setAiThemeMetrics((prev) => ({ ...prev, isAnalyzing: true }));
+
+      // Extract feedback comments
+      const texts = complaints
+        .map((c) => (c.feedback?.overallComment || '').trim())
+        .filter((t) => t.length > 0);
+
+      if (texts.length === 0) {
+        console.log('[AI Analysis] No comments to analyze');
+        setAiThemeMetrics({
+          effectiveSolution: 0,
+          ineffectiveSolution: 0,
+          fastResponse: 0,
+          slowResponse: 0,
+          politeStaff: 0,
+          rudeStaff: 0,
+          total: 0,
+          isAnalyzing: false,
+        });
+        return;
+      }
+
+      // Initialize zero-shot classification pipeline (mobile-size model for browser)
+      const classifier = await pipeline('zero-shot-classification', 'Xenova/mobilebert-uncased-mnli');
+
+      // Admin Performance Labels with natural language hypotheses for better alignment
+      const candidateLabels = [
+        'Effective Solution',
+        'Ineffective Solution',
+        'Fast Response',
+        'Slow Response',
+        'Polite Staff',
+        'Rude Staff',
+      ];
+
+      const HINT_BOOST = 0.25; // manual nudge when clear keywords appear
+      const MIN_CONFIDENCE = 0.35; // require this confidence to count
+      const counts = {
+        effectiveSolution: 0,
+        ineffectiveSolution: 0,
+        fastResponse: 0,
+        slowResponse: 0,
+        politeStaff: 0,
+        rudeStaff: 0,
+      };
+
+      // Basic heuristic hints to help disambiguate short / slang comments
+      const slowRegex = /(slow|late|delay|wait|waiting)/i;
+      const fastRegex = /(fast|quick|prompt)/i;
+      const rudeRegex = /(rude|laji|lanjiao|shitty|useless|annoying|impolite|lapsap)/i;
+      const politeRegex = /(polite|friendly|helpful|kind|respectful)/i;
+      const ineffectiveRegex = /(ineffective|no help|not help|useless|did nothing|didnt fix|not fix|no solution)/i;
+
+      for (const text of texts) {
+        const result = await classifier(text, candidateLabels, {
+          multi_label: true,
+          hypothesis_template: 'This feedback is about {label}.',
+        });
+
+        // Convert scores to a mutable map so we can nudge with heuristics
+        const scores = {};
+        result.labels.forEach((lbl, idx) => {
+          scores[lbl] = result.scores[idx];
+        });
+
+        // Heuristic boosts for extremely short / slang-heavy comments
+        if (slowRegex.test(text)) scores['Slow Response'] = (scores['Slow Response'] || 0) + HINT_BOOST;
+        if (fastRegex.test(text)) scores['Fast Response'] = (scores['Fast Response'] || 0) + HINT_BOOST;
+        if (rudeRegex.test(text)) scores['Rude Staff'] = (scores['Rude Staff'] || 0) + HINT_BOOST;
+        if (politeRegex.test(text)) scores['Polite Staff'] = (scores['Polite Staff'] || 0) + HINT_BOOST;
+        if (ineffectiveRegex.test(text)) scores['Ineffective Solution'] = (scores['Ineffective Solution'] || 0) + HINT_BOOST;
+
+        // Pick the label with the highest adjusted score
+        let bestLabel = null;
+        let bestScore = 0;
+        Object.entries(scores).forEach(([lbl, sc]) => {
+          if (sc > bestScore) {
+            bestLabel = lbl;
+            bestScore = sc;
+          }
+        });
+
+        if (bestLabel && bestScore >= MIN_CONFIDENCE) {
+          switch (bestLabel) {
+            case 'Effective Solution':
+              counts.effectiveSolution++;
+              break;
+            case 'Ineffective Solution':
+              counts.ineffectiveSolution++;
+              break;
+            case 'Fast Response':
+              counts.fastResponse++;
+              break;
+            case 'Slow Response':
+              counts.slowResponse++;
+              break;
+            case 'Polite Staff':
+              counts.politeStaff++;
+              break;
+            case 'Rude Staff':
+              counts.rudeStaff++;
+              break;
+            default:
+              break;
+          }
+        } else {
+          console.log('[AI Analysis] Comment fell below confidence threshold:', { text, bestLabel, bestScore });
+        }
+      }
+
+      console.log('[AI Analysis] Classification complete:', counts);
+
+      setAiThemeMetrics({
+        ...counts,
+        total: texts.length,
+        isAnalyzing: false,
+      });
+    } catch (error) {
+      console.error('[AI Analysis] Error:', error);
+      setAiThemeMetrics((prev) => ({ ...prev, isAnalyzing: false }));
+    }
+  };
+  
+  // Run AI analysis when feedbackComplaints changes
+  useEffect(() => {
+    if (feedbackComplaints && feedbackComplaints.length > 0) {
+      analyzeFeedbackAI(feedbackComplaints);
+    } else {
+      setAiThemeMetrics({
+        effectiveSolution: 0,
+        ineffectiveSolution: 0,
+        fastResponse: 0,
+        slowResponse: 0,
+        politeStaff: 0,
+        rudeStaff: 0,
+        total: 0,
+        isAnalyzing: false
+      });
+    }
+  }, [feedbackComplaints]);
+
   const themeMetrics = useMemo(() => {
+    console.log('[Theme Analysis] Processing', feedbackComplaints.length, 'feedback complaints');
     const texts = feedbackComplaints
       .map(c => (c.feedback?.overallComment || '').trim())
       .filter(t => t.length > 0);
-    if (!texts.length) return { positive: [], improvement: [], recent: [], topPhrases: [] };
+    console.log('[Theme Analysis] Comments to analyze:', texts.length);
+    if (!texts.length) {
+      console.log('[Theme Analysis] No comments found, returning empty metrics');
+      return { positive: [], improvement: [], recent: [], topPhrases: [] };
+    }
     const stop = new Set(['the','and','a','to','of','in','is','it','for','on','at','with','this','that','was','are','be','an','as','by','or','we','i','you','they','but','from','have','has','had','were','not','more','less']);
     const positiveKeywords = ['quick','fast','helpful','professional','clear','responsive','friendly','timely','efficient','resolved','resolution','transparent'];
     const improvementKeywords = ['slow','delayed','unclear','confusing','late','no','lack','status','update','updates','response','detail','details','waiting','wait'];
@@ -1714,6 +2003,10 @@ function App() {
       .map(k => ({ phrase: k, count: freq[k] }))
       .sort((a,b)=> b.count - a.count)
       .slice(0,5);
+    console.log('[Theme Analysis] Positive themes:', positive);
+    console.log('[Theme Analysis] Improvement themes:', improvement);
+    console.log('[Theme Analysis] Recent themes:', recent);
+    console.log('[Theme Analysis] Top phrases:', topPhrases);
     // Normalize casing to Title Case for consistent presentation (keep numeric parts intact)
     const titleCase = (s) => s.split(' ').map(part => part ? part.charAt(0).toUpperCase() + part.slice(1) : part).join(' ');
     const normalizeThemes = (arr) => arr.map(obj => ({ ...obj, theme: titleCase(obj.theme) }));
@@ -1736,12 +2029,14 @@ function App() {
       if (!isNaN(q1) && q1 > 0) q1Values.push(Math.max(1, Math.min(5, Math.round(q1))));
       if (!isNaN(q2) && q2 > 0) q2Values.push(Math.max(1, Math.min(5, Math.round(q2))));
     });
+
     const distQ1 = { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 };
     q1Values.forEach((v) => (distQ1[v] = (distQ1[v] || 0) + 1));
     const count = feedbackComplaints.length;
     const avgQ1 = q1Values.length ? Math.round((q1Values.reduce((a, b) => a + b, 0) / q1Values.length) * 10) / 10 : null;
     const avgQ2 = q2Values.length ? Math.round((q2Values.reduce((a, b) => a + b, 0) / q2Values.length) * 10) / 10 : null;
     const avgOverall = avgQ1 != null && avgQ2 != null ? Math.round(((avgQ1 + avgQ2) / 2) * 10) / 10 : (avgQ1 ?? avgQ2);
+
     const pct = (n) => (q1Values.length ? Math.round((n / q1Values.length) * 1000) / 10 : 0);
     const entries = feedbackComplaints
       .slice()
@@ -1778,34 +2073,33 @@ function App() {
 
         // Calculate Response Time and Resolution Time using reportHistories
         if (c.reportHistories && Array.isArray(c.reportHistories)) {
-          // Sort events by createdAt ascending to find most recent assignment before chat/resolution
+          // Sort events by createdAt ascending to find most recent assignment before acknowledgment
           const sortedEvents = [...c.reportHistories].sort((a, b) => 
             Date.parse(a.createdAt) - Date.parse(b.createdAt)
           );
           
-          // Find "Chat initiated" event
-          const chatroomEvent = sortedEvents.find(evt => 
-            evt.actionTitle === "Chat initiated" ||
-            evt.actionTitle === "Chatroom Initial" || 
-            evt.actionTitle === "Chatroom Created" ||
-            evt.actionTitle === "Chat Started"
+          // Calculate Response Time: from "Admin Assigned" to "Report Acknowledged"
+          // Find the "Report Acknowledged" event in the timeline
+          const acknowledgedEvent = sortedEvents.find(evt => 
+            evt.actionTitle === "Report Acknowledged"
           );
           
-          // Calculate Response Time: from most recent "Admin Assigned" before chat to "Chat initiated"
-          if (chatroomEvent) {
-            const chatroomTime = Date.parse(chatroomEvent.createdAt);
-            // Find the most recent "Admin Assigned" event before the chatroom event
-            const assignedEvents = sortedEvents.filter(evt => 
-              evt.actionTitle === "Admin Assigned" && 
-              Date.parse(evt.createdAt) < chatroomTime
-            );
-            const mostRecentAssignment = assignedEvents[assignedEvents.length - 1];
-            
-            if (mostRecentAssignment) {
-              const assignedTime = Date.parse(mostRecentAssignment.createdAt);
-              if (!isNaN(assignedTime) && !isNaN(chatroomTime) && chatroomTime > assignedTime) {
-                const responseHrs = (chatroomTime - assignedTime) / (1000 * 60 * 60);
-                map[officerKey].responseTimes.push(responseHrs);
+          if (acknowledgedEvent) {
+            const acknowledgedTime = Date.parse(acknowledgedEvent.createdAt);
+            if (!isNaN(acknowledgedTime)) {
+              // Find the most recent "Admin Assigned" event before the acknowledgment time
+              const assignedEvents = sortedEvents.filter(evt => 
+                evt.actionTitle === "Admin Assigned" && 
+                Date.parse(evt.createdAt) < acknowledgedTime
+              );
+              const mostRecentAssignment = assignedEvents[assignedEvents.length - 1];
+              
+              if (mostRecentAssignment) {
+                const assignedTime = Date.parse(mostRecentAssignment.createdAt);
+                if (!isNaN(assignedTime) && acknowledgedTime > assignedTime) {
+                  const responseHrs = (acknowledgedTime - assignedTime) / (1000 * 60 * 60);
+                  map[officerKey].responseTimes.push(responseHrs);
+                }
               }
             }
           }
@@ -1813,27 +2107,83 @@ function App() {
           // Calculate Resolution Time: from most recent "Admin Assigned" to "Case Resolved"
           // This handles both cases: with or without chatroom interaction
           if (s === "resolved" || s === "closed") {
-            const resolvedEvent = sortedEvents.find(evt => 
-              evt.actionTitle === "Case Resolved" || 
-              evt.actionTitle === "Case Closed" ||
-              evt.actionTitle === "Status Updated to Resolved" ||
-              evt.actionTitle === "Status Updated to Closed"
-            );
+    
+            
+            const resolvedEvent = sortedEvents.find(evt => {
+              if (!evt.actionTitle) return false;
+              const actionLower = evt.actionTitle.toLowerCase();
+              return actionLower.includes("resolved") || 
+                     actionLower.includes("closed") ||
+                     evt.actionTitle === "Case Resolved" ||
+                     evt.actionTitle === "Case Closed" ||
+                     evt.actionTitle === "Status Updated to Resolved" ||
+                     evt.actionTitle === "Status Updated to Closed" ||
+                     evt.actionTitle === "Report Resolved";
+            });
+            
             
             if (resolvedEvent) {
               const resolvedTime = Date.parse(resolvedEvent.createdAt);
-              // Find the most recent "Admin Assigned" event before the resolved event
-              const assignedEvents = sortedEvents.filter(evt => 
-                evt.actionTitle === "Admin Assigned" && 
-                Date.parse(evt.createdAt) < resolvedTime
-              );
-              const mostRecentAssignment = assignedEvents[assignedEvents.length - 1];
-              
-              if (mostRecentAssignment) {
-                const assignedTime = Date.parse(mostRecentAssignment.createdAt);
-                if (!isNaN(assignedTime) && !isNaN(resolvedTime) && resolvedTime > assignedTime) {
-                  const resolutionHrs = (resolvedTime - assignedTime) / (1000 * 60 * 60);
-                  map[officerKey].resolutionTimes.push(resolutionHrs);
+              if (!isNaN(resolvedTime)) {
+                // Find the most recent "Admin Assigned" event before the resolved event
+                const assignedEvents = sortedEvents.filter(evt => 
+                  evt.actionTitle === "Admin Assigned" && 
+                  Date.parse(evt.createdAt) < resolvedTime
+                );
+                
+                
+                const mostRecentAssignment = assignedEvents[assignedEvents.length - 1];
+                
+                if (mostRecentAssignment) {
+                  const assignedTime = Date.parse(mostRecentAssignment.createdAt);
+                  if (!isNaN(assignedTime) && resolvedTime > assignedTime) {
+                    const resolutionHrs = (resolvedTime - assignedTime) / (1000 * 60 * 60);
+                    
+                    map[officerKey].resolutionTimes.push(resolutionHrs);
+                  } else {
+                    console.log(`[Resolution Time] ✗ Invalid times:`, {
+                      assignedTime: new Date(assignedTime).toISOString(),
+                      resolvedTime: new Date(resolvedTime).toISOString(),
+                      validAssignedTime: !isNaN(assignedTime),
+                      resolvedAfterAssigned: resolvedTime > assignedTime
+                    });
+                  }
+                } else {
+                  console.log(`[Resolution Time] ✗ No assignment event found before resolution`);
+                }
+              } else {
+                console.log(`[Resolution Time] ✗ Invalid resolved time:`, resolvedEvent.createdAt);
+              }
+            }
+          }
+
+          // Calculate Resolution Time: from most recent "Admin Assigned" to "Case Resolved"
+          if (s === "resolved" || s === "closed") {
+            const resolvedEvent = sortedEvents.find(evt => {
+              if (!evt.actionTitle) return false;
+              const actionLower = evt.actionTitle.toLowerCase();
+              return actionLower.includes("resolved") || 
+                     actionLower.includes("closed") ||
+                     evt.actionTitle === "Case Resolved" ||
+                     evt.actionTitle === "Case Closed";
+            });
+            
+            if (resolvedEvent) {
+              const resolvedTime = Date.parse(resolvedEvent.createdAt);
+              if (!isNaN(resolvedTime)) {
+                // Find the most recent "Admin Assigned" event before the resolved event
+                const assignedEvents = sortedEvents.filter(evt => 
+                  evt.actionTitle === "Admin Assigned" && 
+                  Date.parse(evt.createdAt) < resolvedTime
+                );
+                const mostRecentAssignment = assignedEvents[assignedEvents.length - 1];
+                
+                if (mostRecentAssignment) {
+                  const assignedTime = Date.parse(mostRecentAssignment.createdAt);
+                  if (!isNaN(assignedTime) && resolvedTime > assignedTime) {
+                    const resolutionHrs = (resolvedTime - assignedTime) / (1000 * 60 * 60);
+                    map[officerKey].resolutionTimes.push(resolutionHrs);
+                  }
                 }
               }
             }
@@ -1856,8 +2206,21 @@ function App() {
     const list = Object.entries(map).map(([id, item]) => {
       const resolutionRate = item.total > 0 ? Math.round((item.resolved / item.total) * 1000) / 10 : 0;
       const avgResponseTime = item.responseTimes.length ? Math.round((item.responseTimes.reduce((a, b) => a + b, 0) / item.responseTimes.length) * 10) / 10 : 0;
-      const avgResolutionTime = item.resolutionTimes.length ? Math.round((item.resolutionTimes.reduce((a, b) => a + b, 0) / item.resolutionTimes.length) * 10) / 10 : 0;
+      const resolutionTimeSum = item.resolutionTimes.reduce((a, b) => a + b, 0);
+      const avgResolutionTime = item.resolutionTimes.length ? Math.round((resolutionTimeSum / item.resolutionTimes.length) * 10) / 10 : 0;
       const avgSat = item.sats.length ? Math.round((item.sats.reduce((a, b) => a + b, 0) / item.sats.length) * 10) / 10 : null;
+      
+      if (item.resolutionTimes.length > 0) {
+        console.log(`[Officer Stats] ${item.name}:`, {
+          total: item.total,
+          resolved: item.resolved,
+          resolutionTimesCount: item.resolutionTimes.length,
+          resolutionTimes: item.resolutionTimes.map(t => t.toFixed(2)),
+          avgResolutionTime: avgResolutionTime,
+          avgResolutionDays: (avgResolutionTime / 24).toFixed(2)
+        });
+      }
+      
       return {
         id,
         name: item.name || "Unknown",
@@ -1866,6 +2229,7 @@ function App() {
         resolutionRate,
         avgResponseTime,
         avgResolutionTime,
+        resolutionTimeSum,
         avgSat,
       };
     });
@@ -1879,18 +2243,33 @@ function App() {
       total: acc.total + it.total, 
       resolved: acc.resolved + it.resolved, 
       responseTimeSum: acc.responseTimeSum + (it.avgResponseTime * it.total), 
-      resolutionTimeSum: acc.resolutionTimeSum + (it.avgResolutionTime * it.total), 
+      resolutionTimeSum: acc.resolutionTimeSum + it.resolutionTimeSum, 
       satSum: acc.satSum + ((it.avgSat || 0) * it.total) 
     }), { total: 0, resolved: 0, responseTimeSum: 0, resolutionTimeSum: 0, satSum: 0 });
+    
+    console.log('[Team Averages] Totals:', {
+      officersWithCases: officersWithCases.length,
+      totalCases: totals.total,
+      resolvedCases: totals.resolved,
+      resolutionTimeSum: totals.resolutionTimeSum.toFixed(2),
+      avgResolutionTime: totals.total ? (totals.resolutionTimeSum / totals.total).toFixed(2) : 0
+    });
     
     const teamAvg = {
       total: totals.total && officersWithCases.length ? Math.round((totals.total / officersWithCases.length) * 10) / 10 : 0,
       resolved: Math.round(totals.resolved),
       resolutionRate: totals.total ? Math.round((totals.resolved / totals.total) * 1000) / 10 : 0,
       avgResponseTime: totals.total ? Math.round((totals.responseTimeSum / totals.total) * 10) / 10 : 0,
-      avgResolutionTime: totals.total ? Math.round((totals.resolutionTimeSum / totals.total) * 10) / 10 : 0,
+      avgResolutionTime: totals.total ? Math.round((totals.resolutionTimeSum / totals.total) * 100) / 100 : 0,
       avgSat: totals.total ? Math.round((totals.satSum / totals.total) * 10) / 10 : null,
     };
+    
+    console.log('[Team Averages] Final:', {
+      avgResolutionTime: teamAvg.avgResolutionTime,
+      avgResponseTime: teamAvg.avgResponseTime,
+      resolutionRate: teamAvg.resolutionRate
+    });
+    
     return { list, teamAvg };
   }, [complaints, officerOptions]);
 
@@ -2186,7 +2565,7 @@ function App() {
             {isFilterCollapsed && (
               <button
                 onClick={() => setIsFilterCollapsed(false)}
-                className="fixed top-24 right-6 z-40 bg-blue-600 hover:bg-blue-700 text-white rounded-full p-3 shadow-lg transition-all duration-200 hover:scale-110"
+                className="fixed top-24 right-6 z-40 bg-purple-600 hover:bg-purple-700 text-white rounded-full p-3 shadow-lg transition-all duration-200 hover:scale-110"
                 aria-label="Open filters"
               >
                 <FontAwesomeIcon icon={faFilter} className="text-lg" />
@@ -2238,26 +2617,52 @@ function App() {
                     <p className="text-xs text-gray-500 mb-3">Quick presets:</p>
                     <div className="flex flex-wrap gap-2 mb-4">
                       <button
+                        onClick={() => handleQuickDate('today')}
+                        className={`px-3 py-1.5 text-xs rounded-md transition-colors cursor-pointer ${
+                          selectedPreset === 'today'
+                            ? 'bg-blue-600 text-white border-2 border-blue-800 font-semibold'
+                            : 'bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-300'
+                        }`}
+                      >
+                        Today
+                      </button>
+                      <button
                         onClick={() => handleQuickDate(7)}
-                        className="px-3 py-1.5 text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-md transition-colors cursor-pointer"
+                        className={`px-3 py-1.5 text-xs rounded-md transition-colors cursor-pointer ${
+                          selectedPreset === 7
+                            ? 'bg-blue-600 text-white border-2 border-blue-800 font-semibold'
+                            : 'bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-300'
+                        }`}
                       >
                         Last 7 Days
                       </button>
                       <button
                         onClick={() => handleQuickDate(30)}
-                        className="px-3 py-1.5 text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-md transition-colors cursor-pointer"
+                        className={`px-3 py-1.5 text-xs rounded-md transition-colors cursor-pointer ${
+                          selectedPreset === 30
+                            ? 'bg-blue-600 text-white border-2 border-blue-800 font-semibold'
+                            : 'bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-300'
+                        }`}
                       >
                         Last 30 Days
                       </button>
                       <button
                         onClick={() => handleQuickDate('thisMonth')}
-                        className="px-3 py-1.5 text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-md transition-colors cursor-pointer"
+                        className={`px-3 py-1.5 text-xs rounded-md transition-colors cursor-pointer ${
+                          selectedPreset === 'thisMonth'
+                            ? 'bg-blue-600 text-white border-2 border-blue-800 font-semibold'
+                            : 'bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-300'
+                        }`}
                       >
                         This Month
                       </button>
                       <button
                         onClick={() => handleQuickDate('thisYear')}
-                        className="px-3 py-1.5 text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-md transition-colors cursor-pointer"
+                        className={`px-3 py-1.5 text-xs rounded-md transition-colors cursor-pointer ${
+                          selectedPreset === 'thisYear'
+                            ? 'bg-blue-600 text-white border-2 border-blue-800 font-semibold'
+                            : 'bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-300'
+                        }`}
                       >
                         This Year
                       </button>
@@ -2268,10 +2673,8 @@ function App() {
                         <input
                           type="date"
                           value={dateRange.from}
-                          onChange={(e) => {
-                            setDateRange({ ...dateRange, from: e.target.value });
-                            setHasCustomDateRange(true);
-                          }}
+                          max={dateRange.to || formatDate(new Date())}
+                          onChange={(e) => handleDateChange('from', e.target.value)}
                           className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm cursor-pointer"
                         />
                       </div>
@@ -2280,10 +2683,9 @@ function App() {
                         <input
                           type="date"
                           value={dateRange.to}
-                          onChange={(e) => {
-                            setDateRange({ ...dateRange, to: e.target.value });
-                            setHasCustomDateRange(true);
-                          }}
+                          min={dateRange.from || undefined}
+                          max={formatDate(new Date())}
+                          onChange={(e) => handleDateChange('to', e.target.value)}
                           className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm cursor-pointer"
                         />
                       </div>
@@ -2848,24 +3250,6 @@ function App() {
                 ) : (
                   <>
                     <div ref={trendChartLargeRef} className="w-full" style={{ height: "600px" }}></div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-8">
-                      <div className="bg-gray-50 rounded-lg p-4">
-                        <h4 className="text-md font-medium text-gray-800 mb-2">
-                          Growth Trends
-                        </h4>
-                        <ul className="space-y-2">
-                          {growthMetrics.map((g) => (
-                            <li key={g.label} className="flex justify-between items-center">
-                              <span className="text-sm text-gray-600">{g.label}:</span>
-                              <span className={`text-lg font-bold ${g.direction === 'up' ? 'text-green-600' : g.direction === 'down' ? 'text-red-600' : 'text-gray-600'}`}>
-                                {g.change >= 0 ? '+' : ''}{g.change}
-                              </span>
-                            </li>
-                          ))}
-                        </ul>
-                        <p className="mt-3 text-xs text-gray-500">Comparison windows use trailing periods (7/30/90/365 days) ending at the current To date filter.</p>
-                      </div>
-                    </div>
                   </>
                 )}
               </div>
@@ -2878,7 +3262,7 @@ function App() {
                   <p className="text-sm text-gray-600">Analysis of complaints by block and room locations in your faculty</p>
                 </div>
 
-                {/* Top Blocks */}
+                {/* Blocks */}
                 <div className="bg-white shadow rounded-lg p-6 mb-6">
                   <h4 className="text-md font-semibold text-gray-900 mb-4 flex items-center">
                     <FontAwesomeIcon icon={faLayerGroup} className="mr-2 text-purple-600" />
@@ -2917,7 +3301,7 @@ function App() {
                   </div>
                 </div>
 
-                {/* Top Rooms */}
+                {/* Rooms */}
                 <div className="bg-white shadow rounded-lg p-6 mb-6">
                   <h4 className="text-md font-semibold text-gray-900 mb-4 flex items-center">
                     <FontAwesomeIcon icon={faDoorClosed} className="mr-2 text-red-600" />
@@ -3025,25 +3409,26 @@ function App() {
                 {feedbackMetrics.count > 0 && (
                 <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
                   <div className="px-6 py-4 border-b border-gray-200"><h4 className="text-lg font-medium text-gray-900">Recent Student Feedback</h4></div>
-                  <div className="overflow-x-auto max-h-[600px] overflow-y-auto">
-                    <table className="min-w-full divide-y divide-gray-200">
-                      <thead className="bg-gray-50 sticky top-0 z-10">
-                        <tr>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Complaint ID</th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Q1 Rating</th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Q2 Rating</th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Student Comment</th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
-                        </tr>
-                      </thead>
+                  <div className="overflow-hidden" style={{ height: `${Math.min(6, feedbackMetrics.entries.length) * 60}px` }}>
+                    <div className="overflow-x-auto overflow-y-auto h-full">
+                      <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-gray-50 sticky top-0 z-10">
+                          <tr>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Complaint ID</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Q1 Rating</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Q2 Rating</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Student Comment</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                          </tr>
+                        </thead>
                       <tbody className="bg-white divide-y divide-gray-200">
                         {feedbackMetrics.entries.length === 0 && (
                           <tr>
                             <td colSpan={6} className="px-6 py-8 text-center text-sm text-gray-500">No feedback available for current filters.</td>
                           </tr>
                         )}
-                        {feedbackMetrics.entries.slice(0, 15).map((c) => {
+                        {feedbackMetrics.entries.map((c) => {
                           const fb = c.feedback;
                           const dateStr = fb?.updatedAt || fb?.createdAt || c.updatedAt || c.createdAt;
                           const cat = (c.category && (c.category.name || c.category.title)) || 'Unknown';
@@ -3059,7 +3444,8 @@ function App() {
                           );
                         })}
                       </tbody>
-                    </table>
+                      </table>
+                    </div>
                   </div>
                 </div>
                 )}
@@ -3093,66 +3479,121 @@ function App() {
                     </div>
                   </div>
                   <div className="bg-white shadow rounded-lg p-6">
-                    <h4 className="text-lg font-medium text-gray-900 mb-4">Common Feedback Themes</h4>
-                    {themeMetrics.positive.length === 0 && themeMetrics.improvement.length === 0 && (
-                      <p className="text-sm text-gray-500">No recurring themes detected from current feedback comments.</p>
+                    <h4 className="text-lg font-medium text-gray-900 mb-4 flex items-center justify-between">
+                      <span>Common Feedback Themes (AI-Powered)</span>
+                      {aiThemeMetrics.isAnalyzing && (
+                        <span className="text-sm text-blue-600 flex items-center">
+                          <FontAwesomeIcon icon={faSpinner} className="animate-spin mr-2" />
+                          Analyzing...
+                        </span>
+                      )}
+                    </h4>
+                    {aiThemeMetrics.total === 0 && !aiThemeMetrics.isAnalyzing && (
+                      <p className="text-sm text-gray-500">No feedback comments to analyze.</p>
                     )}
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      <div className="p-4 bg-green-50 rounded-lg">
-                        <h5 className="text-sm font-medium text-green-800 mb-3 flex items-center">
-                          <FontAwesomeIcon icon={faCheckCircle} className="mr-2" />Positive Feedback
-                        </h5>
-                        <ul className="space-y-2 text-xs text-green-700">
-                          {themeMetrics.positive.map(t => (
-                            <li key={t.theme} className="flex justify-between">
-                              <span className="truncate max-w-[70%]" title={t.theme}>{t.theme}</span>
-                              <span className="font-semibold">{t.count}</span>
-                            </li>
-                          ))}
-                          {themeMetrics.positive.length === 0 && <li className="text-green-600 opacity-70">No positive themes</li>}
-                        </ul>
-                      </div>
-                      <div className="p-4 bg-red-50 rounded-lg">
-                        <h5 className="text-sm font-medium text-red-800 mb-3 flex items-center">
-                          <FontAwesomeIcon icon={faExclamationCircle} className="mr-2" />Areas for Improvement
-                        </h5>
-                        <ul className="space-y-2 text-xs text-red-700">
-                          {themeMetrics.improvement.map(t => (
-                            <li key={t.theme} className="flex justify-between">
-                              <span className="truncate max-w-[70%]" title={t.theme}>{t.theme}</span>
-                              <span className="font-semibold">{t.count}</span>
-                            </li>
-                          ))}
-                          {themeMetrics.improvement.length === 0 && <li className="text-red-600 opacity-70">No improvement themes</li>}
-                        </ul>
-                      </div>
-                      <div className="p-4 bg-blue-50 rounded-lg">
-                        <h5 className="text-sm font-medium text-blue-800 mb-3 flex items-center">
-                          <FontAwesomeIcon icon={faInfoCircle} className="mr-2" />Emerging (Last 7 Days)
-                        </h5>
-                        <ul className="space-y-2 text-xs text-blue-700">
-                          {themeMetrics.recent.map(t => (
-                            <li key={t.theme} className="flex justify-between">
-                              <span className="truncate max-w-[70%]" title={t.theme}>{t.theme}</span>
-                              <span className="font-semibold">{t.count}</span>
-                            </li>
-                          ))}
-                          {themeMetrics.recent.length === 0 && <li className="text-blue-600 opacity-70">No recent themes</li>}
-                        </ul>
-                        {themeMetrics.topPhrases.length > 0 && (
-                          <div className="mt-4 border-t pt-3">
-                            <h6 className="text-xs font-semibold text-blue-800 mb-2">Top Phrases</h6>
-                            <div className="flex flex-wrap gap-2">
-                              {themeMetrics.topPhrases.map(p => (
-                                <span key={p.phrase} className="px-2 py-1 bg-white border border-blue-200 rounded-full text-[11px] text-blue-700" title={`${p.count} occurrences`}>
-                                  {p.phrase} ({p.count})
-                                </span>
-                              ))}
-                            </div>
+                    {aiThemeMetrics.total > 0 && (
+                      <div className="space-y-4">
+                        <div className="text-sm text-gray-600 mb-4">
+                          Analyzed {aiThemeMetrics.total} feedback comment{aiThemeMetrics.total !== 1 ? 's' : ''} using AI classification
+                        </div>
+                        
+                        {/* Effective Solution */}
+                        <div>
+                          <div className="flex justify-between items-center mb-2">
+                            <span className="text-sm font-medium text-green-700">Effective Solution</span>
+                            <span className="text-sm font-semibold text-green-800">
+                              {aiThemeMetrics.effectiveSolution} ({Math.round((aiThemeMetrics.effectiveSolution / aiThemeMetrics.total) * 100)}%)
+                            </span>
                           </div>
-                        )}
+                          <div className="w-full bg-gray-200 rounded-full h-3">
+                            <div 
+                              className="bg-green-500 h-3 rounded-full transition-all duration-500" 
+                              style={{ width: `${(aiThemeMetrics.effectiveSolution / aiThemeMetrics.total) * 100}%` }}
+                            ></div>
+                          </div>
+                        </div>
+                        
+                        {/* Ineffective Solution */}
+                        <div>
+                          <div className="flex justify-between items-center mb-2">
+                            <span className="text-sm font-medium text-red-700">Ineffective Solution</span>
+                            <span className="text-sm font-semibold text-red-800">
+                              {aiThemeMetrics.ineffectiveSolution} ({Math.round((aiThemeMetrics.ineffectiveSolution / aiThemeMetrics.total) * 100)}%)
+                            </span>
+                          </div>
+                          <div className="w-full bg-gray-200 rounded-full h-3">
+                            <div 
+                              className="bg-red-500 h-3 rounded-full transition-all duration-500" 
+                              style={{ width: `${(aiThemeMetrics.ineffectiveSolution / aiThemeMetrics.total) * 100}%` }}
+                            ></div>
+                          </div>
+                        </div>
+                        
+                        {/* Fast Response */}
+                        <div>
+                          <div className="flex justify-between items-center mb-2">
+                            <span className="text-sm font-medium text-blue-700">Fast Response</span>
+                            <span className="text-sm font-semibold text-blue-800">
+                              {aiThemeMetrics.fastResponse} ({Math.round((aiThemeMetrics.fastResponse / aiThemeMetrics.total) * 100)}%)
+                            </span>
+                          </div>
+                          <div className="w-full bg-gray-200 rounded-full h-3">
+                            <div 
+                              className="bg-blue-500 h-3 rounded-full transition-all duration-500" 
+                              style={{ width: `${(aiThemeMetrics.fastResponse / aiThemeMetrics.total) * 100}%` }}
+                            ></div>
+                          </div>
+                        </div>
+                        
+                        {/* Slow Response */}
+                        <div>
+                          <div className="flex justify-between items-center mb-2">
+                            <span className="text-sm font-medium text-orange-700">Slow Response</span>
+                            <span className="text-sm font-semibold text-orange-800">
+                              {aiThemeMetrics.slowResponse} ({Math.round((aiThemeMetrics.slowResponse / aiThemeMetrics.total) * 100)}%)
+                            </span>
+                          </div>
+                          <div className="w-full bg-gray-200 rounded-full h-3">
+                            <div 
+                              className="bg-orange-500 h-3 rounded-full transition-all duration-500" 
+                              style={{ width: `${(aiThemeMetrics.slowResponse / aiThemeMetrics.total) * 100}%` }}
+                            ></div>
+                          </div>
+                        </div>
+                        
+                        {/* Polite Staff */}
+                        <div>
+                          <div className="flex justify-between items-center mb-2">
+                            <span className="text-sm font-medium text-teal-700">Polite Staff</span>
+                            <span className="text-sm font-semibold text-teal-800">
+                              {aiThemeMetrics.politeStaff} ({Math.round((aiThemeMetrics.politeStaff / aiThemeMetrics.total) * 100)}%)
+                            </span>
+                          </div>
+                          <div className="w-full bg-gray-200 rounded-full h-3">
+                            <div 
+                              className="bg-teal-500 h-3 rounded-full transition-all duration-500" 
+                              style={{ width: `${(aiThemeMetrics.politeStaff / aiThemeMetrics.total) * 100}%` }}
+                            ></div>
+                          </div>
+                        </div>
+                        
+                        {/* Rude Staff */}
+                        <div>
+                          <div className="flex justify-between items-center mb-2">
+                            <span className="text-sm font-medium text-purple-700">Rude Staff</span>
+                            <span className="text-sm font-semibold text-purple-800">
+                              {aiThemeMetrics.rudeStaff} ({Math.round((aiThemeMetrics.rudeStaff / aiThemeMetrics.total) * 100)}%)
+                            </span>
+                          </div>
+                          <div className="w-full bg-gray-200 rounded-full h-3">
+                            <div 
+                              className="bg-purple-500 h-3 rounded-full transition-all duration-500" 
+                              style={{ width: `${(aiThemeMetrics.rudeStaff / aiThemeMetrics.total) * 100}%` }}
+                            ></div>
+                          </div>
+                        </div>
                       </div>
-                    </div>
+                    )}
                   </div>
                 </div>
                 )}
@@ -3208,11 +3649,11 @@ function App() {
                       <h4 className="text-sm font-semibold text-purple-900">Avg Resolution</h4>
                       <FontAwesomeIcon icon={faHourglassHalf} className="text-purple-600" />
                     </div>
-                    <p className="text-2xl font-bold text-purple-900">{officerStats.teamAvg.avgResolutionTime ? `${(officerStats.teamAvg.avgResolutionTime / 24).toFixed(1)}d` : '—'}</p>
-                    <p className="text-xs text-purple-700 mt-1">{officerStats.teamAvg.avgResolutionTime ? `${officerStats.teamAvg.avgResolutionTime.toFixed(1)} hours total` : 'No data'}</p>
+                    <p className="text-2xl font-bold text-purple-900">{officerStats.teamAvg.avgResolutionTime ? `${officerStats.teamAvg.avgResolutionTime.toFixed(2)}h` : '—'}</p>
+                    <p className="text-xs text-purple-700 mt-1">{officerStats.teamAvg.avgResolutionTime ? `${(officerStats.teamAvg.avgResolutionTime / 24).toFixed(2)} days` : 'No data'}</p>
                   </div>
-                  <div className="bg-gradient-to-br from-yellow-50 to-yellow-100 rounded-lg p-4 border border-yellow-200">
-                    <div className="flex items-center justify-between mb-2">
+                  <div className="bg-gradient-to-br from-yellow-50 to-yellow-100 rounded-lg p-4 border border-yellow-200\">
+                    <div className="flex items-center justify-between mb-2\">
                       <h4 className="text-sm font-semibold text-yellow-900">Team Resolution</h4>
                       <FontAwesomeIcon icon={faChartLine} className="text-yellow-600" />
                     </div>
@@ -3247,15 +3688,12 @@ function App() {
                           <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
                             Rating
                           </th>
-                          <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
-                            Status
-                          </th>
                         </tr>
                       </thead>
                       <tbody className="bg-white divide-y divide-gray-200">
                         {officerStats.list.length === 0 && (
                           <tr>
-                            <td colSpan={6} className="px-6 py-8 text-center text-sm text-gray-500">
+                            <td colSpan={5} className="px-6 py-8 text-center text-sm text-gray-500">
                               No officer performance data available for current filters.
                             </td>
                           </tr>
@@ -3307,21 +3745,6 @@ function App() {
                                   <span className="text-sm text-gray-400">No data</span>
                                 )}
                               </td>
-                              <td className="px-6 py-4 whitespace-nowrap text-center">
-                                {officer.total > 0 ? (
-                                  <div>
-                                    {responseStatus === 'excellent' && resolutionStatus === 'excellent' ? (
-                                      <span className="px-3 py-1 text-xs font-bold bg-green-100 text-green-800 rounded-full">⭐ Excellent</span>
-                                    ) : responseStatus === 'needs-improvement' || resolutionStatus === 'needs-improvement' ? (
-                                      <span className="px-3 py-1 text-xs font-bold bg-red-100 text-red-800 rounded-full">⚠ Needs Help</span>
-                                    ) : (
-                                      <span className="px-3 py-1 text-xs font-bold bg-blue-100 text-blue-800 rounded-full">✓ Good</span>
-                                    )}
-                                  </div>
-                                ) : (
-                                  <span className="text-xs text-gray-400">Idle</span>
-                                )}
-                              </td>
                             </tr>
                           );
                         })}
@@ -3340,69 +3763,13 @@ function App() {
                               {officerStats.teamAvg.avgResponseTime ? `${officerStats.teamAvg.avgResponseTime.toFixed(1)}h` : '—'}
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                              {officerStats.teamAvg.avgResolutionTime ? `${(officerStats.teamAvg.avgResolutionTime / 24).toFixed(1)}d` : '—'}
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                               {officerStats.teamAvg.avgSat ? `${officerStats.teamAvg.avgSat.toFixed(1)}/5` : '—'}
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                              Benchmark
                             </td>
                           </tr>
                         )}
                       </tbody>
                     </table>
                   </div>
-                  
-                  {/* Performance Insights */}
-                  {officerStats.list.length > 0 && (
-                    <div className="px-6 py-4 bg-gray-50 border-t border-gray-200">
-                      <h4 className="text-sm font-semibold text-gray-900 mb-3">Performance Insights</h4>
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div className="flex items-start space-x-3">
-                          <div className="flex-shrink-0">
-                            <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
-                              <FontAwesomeIcon icon={faCheckCircle} className="text-green-600 text-sm" />
-                            </div>
-                          </div>
-                          <div>
-                            <p className="text-sm font-medium text-gray-900">Top Performer</p>
-                            <p className="text-xs text-gray-600 mt-1">
-                              {officerStats.list.filter(o => o.total > 0).sort((a, b) => b.resolutionRate - a.resolutionRate)[0]?.name || 'N/A'} 
-                              {' '}with {officerStats.list.filter(o => o.total > 0).sort((a, b) => b.resolutionRate - a.resolutionRate)[0]?.resolutionRate || 0}% resolution rate
-                            </p>
-                          </div>
-                        </div>
-                        <div className="flex items-start space-x-3">
-                          <div className="flex-shrink-0">
-                            <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
-                              <FontAwesomeIcon icon={faClock} className="text-blue-600 text-sm" />
-                            </div>
-                          </div>
-                          <div>
-                            <p className="text-sm font-medium text-gray-900">Fastest Response</p>
-                            <p className="text-xs text-gray-600 mt-1">
-                              {officerStats.list.filter(o => o.avgResponseTime > 0).sort((a, b) => a.avgResponseTime - b.avgResponseTime)[0]?.name || 'N/A'}
-                              {' '}at {officerStats.list.filter(o => o.avgResponseTime > 0).sort((a, b) => a.avgResponseTime - b.avgResponseTime)[0]?.avgResponseTime?.toFixed(1) || 0}h avg
-                            </p>
-                          </div>
-                        </div>
-                        <div className="flex items-start space-x-3">
-                          <div className="flex-shrink-0">
-                            <div className="w-8 h-8 bg-yellow-100 rounded-full flex items-center justify-center">
-                              <FontAwesomeIcon icon={faExclamationCircle} className="text-yellow-600 text-sm" />
-                            </div>
-                          </div>
-                          <div>
-                            <p className="text-sm font-medium text-gray-900">Needs Support</p>
-                            <p className="text-xs text-gray-600 mt-1">
-                              {officerStats.list.filter(o => o.avgResponseTime > 48).length} officer(s) exceeding 48h response time
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
                 </div>
               </>
             )}
@@ -3490,7 +3857,7 @@ function App() {
                         }
                       />
                       <span className="ml-2 text-sm text-gray-700">
-                        Charts & Visualizations
+                        Location Hotspots
                       </span>
                     </label>
                     <label className="flex items-center">

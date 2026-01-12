@@ -10,7 +10,7 @@ import { NotificationService } from "../utils/NotificationService";
  * @param {Function} onMessageDelivered - Callback when message is delivered
  * @param {Object} options - Additional options
  * @param {boolean} options.showNotifications - Whether to show toast notifications (default: true)
- * @param {string} options.senderName - Name of the sender to display in notification
+ * @param {string} options.reportDisplayId - Display ID of the report to show in notification
  */
 export const useChatUpdates = (
   {
@@ -19,21 +19,22 @@ export const useChatUpdates = (
     onNewMessage,
     onMessageDelivered,
   },
-  { showNotifications = true, senderName = "User" } = {}
+  { showNotifications = true, reportDisplayId = "" } = {}
 ) => {
   const handleNewMessage = useCallback(
     (payload) => {
       // Show notification for new message
       if (showNotifications && payload.message && !payload.system) {
+        const displayName = reportDisplayId ? `Complaint #${reportDisplayId}` : "New message";
         NotificationService.showNewMessageNotification(
-          senderName,
+          displayName,
           payload.message
         );
       }
       
       if (onNewMessage) onNewMessage(payload);
     },
-    [onNewMessage, showNotifications, senderName]
+    [onNewMessage, showNotifications, reportDisplayId]
   );
 
   const handleMessageDelivered = useCallback(

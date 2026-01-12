@@ -590,20 +590,25 @@ const ComplaintManagement = () => {
 
       if (selectedDateRange !== "all") {
         const rawDate = complaint.createdAt;
-        const formattedDate = rawDate
-          ? new Date(rawDate).toISOString().slice(0, 10)
-          : "";
+        if (!rawDate) {
+          matchesDate = false;
+        } else {
+          const complaintDate = new Date(rawDate);
+          complaintDate.setHours(0, 0, 0, 0);
 
-        if (selectedDateRange === "custom" && customStartDate && customEndDate) {
-          matchesDate =
-            formattedDate >= customStartDate && formattedDate <= customEndDate;
-        } else if (dateRange.start && dateRange.end) {
-          const complaintDate = formattedDate;
-          const startDate = new Date(dateRange.start)
-            .toISOString()
-            .slice(0, 10);
-          const endDate = new Date(dateRange.end).toISOString().slice(0, 10);
-          matchesDate = complaintDate >= startDate && complaintDate <= endDate;
+          if (selectedDateRange === "custom" && customStartDate && customEndDate) {
+            const startDate = new Date(customStartDate);
+            startDate.setHours(0, 0, 0, 0);
+            const endDate = new Date(customEndDate);
+            endDate.setHours(23, 59, 59, 999);
+            matchesDate = complaintDate >= startDate && complaintDate <= endDate;
+          } else if (dateRange.start && dateRange.end) {
+            const startDate = new Date(dateRange.start);
+            startDate.setHours(0, 0, 0, 0);
+            const endDate = new Date(dateRange.end);
+            endDate.setHours(23, 59, 59, 999);
+            matchesDate = complaintDate >= startDate && complaintDate <= endDate;
+          }
         }
       }
 
@@ -916,7 +921,7 @@ const ComplaintManagement = () => {
                               setCustomEndDate(value);
                             }
                           }}
-                          max={customEndDate || undefined}
+                          max={customEndDate || new Date().toISOString().split('T')[0]}
                           placeholder="Start date"
                         />
                         <span className="self-center">to</span>
@@ -932,10 +937,27 @@ const ComplaintManagement = () => {
                             }
                           }}
                           min={customStartDate || undefined}
+                          max={new Date().toISOString().split('T')[0]}
                           placeholder="End date"
                         />
                       </div>
                     )}
+                    <div className="mt-3 pt-3 border-t border-gray-200 flex justify-start">
+                      <button
+                        onClick={() => {
+                          setActiveFilter("all");
+                          setSelectedCategory("all");
+                          setSelectedDateRange("all");
+                          setCustomStartDate("");
+                          setCustomEndDate("");
+                          setDateRange({ start: null, end: null });
+                          setSearchTerm("");
+                        }}
+                        className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
+                      >
+                        Reset Filters
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>

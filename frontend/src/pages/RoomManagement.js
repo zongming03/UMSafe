@@ -248,16 +248,21 @@ const RoomManagement = () => {
       const facultyId = userFacultyId; 
       const blockName = newRoom.building;
       const roomName = newRoom.roomName;
-      const latitude = parseFloat(newRoom.latitude);
-      const longitude = parseFloat(newRoom.longitude);
+      // Coordinates are optional; include only if provided and valid
+      const latitude = newRoom.latitude !== "" ? parseFloat(newRoom.latitude) : undefined;
+      const longitude = newRoom.longitude !== "" ? parseFloat(newRoom.longitude) : undefined;
 
-      if (!facultyId || !blockName || !roomName || isNaN(latitude) || isNaN(longitude)) {
-        setError("Please fill in all fields with valid values.");
+      if (!facultyId || !blockName || !roomName) {
+        setError("Block and Room name are required.");
         setIsLoading(false);
         return;
       }
 
-      const res = await addRoom({ facultyId, blockName, roomName, latitude, longitude });
+      const payload = { facultyId, blockName, roomName };
+      if (!isNaN(latitude)) payload.latitude = latitude;
+      if (!isNaN(longitude)) payload.longitude = longitude;
+
+      const res = await addRoom(payload);
 
       if (res && (res.status === 200 || res.status === 201)) {
         await fetchAndSetRooms();
