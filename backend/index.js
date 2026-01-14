@@ -13,6 +13,7 @@ import facultyCategoryRoutes from './routes/facultyCategoryRoutes.js';
 import analyticsRoutes from './routes/analyticsRoutes.js';
 import mobileRoutes from './routes/mobileRoutes.js';
 import uploadRoutes from './routes/uploadRoutes.js';
+import { authMiddleware } from './middleware/authMiddleware.js';
 import { initSocket } from './realtime/socket.js';
 import { registerPartnerProxy } from './routes/partnerProxy.js';
 
@@ -45,6 +46,9 @@ app.use('/admin/mobile', mobileRoutes);
 app.use('/admin/upload', uploadRoutes);
 
 // Partner API Proxy - handles /admin/reports and /admin/mobileAdmin
+// Apply auth middleware to proxy routes
+app.use('/admin/reports', authMiddleware);
+app.use('/admin/mobileAdmin', authMiddleware);
 const PARTNER_API_BASE_URL = (process.env.PARTNER_API_BASE_URL || '').trim();
 registerPartnerProxy(app, PARTNER_API_BASE_URL);
 

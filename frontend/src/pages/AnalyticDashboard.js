@@ -847,7 +847,7 @@ function App() {
     if (!Array.isArray(list) || list.length === 0) return [];
     const enriched = await Promise.all(
       list.map(async (c) => {
-        const id = c.id || c._id || c.reportId || c.displayId;
+        const id = c.id|| c.displayId;
         if (!id) return c;
         if (c.reportHistories || c.timelineHistory) return c;
 
@@ -2059,12 +2059,12 @@ function App() {
     
     // Process complaints and update officer stats
     (complaints || []).forEach((c) => {
-      const officerKey = c.assignedTo || c.adminId || c.assigned_to;
+      const officerKey = c.adminId;
       
       // Only process if officer is assigned (not Unassigned or null)
-      if (officerKey && officerKey !== "Unassigned") {
+      if (officerKey && officerKey !== "null") {
         if (!map[officerKey]) {
-          map[officerKey] = { name: c.adminName || c.assignedName || "Unknown", total: 0, resolved: 0, responseTimes: [], resolutionTimes: [], sats: [] };
+          map[officerKey] = { name: c.adminName || "Unknown", total: 0, resolved: 0, responseTimes: [], resolutionTimes: [], sats: [] };
         }
 
         map[officerKey].total += 1;
@@ -2073,6 +2073,7 @@ function App() {
 
         // Calculate Response Time and Resolution Time using reportHistories
         if (c.reportHistories && Array.isArray(c.reportHistories)) {
+          
           // Sort events by createdAt ascending to find most recent assignment before acknowledgment
           const sortedEvents = [...c.reportHistories].sort((a, b) => 
             Date.parse(a.createdAt) - Date.parse(b.createdAt)
@@ -2099,8 +2100,26 @@ function App() {
                 if (!isNaN(assignedTime) && acknowledgedTime > assignedTime) {
                   const responseHrs = (acknowledgedTime - assignedTime) / (1000 * 60 * 60);
                   map[officerKey].responseTimes.push(responseHrs);
+                } else {
+                  console.log('[Officer Stats][Response] Skipped due to invalid/ordered times', {
+                    officer: map[officerKey]?.name,
+                    assignedTime: assignedTime ? new Date(assignedTime).toISOString() : assignedTime,
+                    acknowledgedTime: acknowledgedEvent.createdAt,
+                    validAssignedTime: !isNaN(assignedTime),
+                    acknowledgedAfterAssigned: acknowledgedTime > assignedTime
+                  });
                 }
               }
+            }
+          } else {
+            const hasAssignments = sortedEvents.some(evt => evt.actionTitle === "Admin Assigned");
+            if (hasAssignments) {
+              console.log('[Officer Stats][Response] No "Report Acknowledged" event found', {
+                officer: map[officerKey]?.name,
+                reportId: c._id,
+                adminAssignedCount: sortedEvents.filter(evt => evt.actionTitle === 'Admin Assigned').length,
+                historySample: sortedEvents.slice(0, 3).map(evt => ({ actionTitle: evt.actionTitle, createdAt: evt.createdAt }))
+              });
             }
           }
 
@@ -2115,10 +2134,7 @@ function App() {
               return actionLower.includes("resolved") || 
                      actionLower.includes("closed") ||
                      evt.actionTitle === "Case Resolved" ||
-                     evt.actionTitle === "Case Closed" ||
-                     evt.actionTitle === "Status Updated to Resolved" ||
-                     evt.actionTitle === "Status Updated to Closed" ||
-                     evt.actionTitle === "Report Resolved";
+                     evt.actionTitle === "Case Closed";
             });
             
             
@@ -2140,6 +2156,13 @@ function App() {
                     const resolutionHrs = (resolvedTime - assignedTime) / (1000 * 60 * 60);
                     
                     map[officerKey].resolutionTimes.push(resolutionHrs);
+                    console.log(`[Resolution Time] ✓ Added for ${map[officerKey]?.name}:`, {
+                      reportId: c._id,
+                      hours: resolutionHrs.toFixed(2),
+                      from: mostRecentAssignment.createdAt,
+                      to: resolvedEvent.createdAt,
+                      totalResolutionTimesNow: map[officerKey].resolutionTimes.length
+                    });
                   } else {
                     console.log(`[Resolution Time] ✗ Invalid times:`, {
                       assignedTime: new Date(assignedTime).toISOString(),
@@ -2153,38 +2176,6 @@ function App() {
                 }
               } else {
                 console.log(`[Resolution Time] ✗ Invalid resolved time:`, resolvedEvent.createdAt);
-              }
-            }
-          }
-
-          // Calculate Resolution Time: from most recent "Admin Assigned" to "Case Resolved"
-          if (s === "resolved" || s === "closed") {
-            const resolvedEvent = sortedEvents.find(evt => {
-              if (!evt.actionTitle) return false;
-              const actionLower = evt.actionTitle.toLowerCase();
-              return actionLower.includes("resolved") || 
-                     actionLower.includes("closed") ||
-                     evt.actionTitle === "Case Resolved" ||
-                     evt.actionTitle === "Case Closed";
-            });
-            
-            if (resolvedEvent) {
-              const resolvedTime = Date.parse(resolvedEvent.createdAt);
-              if (!isNaN(resolvedTime)) {
-                // Find the most recent "Admin Assigned" event before the resolved event
-                const assignedEvents = sortedEvents.filter(evt => 
-                  evt.actionTitle === "Admin Assigned" && 
-                  Date.parse(evt.createdAt) < resolvedTime
-                );
-                const mostRecentAssignment = assignedEvents[assignedEvents.length - 1];
-                
-                if (mostRecentAssignment) {
-                  const assignedTime = Date.parse(mostRecentAssignment.createdAt);
-                  if (!isNaN(assignedTime) && resolvedTime > assignedTime) {
-                    const resolutionHrs = (resolvedTime - assignedTime) / (1000 * 60 * 60);
-                    map[officerKey].resolutionTimes.push(resolutionHrs);
-                  }
-                }
               }
             }
           }
@@ -2205,11 +2196,32 @@ function App() {
     // Create list from all officers seen in options or complaints (including those with 0 cases)
     const list = Object.entries(map).map(([id, item]) => {
       const resolutionRate = item.total > 0 ? Math.round((item.resolved / item.total) * 1000) / 10 : 0;
-      const avgResponseTime = item.responseTimes.length ? Math.round((item.responseTimes.reduce((a, b) => a + b, 0) / item.responseTimes.length) * 10) / 10 : 0;
+      const avgResponseTime = item.responseTimes.length ? Math.round((item.responseTimes.reduce((a, b) => a + b, 0) / item.responseTimes.length) * 100) / 100 : 0;
       const resolutionTimeSum = item.resolutionTimes.reduce((a, b) => a + b, 0);
-      const avgResolutionTime = item.resolutionTimes.length ? Math.round((resolutionTimeSum / item.resolutionTimes.length) * 10) / 10 : 0;
+      const avgResolutionTime = item.resolutionTimes.length ? Math.round((resolutionTimeSum / item.resolutionTimes.length) * 100) / 100 : 0;
       const avgSat = item.sats.length ? Math.round((item.sats.reduce((a, b) => a + b, 0) / item.sats.length) * 10) / 10 : null;
       
+      if (item.total > 0 && item.responseTimes.length === 0) {
+        console.log(`[Officer Stats][Response] No response times`, {
+          officer: item.name,
+          totalCases: item.total,
+          acknowledgedEventsSeen: map[id]?.responseTimes?.length || 0,
+          hasReportHistories: map[id] ? 'unknown in this scope' : 'unknown'
+        });
+      }
+
+      if (item.responseTimes.length > 0) {
+        const sumResponse = item.responseTimes.reduce((a, b) => a + b, 0);
+        const rawAvg = sumResponse / item.responseTimes.length;
+        console.log(`[Officer Stats][Response] ${item.name}:`, {
+          responseTimesCount: item.responseTimes.length,
+          responseTimesHours: item.responseTimes.map(t => t.toFixed(2)),
+          sumHours: sumResponse.toFixed(4),
+          rawAverage: rawAvg.toFixed(4),
+          avgResponseTime
+        });
+      }
+
       if (item.resolutionTimes.length > 0) {
         console.log(`[Officer Stats] ${item.name}:`, {
           total: item.total,
@@ -2251,6 +2263,7 @@ function App() {
       officersWithCases: officersWithCases.length,
       totalCases: totals.total,
       resolvedCases: totals.resolved,
+      responseTimeSum: totals.responseTimeSum.toFixed(2),
       resolutionTimeSum: totals.resolutionTimeSum.toFixed(2),
       avgResolutionTime: totals.total ? (totals.resolutionTimeSum / totals.total).toFixed(2) : 0
     });
@@ -2259,7 +2272,7 @@ function App() {
       total: totals.total && officersWithCases.length ? Math.round((totals.total / officersWithCases.length) * 10) / 10 : 0,
       resolved: Math.round(totals.resolved),
       resolutionRate: totals.total ? Math.round((totals.resolved / totals.total) * 1000) / 10 : 0,
-      avgResponseTime: totals.total ? Math.round((totals.responseTimeSum / totals.total) * 10) / 10 : 0,
+      avgResponseTime: totals.total ? Math.round((totals.responseTimeSum / totals.total) * 100) / 100 : 0,
       avgResolutionTime: totals.total ? Math.round((totals.resolutionTimeSum / totals.total) * 100) / 100 : 0,
       avgSat: totals.total ? Math.round((totals.satSum / totals.total) * 10) / 10 : null,
     };

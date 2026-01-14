@@ -748,7 +748,7 @@ const Dashboard = () => {
       }
       // Show as absolute increase with indicator
       return {
-        percent: delta > 0 ? 999 : -999, 
+        percent: delta > 0 ? 999 : -999, // Use high number to indicate significant change
         label: delta > 0 ? `+${delta}` : `${delta}`,
         delta,
       };
@@ -756,7 +756,7 @@ const Dashboard = () => {
     
     // Calculate real percentage (not capped at 100%)
     const rawPct = (delta / previous) * 100;
-    const pct = Math.round(rawPct * 10) / 10; 
+    const pct = Math.round(rawPct * 10) / 10; // one decimal
     const sign = pct > 0 ? "+" : "";
     
     return {

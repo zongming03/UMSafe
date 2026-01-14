@@ -86,12 +86,20 @@ const fetchReportDetailsIfNeeded = async (partnerBaseUrl, reportId, existing) =>
   // Always fetch full report with user details for email notifications
   if (!reportId) return existing;
   
-  
   try {
     const res = await axios.get(`${partnerBaseUrl.replace(/\/$/, '')}/reports/${reportId}`, {
       headers: { 'ngrok-skip-browser-warning': 'true' },
     });
     const fullReport = res.data?.report || res.data;
+    console.log('\n[FETCH REPORT DETAILS]');
+    console.log('  - Report ID:', reportId);
+    console.log('  - API Response status:', res.status);
+    console.log('  - Full response structure:', JSON.stringify(Object.keys(res.data), null, 2));
+    console.log('  - Has user object:', !!fullReport?.user);
+    if (fullReport?.user) {
+      console.log('  - User email:', fullReport.user.email);
+      console.log('  - User ID:', fullReport.user.id || fullReport.user._id);
+    }
     console.log('✅ Fetched report with user data:', JSON.stringify({
       reportId: fullReport?.id || fullReport?.displayId,
       hasUser: !!fullReport?.user,
@@ -100,14 +108,31 @@ const fetchReportDetailsIfNeeded = async (partnerBaseUrl, reportId, existing) =>
     }, null, 2));
     return fullReport;
   } catch (e) {
-    console.warn('⚠️ Could not fetch report details for email notification:', e.message);
+    console.warn('❌ [FETCH REPORT DETAILS] Could not fetch report details for email notification:', e.message);
+    console.warn('   Stack:', e.stack);
     return existing;
   }
 };
 
 const sendEmailIfAny = async (sendEmail, to, subject, html) => {
-  if (!to?.length) return;
-  await sendEmail({ to: to.join(','), subject, html });
+  console.log('\n[SEND EMAIL]');
+  console.log('  - Recipients:', to);
+  console.log('  - Subject:', subject);
+  console.log('  - HTML length:', html?.length || 0, 'chars');
+  
+  if (!to?.length) {
+    console.warn('⚠️ [SEND EMAIL] No recipients provided - skipping email');
+    return;
+  }
+  
+  try {
+    console.log('[SEND EMAIL] Calling sendEmail utility with recipients:', to.join(', '));
+    await sendEmail({ to: to.join(','), subject, html });
+    console.log('✅ [SEND EMAIL] Successfully sent email to:', to.join(', '));
+  } catch (error) {
+    console.error('❌ [SEND EMAIL] Error sending email:', error.message);
+    console.error('   Stack:', error.stack);
+  }
 };
 
 const buildTargetUrl = (baseUrl, originalUrl) => {
@@ -173,91 +198,102 @@ const studentChatroomEmail = (reportId, reportData) => ({
   html: `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Chatroom Created</title></head><body style="margin:0; padding:0; font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color:#f5f5f5;"><table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f5f5f5; padding:20px;"><tr><td align="center"><table width="600" cellpadding="0" cellspacing="0" style="background-color:#ffffff; border-radius:8px; box-shadow:0 2px 8px rgba(0,0,0,0.1);"><tr><td style="background:linear-gradient(135deg, #3B82F6 0%, #1E40AF 100%); padding:30px; border-radius:8px 8px 0 0;"><h1 style="margin:0; color:#ffffff; font-size:24px; font-weight:600;">💬 Chatroom Initiated</h1></td></tr><tr><td style="padding:40px 30px;"><p style="margin:0 0 20px 0; color:#4B5563; font-size:16px; line-height:1.6;">A chatroom has been created so you can communicate directly with the officer regarding your report.</p><div style="background-color:#F3F4F6; border-left:4px solid #3B82F6; padding:20px; margin:25px 0; border-radius:4px;"><table width="100%" cellpadding="8" cellspacing="0"><tr><td style="color:#6B7280; font-size:14px; width:140px;">Report ID:</td><td style="color:#1F2937; font-size:14px; font-weight:600;">${reportData?.displayId || reportId}</td></tr><tr><td style="color:#6B7280; font-size:14px;">Title:</td><td style="color:#1F2937; font-size:14px; font-weight:500;">${reportData?.title || 'N/A'}</td></tr><tr><td style="color:#6B7280; font-size:14px;">Action:</td><td><span style="background-color:#3B82F6; color:#ffffff; padding:4px 12px; border-radius:12px; font-size:12px; font-weight:600;">Chatroom Created</span></td></tr></table></div><p style="margin:25px 0 0 0; color:#6B7280; font-size:14px; line-height:1.6;">Please log in to the UMSafe system to access the chatroom.</p></td></tr><tr><td style="background-color:#F9FAFB; padding:20px 30px; border-radius:0 0 8px 8px; border-top:1px solid #E5E7EB;"><p style="margin:0; color:#9CA3AF; font-size:12px; text-align:center;">© ${new Date().getFullYear()} UMSafe - University Maintenance & Safety System</p></td></tr></table></td></tr></table></body></html>`,
 });
 
-const gatherRecipients = async (User, adminId, facultyId = null) => {
-  console.log('🔍 gatherRecipients called with facultyId:', facultyId);
-  // Strict: if facultyId is missing, avoid cross-faculty emails by skipping staff recipients
-  if (!facultyId) {
-    console.warn('⚠️ Missing facultyId — skipping staff notifications to prevent cross-faculty emails');
-    return { superAdminEmails: [], adminEmails: [], officerEmails: [], assignedOfficerEmail: null };
+const gatherRecipients = async (User, adminId, currentUserFacultyId = null) => {
+  console.log('\n[GATHER RECIPIENTS] Called with:');
+  console.log('  - currentUserFacultyId:', currentUserFacultyId);
+  console.log('  - adminId:', adminId);
+  
+  // Strict: if currentUserFacultyId is missing, skip staff notifications
+  if (!currentUserFacultyId) {
+    console.warn('❌ [GATHER RECIPIENTS] Missing currentUserFacultyId — skipping staff notifications');
+    return { superAdminEmails: [], adminEmails: [], assignedOfficerEmail: null };
   }
   
-  // Build query to filter by faculty if provided
-  const superAdminQuery = { role: 'superadmin', 'notifications.emailNotifications': { $ne: false } };
-  const adminQuery = { role: 'admin', 'notifications.emailNotifications': { $ne: false } };
-  const officerQuery = { role: 'officer', 'notifications.emailNotifications': { $ne: false } };
-  
-  // Add faculty filter if facultyId is provided
-  if (facultyId) {
-    console.log('✅ Applying faculty filter:', facultyId);
-    superAdminQuery.facultyid = facultyId;
-    adminQuery.facultyid = facultyId;
-    officerQuery.facultyid = facultyId;
-  }
-  
-  console.log('📊 Queries:', {
-    superAdminQuery,
-    adminQuery,
-    officerQuery
-  });
-  
-  // Get all superadmins, admins, and officers with email notifications enabled
-  const superAdmins = await User.find(superAdminQuery);
-  const admins = await User.find(adminQuery);
-  const officers = await User.find(officerQuery);
-  
-  console.log('📧 Found recipients:', {
-    superAdmins: superAdmins.length,
-    admins: admins.length,
-    officers: officers.length,
-    superAdminFaculties: superAdmins.map(u => ({ email: u.email, facultyid: u.facultyid })),
-    adminFaculties: admins.map(u => ({ email: u.email, facultyid: u.facultyid })),
-    officerFaculties: officers.map(u => ({ email: u.email, facultyid: u.facultyid }))
-  });
-  
-  const superAdminEmails = superAdmins.map((admin) => admin.email).filter(Boolean);
-  const adminEmails = admins.map((admin) => admin.email).filter(Boolean);
-  const officerEmails = officers.map((officer) => officer.email).filter(Boolean);
-  
-  let assignedOfficerEmail = null;
-  if (adminId) {
-    const officer = await User.findById(adminId);
-    if (officer) {
-      const hasEmailNotif = officer.notifications?.emailNotifications !== false;
-      const sameFaculty = facultyId ? String(officer.facultyid) === String(facultyId) : false;
-      console.log('👮 Assigned officer check:', {
-        officerEmail: officer.email,
-        officerFacultyId: officer.facultyid,
-        targetFacultyId: facultyId || 'N/A',
-        hasEmailNotif,
-        sameFaculty
-      });
-      if (hasEmailNotif && sameFaculty) {
-        assignedOfficerEmail = officer.email || null;
-      } else {
-        console.warn('🚫 Excluding assigned officer from recipients due to', {
-          reason: !hasEmailNotif ? 'notifications disabled' : 'faculty mismatch or missing facultyId'
+  try {
+    // Fetch all users from the current admin/officer's faculty via API
+    const apiUrl = `${process.env.HOSTNAME || 'http://localhost:5000'}/admin/mobile/users/faculty/${currentUserFacultyId}`;
+    console.log('\n[GATHER RECIPIENTS] Fetching users from API:', apiUrl);
+    
+    const response = await axios.get(apiUrl, {
+      headers: { 'ngrok-skip-browser-warning': 'true' },
+      validateStatus: () => true,
+    });
+    
+    console.log('[GATHER RECIPIENTS] API Response Status:', response.status);
+    
+    if (response.status !== 200 || !response.data?.data) {
+      console.warn('❌ [GATHER RECIPIENTS] Failed to fetch faculty users from API');
+      console.warn('  - Status:', response.status);
+      console.warn('  - Response data:', response.data);
+      return { superAdminEmails: [], adminEmails: [], assignedOfficerEmail: null };
+    }
+    
+    const facultyUsers = response.data.data;
+    console.log(`✅ [GATHER RECIPIENTS] Fetched ${facultyUsers.length} users from faculty ${currentUserFacultyId}`);
+    console.log('[GATHER RECIPIENTS] User list:', facultyUsers.map(u => ({ 
+      email: u.email, 
+      role: u.role,
+      id: u._id 
+    })));
+    
+    // Filter for super admins and admins only (exclude officers from general notification)
+    const superAdmins = facultyUsers.filter(u => u.role === 'superadmin');
+    const admins = facultyUsers.filter(u => u.role === 'admin');
+    
+    console.log('[GATHER RECIPIENTS] Filtered results:');
+    console.log('  - Super admins found:', superAdmins.length, '—', superAdmins.map(u => u.email));
+    console.log('  - Admins found:', admins.length, '—', admins.map(u => u.email));
+    
+    const superAdminEmails = superAdmins.map(u => u.email).filter(Boolean);
+    const adminEmails = admins.map(u => u.email).filter(Boolean);
+    
+    // Get assigned officer email separately (if adminId provided)
+    let assignedOfficerEmail = null;
+    if (adminId) {
+      console.log('\n[GATHER RECIPIENTS] Looking up assigned officer with ID:', adminId);
+      const officer = await User.findById(adminId);
+      if (officer) {
+        const hasEmailNotif = officer.notifications?.emailNotifications !== false;
+        console.log('[GATHER RECIPIENTS] Assigned officer found:', {
+          officerEmail: officer.email,
+          officerRole: officer.role,
+          hasEmailNotif
         });
+        if (hasEmailNotif) {
+          assignedOfficerEmail = officer.email || null;
+          console.log('✅ [GATHER RECIPIENTS] Assigned officer included:', assignedOfficerEmail);
+        } else {
+          console.warn('⚠️ [GATHER RECIPIENTS] Assigned officer excluded - notifications disabled');
+        }
+      } else {
+        console.warn('❌ [GATHER RECIPIENTS] Assigned officer not found in database with ID:', adminId);
       }
     }
+    
+    console.log('\n[GATHER RECIPIENTS] Final recipients:');
+    console.log('  - Super admin emails:', superAdminEmails);
+    console.log('  - Admin emails:', adminEmails);
+    console.log('  - Assigned officer email:', assignedOfficerEmail || 'NONE');
+    
+    return { superAdminEmails, adminEmails, assignedOfficerEmail };
+  } catch (error) {
+    console.error('❌ [GATHER RECIPIENTS] Error:', error.message);
+    console.error('   Stack:', error.stack);
+    return { superAdminEmails: [], adminEmails: [], assignedOfficerEmail: null };
   }
-  
-  console.log('✅ Returning emails:', {
-    superAdminEmails,
-    adminEmails,
-    officerEmails,
-    assignedOfficerEmail
-  });
-  
-  return { superAdminEmails, adminEmails, officerEmails, assignedOfficerEmail };
 };
 
-const sendNotificationEmailsAndEvents = async ({ req, r, reportId, reportData }) => {
+const sendNotificationEmailsAndEvents = async ({ req, r, reportId, reportData, partnerApiBaseUrl }) => {
   const { default: sendEmail } = await import('../utils/sendEmail.js');
   const { default: User } = await import('../models/User.js');
 
+  console.log('\n' + '='.repeat(80));
+  console.log(`📧 STARTING EMAIL NOTIFICATION FLOW for Report: ${reportId}`);
+  console.log('='.repeat(80));
+
   // Get student/submitter email from report data
-  const getStudentEmail = () => {
-    console.log('🔍 Attempting to extract student email from report data...');
+  const getStudentEmail = async () => {
+    console.log('\n🔍 [STUDENT EMAIL] Attempting to extract student email from report data...');
     console.log('📊 Report data structure:', JSON.stringify({
       hasUser: !!reportData?.user,
       userEmail: reportData?.user?.email || 'N/A',
@@ -267,112 +303,179 @@ const sendNotificationEmailsAndEvents = async ({ req, r, reportId, reportData })
     
     // First try to get from user object (partner API response includes user data)
     if (reportData?.user?.email) {
-      console.log('✅ Student email found in reportData.user.email:', reportData.user.email);
+      console.log('✅ [STUDENT EMAIL] Found in reportData.user.email:', reportData.user.email);
       return reportData.user.email;
     }
     // Fallback to direct email field if present
     if (reportData?.email) {
-      console.log('✅ Student email found in reportData.email:', reportData.email);
+      console.log('✅ [STUDENT EMAIL] Found in reportData.email:', reportData.email);
       return reportData.email;
     }
-    console.warn('❌ Student email NOT found in report data');
+    
+    // If not found, fetch the full report to get user details
+    console.log('🔄 [STUDENT EMAIL] Not found in reportData, fetching full report from partner API...');
+    try {
+      const fetchUrl = `${partnerApiBaseUrl}/reports/${reportId}`;
+      console.log('🔗 [STUDENT EMAIL] Fetching from:', fetchUrl);
+      const response = await axios.get(fetchUrl, {
+        headers: { 
+          'Authorization': req.headers.authorization || '',
+          'ngrok-skip-browser-warning': 'true'
+        },
+        validateStatus: () => true,
+      });
+      
+      if (response.status === 200 && response.data?.report) {
+        const fullReport = response.data.report;
+        console.log('📊 [STUDENT EMAIL] Full report fetched:', JSON.stringify({
+          hasUser: !!fullReport?.user,
+          userEmail: fullReport?.user?.email || 'N/A',
+          directEmail: fullReport?.email || 'N/A'
+        }, null, 2));
+        
+        if (fullReport?.user?.email) {
+          console.log('✅ [STUDENT EMAIL] Found in full report user.email:', fullReport.user.email);
+          return fullReport.user.email;
+        }
+        if (fullReport?.email) {
+          console.log('✅ [STUDENT EMAIL] Found in full report email:', fullReport.email);
+          return fullReport.email;
+        }
+      } else {
+        console.warn('⚠️ [STUDENT EMAIL] Failed to fetch full report, status:', response.status);
+      }
+    } catch (error) {
+      console.error('❌ [STUDENT EMAIL] Error fetching full report:', error.message);
+    }
+    
+    console.warn('❌ [STUDENT EMAIL] NOT found in report data or full report');
     return null;
   };
   
-  // Get faculty ID from report data
-  const getFacultyId = () => {
-    console.log('🔍 Attempting to extract faculty ID from report data...');
-    console.log('📊 Faculty data:', {
-      userFacultyId: reportData?.user?.facultyId || 'N/A',
-      directFacultyId: reportData?.facultyId || 'N/A'
-    });
+  // Get current user's (admin/officer performing action) faculty ID from req.user
+  const getCurrentUserFacultyId = () => {
+    console.log('\n🔍 [CURRENT USER] Attempting to extract current user faculty ID from req.user...');
+    console.log('📊 [CURRENT USER] Request user data:', JSON.stringify({
+      hasUser: !!req.user,
+      userId: req.user?.id || req.user?._id || 'N/A',
+      userFacultyId: req.user?.facultyid || req.user?.facultyId || 'N/A',
+      userRole: req.user?.role || 'N/A'
+    }, null, 2));
     
-    // Try user.facultyId first (partner API response)
-    if (reportData?.user?.facultyId) {
-      console.log('✅ Faculty ID found in reportData.user.facultyId:', reportData.user.facultyId);
-      return reportData.user.facultyId;
+    // Try facultyid first (MongoDB field)
+    if (req.user?.facultyid) {
+      console.log('✅ [CURRENT USER] Faculty ID found in req.user.facultyid:', req.user.facultyid);
+      return req.user.facultyid;
     }
-    // Fallback to direct facultyId field
-    if (reportData?.facultyId) {
-      console.log('✅ Faculty ID found in reportData.facultyId:', reportData.facultyId);
-      return reportData.facultyId;
+    // Fallback to facultyId field
+    if (req.user?.facultyId) {
+      console.log('✅ [CURRENT USER] Faculty ID found in req.user.facultyId:', req.user.facultyId);
+      return req.user.facultyId;
     }
-    console.warn('❌ Faculty ID NOT found in report data');
+    console.warn('❌ [CURRENT USER] Faculty ID NOT found in req.user');
     return null;
   };
 
   // Assignment
   if (req.originalUrl.includes('/assign-admin') && r.status === 200) {
-    const facultyId = getFacultyId();
-    const { superAdminEmails, adminEmails, officerEmails, assignedOfficerEmail } = await gatherRecipients(User, req.body.adminId, facultyId);
-    const recipientEmails = [...new Set([...superAdminEmails, ...adminEmails, ...officerEmails, assignedOfficerEmail].filter(Boolean))];
+    console.log('\n' + '─'.repeat(80));
+    console.log('📋 [ASSIGNMENT] Processing assign-admin endpoint');
+    console.log('─'.repeat(80));
+    
+    const currentUserFacultyId = getCurrentUserFacultyId();
+    console.log('\n[ASSIGNMENT] Current user faculty ID:', currentUserFacultyId || 'MISSING ❌');
+    console.log('[ASSIGNMENT] Assigned admin ID from request:', req.body?.adminId || 'NOT PROVIDED');
+    console.log('[ASSIGNMENT] Assigned admin name from request:', req.body?.adminName || 'NOT PROVIDED');
+    
+    const { superAdminEmails, adminEmails, assignedOfficerEmail } = await gatherRecipients(User, req.body.adminId, currentUserFacultyId);
+    console.log('\n[ASSIGNMENT] Recipients gathered:', {
+      superAdminEmails: superAdminEmails || [],
+      adminEmails: adminEmails || [],
+      assignedOfficerEmail: assignedOfficerEmail || 'NONE'
+    });
+    
+    const recipientEmails = [...new Set([...superAdminEmails, ...adminEmails, assignedOfficerEmail].filter(Boolean))];
+    console.log('[ASSIGNMENT] Final recipient email list (deduplicated):', recipientEmails);
     
     // Send email to staff
     const email = assignmentEmail(reportId, reportData, req.body.adminName || 'Officer');
+    console.log('\n[ASSIGNMENT] Sending staff email with subject:', email.subject);
     await sendEmailIfAny(sendEmail, recipientEmails, email.subject, email.html);
-    console.log(`📧 Assignment notification sent to: ${recipientEmails.length} recipients (superadmins, admins, officers in faculty ${facultyId || 'N/A'})`);
+    console.log(`✅ [ASSIGNMENT] Staff notification sent to: ${recipientEmails.length} recipients`);
     
-    // Send email to student (extract from partner API user.email)
-    const studentEmail = getStudentEmail();
-    console.log('📬 Student email extracted for ASSIGN:', studentEmail || 'NOT FOUND');
-    if (studentEmail) {
-      const sEmail = studentAssignmentEmail(reportId, reportData, req.body.adminName || 'Officer');
-      await sendEmailIfAny(sendEmail, [studentEmail], sEmail.subject, sEmail.html);
-      console.log(`📧 Assignment notification sent to student: ${studentEmail}`);
+    // Send email to student (extract from partner API user.email) - skip if anonymous
+    if (reportData?.isAnonymous) {
+      console.log('\n[ASSIGNMENT] Report is anonymous - skipping student notification');
     } else {
-      console.warn('⚠️ Student email not found in report data for assignment notification');
+      const studentEmail = await getStudentEmail();
+      console.log('\n[ASSIGNMENT] Student email extracted:', studentEmail || 'NOT FOUND ❌');
+      if (studentEmail) {
+        const sEmail = studentAssignmentEmail(reportId, reportData, req.body.adminName || 'Officer');
+        console.log('[ASSIGNMENT] Sending student email with subject:', sEmail.subject);
+        await sendEmailIfAny(sendEmail, [studentEmail], sEmail.subject, sEmail.html);
+        console.log(`✅ [ASSIGNMENT] Student notification sent to: ${studentEmail}`);
+      } else {
+        console.warn('⚠️ [ASSIGNMENT] Student email not found - skipping student notification');
+      }
     }
     
-    emitEvent('complaint:assignment', { complaintId: reportId, displayId: reportId, adminId: req.body.adminId, adminName: req.body.adminName || 'Officer', status: reportData?.status });
-    if (reportData?.status) emitEvent('complaint:status', { complaintId: reportId, displayId: reportId, status: reportData.status });
+    console.log('\n' + '─'.repeat(80));
+    emitEvent('complaint:assignment', { complaintId: reportId, displayId: reportData?.displayId || reportId, adminId: req.body.adminId, adminName: req.body.adminName || 'Officer', status: reportData?.status });
+    if (reportData?.status) emitEvent('complaint:status', { complaintId: reportId, displayId: reportData?.displayId || reportId, status: reportData.status });
     return;
   }
 
   // Revoke
   if (req.originalUrl.includes('/revoke-admin') && (r.status === 200 || r.status === 422)) {
-    const facultyId = getFacultyId();
-    const { superAdminEmails, adminEmails, officerEmails, assignedOfficerEmail } = await gatherRecipients(User, reportData?.adminId, facultyId);
-    const recipientEmails = [...new Set([...superAdminEmails, ...adminEmails, ...officerEmails, assignedOfficerEmail].filter(Boolean))];
+    const currentUserFacultyId = getCurrentUserFacultyId();
+    const { superAdminEmails, adminEmails, assignedOfficerEmail } = await gatherRecipients(User, reportData?.adminId, currentUserFacultyId);
+    const recipientEmails = [...new Set([...superAdminEmails, ...adminEmails, assignedOfficerEmail].filter(Boolean))];
     
     // Send email to staff
     const email = revokeEmail(reportId, reportData);
     await sendEmailIfAny(sendEmail, recipientEmails, email.subject, email.html);
-    console.log(`📧 Revoke notification sent to: ${recipientEmails.length} recipients (superadmins, admins, officers in faculty ${facultyId || 'N/A'})`);
+    console.log(`📧 Revoke notification sent to: ${recipientEmails.length} recipients (superadmins, admins, assigned officer in faculty ${currentUserFacultyId || 'N/A'})`);
     
-    // Send email to student (extract from partner API user.email)
-    const studentEmail = getStudentEmail();
-    console.log('📬 Student email extracted for REVOKE:', studentEmail || 'NOT FOUND');
-    if (studentEmail) {
-      const sEmail = studentRevokeEmail(reportId, reportData);
-      await sendEmailIfAny(sendEmail, [studentEmail], sEmail.subject, sEmail.html);
-      console.log(`📧 Revoke notification sent to student: ${studentEmail}`);
+    // Send email to student (extract from partner API user.email) - skip if anonymous
+    if (reportData?.isAnonymous) {
+      console.log('📬 Report is anonymous - skipping student revoke notification');
     } else {
-      console.warn('⚠️ Student email not found in report data for revoke notification');
+      const studentEmail = await getStudentEmail();
+      console.log('📬 Student email extracted for REVOKE:', studentEmail || 'NOT FOUND');
+      if (studentEmail) {
+        const sEmail = studentRevokeEmail(reportId, reportData);
+        await sendEmailIfAny(sendEmail, [studentEmail], sEmail.subject, sEmail.html);
+        console.log(`📧 Revoke notification sent to student: ${studentEmail}`);
+      } else {
+        console.warn('⚠️ Student email not found in report data for revoke notification');
+      }
     }
     
-    emitEvent('complaint:assignment', { complaintId: reportId, displayId: reportId, adminId: null, adminName: null, status: reportData?.status });
-    if (reportData?.status) emitEvent('complaint:status', { complaintId: reportId, displayId: reportId, status: reportData.status });
+    emitEvent('complaint:assignment', { complaintId: reportId, displayId: reportData?.displayId || reportId, adminId: null, adminName: null, status: reportData?.status });
+    if (reportData?.status) emitEvent('complaint:status', { complaintId: reportId, displayId: reportData?.displayId || reportId, status: reportData.status });
     return;
   }
 
   // Resolve
   if (req.originalUrl.includes('/resolve') && r.status === 200) {
     console.log('📧 Starting RESOLVE notification process...');
-    const facultyId = getFacultyId();
-    const { superAdminEmails, adminEmails, officerEmails, assignedOfficerEmail } = await gatherRecipients(User, reportData?.adminId, facultyId);
-    const recipientEmails = [...new Set([...superAdminEmails, ...adminEmails, ...officerEmails, assignedOfficerEmail].filter(Boolean))];
+    const currentUserFacultyId = getCurrentUserFacultyId();
+    const { superAdminEmails, adminEmails, assignedOfficerEmail } = await gatherRecipients(User, reportData?.adminId, currentUserFacultyId);
+    const recipientEmails = [...new Set([...superAdminEmails, ...adminEmails, assignedOfficerEmail].filter(Boolean))];
     
     // Get student email for resolved notification (from report data)
-    const studentEmail = getStudentEmail();
+    const studentEmail = await getStudentEmail();
     console.log('📬 Student email extracted for RESOLVE:', studentEmail || 'NOT FOUND');
     
-    // Send email to staff (admins, superadmins, officers)
+    // Send email to staff (admins, superadmins, assigned officer)
     const email = resolveEmail(reportId, reportData);
     await sendEmailIfAny(sendEmail, recipientEmails, email.subject, email.html);
-    console.log(`📧 Resolve notification sent to: ${recipientEmails.length} recipients (superadmins, admins, officers in faculty ${facultyId || 'N/A'})`);
+    console.log(`📧 Resolve notification sent to: ${recipientEmails.length} recipients (superadmins, admins, assigned officer in faculty ${currentUserFacultyId || 'N/A'})`);
     
-    // Send email to student
-    if (studentEmail) {
+    // Send email to student - skip if anonymous
+    if (reportData?.isAnonymous) {
+      console.log('📬 Report is anonymous - skipping student resolve notification');
+    } else if (studentEmail) {
       const studentEmail_obj = studentStatusUpdateEmail(reportId, reportData, 'Resolved');
       await sendEmailIfAny(sendEmail, [studentEmail], studentEmail_obj.subject, studentEmail_obj.html);
       console.log(`📧 Resolve notification sent to student: ${studentEmail} (from report data)`);
@@ -380,28 +483,30 @@ const sendNotificationEmailsAndEvents = async ({ req, r, reportId, reportData })
       console.warn('⚠️ Student email not found in report data for resolved notification');
     }
     
-    emitEvent('complaint:status', { complaintId: reportId, status: 'Resolved' });
+    emitEvent('complaint:status', { complaintId: reportId, displayId: reportData?.displayId || reportId, status: 'Resolved' });
     return;
   }
 
   // Close
   if (req.originalUrl.includes('/close') && r.status === 200) {
     console.log('📧 Starting CLOSE notification process...');
-    const facultyId = getFacultyId();
-    const { superAdminEmails, adminEmails, officerEmails, assignedOfficerEmail } = await gatherRecipients(User, reportData?.adminId, facultyId);
-    const recipientEmails = [...new Set([...superAdminEmails, ...adminEmails, ...officerEmails, assignedOfficerEmail].filter(Boolean))];
+    const currentUserFacultyId = getCurrentUserFacultyId();
+    const { superAdminEmails, adminEmails, assignedOfficerEmail } = await gatherRecipients(User, reportData?.adminId, currentUserFacultyId);
+    const recipientEmails = [...new Set([...superAdminEmails, ...adminEmails, assignedOfficerEmail].filter(Boolean))];
     
     // Get student email for closed notification (from report data)
-    const studentEmail = getStudentEmail();
+    const studentEmail = await getStudentEmail();
     console.log('📬 Student email extracted for CLOSE:', studentEmail || 'NOT FOUND');
     
-    // Send email to staff (admins, superadmins, officers)
+    // Send email to staff (admins, superadmins, assigned officer)
     const email = closeEmail(reportId, reportData);
     await sendEmailIfAny(sendEmail, recipientEmails, email.subject, email.html);
-    console.log(`📧 Close notification sent to: ${recipientEmails.length} recipients (superadmins, admins, officers in faculty ${facultyId || 'N/A'})`);
+    console.log(`📧 Close notification sent to: ${recipientEmails.length} recipients (superadmins, admins, assigned officer in faculty ${currentUserFacultyId || 'N/A'})`);
     
-    // Send email to student
-    if (studentEmail) {
+    // Send email to student - skip if anonymous
+    if (reportData?.isAnonymous) {
+      console.log('📬 Report is anonymous - skipping student close notification');
+    } else if (studentEmail) {
       const studentEmail_obj = studentStatusUpdateEmail(reportId, reportData, 'Closed');
       await sendEmailIfAny(sendEmail, [studentEmail], studentEmail_obj.subject, studentEmail_obj.html);
       console.log(`📧 Close notification sent to student: ${studentEmail} (from report data)`);
@@ -409,33 +514,37 @@ const sendNotificationEmailsAndEvents = async ({ req, r, reportId, reportData })
       console.warn('⚠️ Student email not found in report data for closed notification');
     }
     
-    emitEvent('complaint:status', { complaintId: reportId, status: 'Closed' });
+    emitEvent('complaint:status', { complaintId: reportId, displayId: reportData?.displayId || reportId, status: 'Closed' });
     return;
   }
 
   // Chatroom Creation
   if (req.originalUrl.includes('/chatrooms/initiate') && req.method === 'POST' && r.status === 200) {
-    const facultyId = getFacultyId();
-    const { superAdminEmails, adminEmails, officerEmails, assignedOfficerEmail } = await gatherRecipients(User, reportData?.adminId, facultyId);
-    const recipientEmails = [...new Set([...superAdminEmails, ...adminEmails, ...officerEmails, assignedOfficerEmail].filter(Boolean))];
+    const currentUserFacultyId = getCurrentUserFacultyId();
+    const { superAdminEmails, adminEmails, assignedOfficerEmail } = await gatherRecipients(User, reportData?.adminId, currentUserFacultyId);
+    const recipientEmails = [...new Set([...superAdminEmails, ...adminEmails, assignedOfficerEmail].filter(Boolean))];
     
     // Send email to staff
     const email = chatroomEmail(reportId, reportData);
     await sendEmailIfAny(sendEmail, recipientEmails, email.subject, email.html);
-    console.log(`📧 Chatroom creation notification sent to: ${recipientEmails.length} recipients (superadmins, admins, officers in faculty ${facultyId || 'N/A'})`);
+    console.log(`📧 Chatroom creation notification sent to: ${recipientEmails.length} recipients (superadmins, admins, assigned officer in faculty ${currentUserFacultyId || 'N/A'})`);
     
-    // Send email to student (extract from partner API user.email)
-    const studentEmail = getStudentEmail();
-    console.log('📬 Student email extracted for CHATROOM:', studentEmail || 'NOT FOUND');
-    if (studentEmail) {
-      const sEmail = studentChatroomEmail(reportId, reportData);
-      await sendEmailIfAny(sendEmail, [studentEmail], sEmail.subject, sEmail.html);
-      console.log(`📧 Chatroom notification sent to student: ${studentEmail}`);
+    // Send email to student (extract from partner API user.email) - skip if anonymous
+    if (reportData?.isAnonymous) {
+      console.log('📬 Report is anonymous - skipping student chatroom notification');
     } else {
-      console.warn('⚠️ Student email not found in report data for chatroom notification');
+      const studentEmail = await getStudentEmail();
+      console.log('📬 Student email extracted for CHATROOM:', studentEmail || 'NOT FOUND');
+      if (studentEmail) {
+        const sEmail = studentChatroomEmail(reportId, reportData);
+        await sendEmailIfAny(sendEmail, [studentEmail], sEmail.subject, sEmail.html);
+        console.log(`📧 Chatroom notification sent to student: ${studentEmail}`);
+      } else {
+        console.warn('⚠️ Student email not found in report data for chatroom notification');
+      }
     }
     
-    emitEvent('complaint:chatroom', { complaintId: reportId, chatroomId: r.data?.chatroom?.id });
+    emitEvent('complaint:chatroom', { complaintId: reportId, displayId: reportData?.displayId || reportId, chatroomId: r.data?.chatroom?.id });
   }
 };
 
@@ -639,7 +748,7 @@ export const registerPartnerProxy = (app, partnerApiBaseUrl) => {
           const reportId = reportIdMatch ? reportIdMatch[1] : null;
           let reportData = r.data?.report || r.data;
           reportData = await fetchReportDetailsIfNeeded(partnerApiBaseUrl, reportId, reportData);
-          await sendNotificationEmailsAndEvents({ req, r, reportId, reportData });
+          await sendNotificationEmailsAndEvents({ req, r, reportId, reportData, partnerApiBaseUrl });
         } catch (emailErr) {
           console.error('Failed to send email notification:', emailErr.message);
         }

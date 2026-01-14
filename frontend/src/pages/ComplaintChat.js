@@ -504,7 +504,7 @@ const ComplaintChat = () => {
       if (roomId) {
         // update URL so route param contains the new chatroomId and location.state carries updated complaint
         const updatedComplaint = { ...(complaint || {}), chatroomId: roomId };
-        navigate(`/complaints/${reportId}/${roomId}`, { state: updatedComplaint });
+        navigate(`/complaints/${reportId}/${roomId}`, { state: updatedComplaint, replace: true });
       }
     }
 

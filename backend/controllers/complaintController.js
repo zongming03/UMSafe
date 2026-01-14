@@ -486,10 +486,11 @@ const assignComplaint = async (req, res) => {
 
           // Send email notification to newly assigned admin if they have notifications enabled
           const assignedUser = await User.findById(adminId);
+          const reportDetails = await axios.get(`http://localhost:5000/admin/reports/${reportId}`);
 
           emitEvent('complaint:assignment', {
             complaintId: reportId,
-            displayId: reportId, // For partner reports, reportId is already the displayId (RPT-xxx)
+            displayId: reportDetails.data.report?.displayId || reportId, // For partner reports, reportId is already the displayId (RPT-xxx)
             adminId,
             adminName: assignedUser?.name || 'Assigned',
             updatedBy: req.user?.id,
@@ -499,7 +500,7 @@ const assignComplaint = async (req, res) => {
           if (adminId) {
             emitToUser(adminId, 'complaint:assignment', {
               complaintId: reportId,
-              displayId: reportId,
+              displayId: reportDetails.data.report?.displayId || reportId,
               adminId,
               adminName: assignedUser?.name || 'You',
             });
