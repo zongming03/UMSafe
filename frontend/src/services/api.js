@@ -69,12 +69,12 @@ export const bulkDeleteFacultyCategories = (facultyId, categoryIds) =>
   api.post(`/faculty-categories/${facultyId}/bulk-delete`, { categoryIds });
 
 // ==================== User Management APIs ====================
-export const addOfficer = (data) => api.post("/users", data);
-export const getAllOfficers = () => api.get("/users");
-export const updateOfficer = (id, data) => api.patch(`/users/${id}`, data);
-export const deleteOfficer = (id) => api.delete(`/users/${id}`);
+export const addOfficer = (data) => api.post("/user", data);
+export const getAllOfficers = () => api.get("/user");
+export const updateOfficer = (id, data) => api.patch(`/user/${id}`, data);
+export const deleteOfficer = (id) => api.delete(`/user/${id}`);
 export const bulkDeleteOfficers = (officers) =>
-  api.post("/users/bulk-delete", { officers });
+  api.post("/user/bulk-delete", { officers });
 
 // ==================== Profile Management APIs ====================
 export const getProfile = () => api.get("/profile");

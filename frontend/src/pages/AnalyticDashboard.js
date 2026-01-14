@@ -35,8 +35,7 @@ import { faStar as faStarRegular } from "@fortawesome/free-regular-svg-icons";
 import { faStar as faStarSolid } from "@fortawesome/free-solid-svg-icons";
 import LoadingOverlay from "../components/LoadingOverlay";
 import { generateAnalyticsPDF } from "../utils/analyticsPDFGenerator";
-
-
+import { getAllOfficers } from "../services/api";
 
 function App() {
   const { user } = useContext(AuthContext);
@@ -90,12 +89,6 @@ function App() {
     return { from: formatDate(from), to: formatDate(today) };
   };
 
-  
-  // ============================================================================
-  // MOCK DATA & CONFIGURATION
-  // ============================================================================
-  
-  // Force analytics to use local mock data (set to false to enable backend API)
   
 
   // ============================================================================
@@ -183,7 +176,7 @@ function App() {
   useEffect(() => {
     const loadOfficers = async () => {
       try {
-        const res = await api.get("/users");
+        const res = await getAllOfficers();
         const list = Array.isArray(res.data) ? res.data : [];
         const mapped = list
           .filter((u) => u && u._id && u.name && (u.role === "officer" || u.role === "admin" || u.role === "superadmin"))
@@ -1280,19 +1273,13 @@ function App() {
         // Response Time: Prefer assignment -> chat. If chat predates a later reassignment,
         // fall back to assignment -> first subsequent meaningful event (resolve/close/reassign/revoke).
         const chatEvt = sorted.find((evt) =>
-          evt.actionTitle === "Chat initiated" ||
-          evt.actionTitle === "Chatroom Initial" ||
-          evt.actionTitle === "Chatroom Created" ||
-          evt.actionTitle === "Chat Started"
-        );
+          evt.actionTitle === "Chat initiated");
         const isMeaningfulNextEvent = (evt) => {
           if (!evt || !evt.actionTitle) return false;
           const t = evt.actionTitle.toLowerCase();
           return (
             t.includes("case resolved") ||
             t.includes("case closed") ||
-            t.includes("status updated to resolved") ||
-            t.includes("status updated to closed") ||
             t.includes("admin assigned") ||
             t.includes("admin revoked")
           );
@@ -1343,9 +1330,7 @@ function App() {
         if (status === "resolved" || status === "closed") {
           const resolveEvt = sorted.find((evt) =>
             evt.actionTitle === "Case Resolved" ||
-            evt.actionTitle === "Case Closed" ||
-            evt.actionTitle === "Status Updated to Resolved" ||
-            evt.actionTitle === "Status Updated to Closed"
+            evt.actionTitle === "Case Closed" 
           );
           if (resolveEvt) {
             const resolveTs = Date.parse(resolveEvt.createdAt);
@@ -1696,104 +1681,6 @@ function App() {
     }
   }, [complaints, dateRange.from, dateRange.to, selectedCategory, selectedBlock, selectedRoom, selectedOfficer, selectedStatus, selectedPriority, officerOptions]);
 
-  // Dynamic growth metrics - Unique insights not shown elsewhere
-  const growthMetrics = useMemo(() => {
-    const base = complaints || [];
-    const now = dateRange?.to ? new Date(dateRange.to) : new Date();
-    const oneDay = 24 * 60 * 60 * 1000;
-    
-    const getComplaintsBetween = (start, end) => {
-      const sTs = start.getTime();
-      const eTs = end.getTime() + (oneDay - 1);
-      return base.filter((c) => {
-        const ts = c.createdAt ? Date.parse(c.createdAt) : Date.parse(c.created_at || 0);
-        return !isNaN(ts) && ts >= sTs && ts <= eTs;
-      });
-    };
-    
-    // Helper to calculate top category trend (most complained about category)
-    const getTopCategoryCount = (complaints) => {
-      const categoryMap = {};
-      complaints.forEach(c => {
-        const cat = c.category?.name || c.category_id?.name || c.category || 'Unknown';
-        categoryMap[cat] = (categoryMap[cat] || 0) + 1;
-      });
-      const sorted = Object.entries(categoryMap).sort((a, b) => b[1] - a[1]);
-      return sorted.length > 0 ? sorted[0][1] : 0;
-    };
-    
-    // Helper to calculate average priority score (for escalation trends)
-    const getAvgPriority = (complaints) => {
-      if (complaints.length === 0) return 0;
-      const priorityMap = { 'high': 3, 'medium': 2, 'low': 1 };
-      const total = complaints.reduce((sum, c) => {
-        const priority = c.priority?.toLowerCase() || c.category?.priority?.toLowerCase() || 'low';
-        return sum + (priorityMap[priority] || 1);
-      }, 0);
-      return (total / complaints.length);
-    };
-    
-    // Helper to calculate workload distribution (variance in officer assignments)
-    const getWorkloadVariance = (complaints) => {
-      if (complaints.length === 0) return 0;
-      const officerMap = {};
-      complaints.forEach(c => {
-        const officer = c.adminId || c.assignedTo || c.assigned_to || 'Unassigned';
-        if (officer && officer !== 'Unassigned') {
-          officerMap[officer] = (officerMap[officer] || 0) + 1;
-        }
-      });
-      if (Object.keys(officerMap).length === 0) return 0;
-      const cases = Object.values(officerMap);
-      const avg = cases.reduce((a, b) => a + b, 0) / cases.length;
-      const variance = cases.reduce((sum, val) => sum + Math.pow(val - avg, 2), 0) / cases.length;
-      return Math.sqrt(variance); // Standard deviation shows uneven workload
-    };
-    
-    // Helper to calculate recurring location issues (complaints from same room/block)
-    const getRecurringLocationCount = (complaints) => {
-      const locationMap = {};
-      complaints.forEach(c => {
-        const loc = `${c.facultyLocation?.block || 'Unknown'}-${c.facultyLocation?.room || 'Unknown'}`;
-        locationMap[loc] = (locationMap[loc] || 0) + 1;
-      });
-      // Count locations with 2+ complaints (recurring issues)
-      return Object.values(locationMap).filter(count => count >= 2).length;
-    };
-    
-    const build = (label, currentComplaints, previousComplaints, valueFunc) => {
-      const current = valueFunc(currentComplaints);
-      const previous = valueFunc(previousComplaints);
-      const change = current - previous;
-      
-      let direction = 'flat';
-      if (change > 0.5) {
-        direction = 'up';
-      } else if (change < -0.5) {
-        direction = 'down';
-      }
-      
-      let displayText = `${current.toFixed(1)}`;
-      
-      return { label, current, previous, change, displayText, direction };
-    };
-    
-    // Split data into current and previous periods
-    const endCurrent = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const startCurrent = new Date(endCurrent.getTime() - (30 - 1) * oneDay); // Last 30 days
-    const endPrev = new Date(startCurrent.getTime() - oneDay);
-    const startPrev = new Date(endPrev.getTime() - (30 - 1) * oneDay); // Previous 30 days
-    
-    const currentPeriod = getComplaintsBetween(startCurrent, endCurrent);
-    const previousPeriod = getComplaintsBetween(startPrev, endPrev);
-    
-    return [
-      build('Top Category Volume', currentPeriod, previousPeriod, getTopCategoryCount),
-      build('Priority Escalation (1-3)', currentPeriod, previousPeriod, getAvgPriority),
-      build('Workload Variance', currentPeriod, previousPeriod, getWorkloadVariance),
-      build('Recurring Location Issues', currentPeriod, previousPeriod, getRecurringLocationCount),
-    ];
-  }, [complaints, dateRange.to]);
 
   const feedbackComplaints = useMemo(() => {
     const withFeedback = (complaints || []).filter(
