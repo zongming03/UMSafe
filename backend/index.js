@@ -15,7 +15,7 @@ import mobileRoutes from './routes/mobileRoutes.js';
 import uploadRoutes from './routes/uploadRoutes.js';
 import { authMiddleware } from './middleware/authMiddleware.js';
 import { initSocket } from './realtime/socket.js';
-import { registerPartnerProxy } from './routes/partnerProxy.js';
+import { registerPartnerProxy } from './proxy/partnerProxy.js';
 
 dotenv.config();
 

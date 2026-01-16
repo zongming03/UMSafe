@@ -1835,76 +1835,76 @@ function App() {
     }
   }, [feedbackComplaints]);
 
-  const themeMetrics = useMemo(() => {
-    console.log('[Theme Analysis] Processing', feedbackComplaints.length, 'feedback complaints');
-    const texts = feedbackComplaints
-      .map(c => (c.feedback?.overallComment || '').trim())
-      .filter(t => t.length > 0);
-    console.log('[Theme Analysis] Comments to analyze:', texts.length);
-    if (!texts.length) {
-      console.log('[Theme Analysis] No comments found, returning empty metrics');
-      return { positive: [], improvement: [], recent: [], topPhrases: [] };
-    }
-    const stop = new Set(['the','and','a','to','of','in','is','it','for','on','at','with','this','that','was','are','be','an','as','by','or','we','i','you','they','but','from','have','has','had','were','not','more','less']);
-    const positiveKeywords = ['quick','fast','helpful','professional','clear','responsive','friendly','timely','efficient','resolved','resolution','transparent'];
-    const improvementKeywords = ['slow','delayed','unclear','confusing','late','no','lack','status','update','updates','response','detail','details','waiting','wait'];
-    const freq = {};
-    const nowTs = Date.now();
-    const recentWindowMs = 7 * 24 * 60 * 60 * 1000;
-    const recentSet = new Set();
-    texts.forEach((t, idx) => {
-      const cleaned = t.toLowerCase().replace(/[^a-z0-9\s]/g,' ');
-      const tokens = cleaned.split(/\s+/).filter(w => w && !stop.has(w));
-      // single word frequency
-      tokens.forEach(w => { freq[w] = (freq[w]||0)+1; });
-      // bi-grams for phrase context
-      for (let i=0;i<tokens.length-1;i++) {
-        const bi = tokens[i] + ' ' + tokens[i+1];
-        freq[bi] = (freq[bi]||0)+1;
-      }
-      // mark recent phrases if complaint updated recently
-      const comp = feedbackComplaints[idx];
-      const ts = Date.parse(comp.feedback?.updatedAt || comp.feedback?.createdAt || comp.updatedAt || comp.createdAt || 0);
-      if (!isNaN(ts) && (nowTs - ts) <= recentWindowMs) {
-        tokens.slice(0,5).forEach(w => recentSet.add(w));
-      }
-    });
-    const toArray = (keywords, label) => {
-      const out = [];
-      keywords.forEach(k => {
-        // consider both keyword and its common bigram forms
-        const candidates = Object.keys(freq).filter(fk => fk.includes(k));
-        let total = 0;
-        candidates.forEach(c => { total += freq[c]; });
-        if (total > 0) out.push({ theme: k, count: total });
-      });
-      out.sort((a,b)=> b.count - a.count);
-      return out.slice(0,6);
-    };
-    const positive = toArray(positiveKeywords,'positive');
-    const improvement = toArray(improvementKeywords,'improvement');
-    const recent = Array.from(recentSet).map(w => ({ theme: w, count: freq[w]||1 })).sort((a,b)=> b.count - a.count).slice(0,6);
-    // top phrases (bi-grams prioritized)
-    const topPhrases = Object.keys(freq)
-      .filter(k => k.includes(' '))
-      .map(k => ({ phrase: k, count: freq[k] }))
-      .sort((a,b)=> b.count - a.count)
-      .slice(0,5);
-    console.log('[Theme Analysis] Positive themes:', positive);
-    console.log('[Theme Analysis] Improvement themes:', improvement);
-    console.log('[Theme Analysis] Recent themes:', recent);
-    console.log('[Theme Analysis] Top phrases:', topPhrases);
-    // Normalize casing to Title Case for consistent presentation (keep numeric parts intact)
-    const titleCase = (s) => s.split(' ').map(part => part ? part.charAt(0).toUpperCase() + part.slice(1) : part).join(' ');
-    const normalizeThemes = (arr) => arr.map(obj => ({ ...obj, theme: titleCase(obj.theme) }));
-    const normalizePhrases = (arr) => arr.map(obj => ({ ...obj, phrase: titleCase(obj.phrase) }));
-    return { 
-      positive: normalizeThemes(positive), 
-      improvement: normalizeThemes(improvement), 
-      recent: normalizeThemes(recent), 
-      topPhrases: normalizePhrases(topPhrases) 
-    };
-  }, [feedbackComplaints]);
+  // const themeMetrics = useMemo(() => {
+  //   console.log('[Theme Analysis] Processing', feedbackComplaints.length, 'feedback complaints');
+  //   const texts = feedbackComplaints
+  //     .map(c => (c.feedback?.overallComment || '').trim())
+  //     .filter(t => t.length > 0);
+  //   console.log('[Theme Analysis] Comments to analyze:', texts.length);
+  //   if (!texts.length) {
+  //     console.log('[Theme Analysis] No comments found, returning empty metrics');
+  //     return { positive: [], improvement: [], recent: [], topPhrases: [] };
+  //   }
+  //   const stop = new Set(['the','and','a','to','of','in','is','it','for','on','at','with','this','that','was','are','be','an','as','by','or','we','i','you','they','but','from','have','has','had','were','not','more','less']);
+  //   const positiveKeywords = ['quick','fast','helpful','professional','clear','responsive','friendly','timely','efficient','resolved','resolution','transparent'];
+  //   const improvementKeywords = ['slow','delayed','unclear','confusing','late','no','lack','status','update','updates','response','detail','details','waiting','wait'];
+  //   const freq = {};
+  //   const nowTs = Date.now();
+  //   const recentWindowMs = 7 * 24 * 60 * 60 * 1000;
+  //   const recentSet = new Set();
+  //   texts.forEach((t, idx) => {
+  //     const cleaned = t.toLowerCase().replace(/[^a-z0-9\s]/g,' ');
+  //     const tokens = cleaned.split(/\s+/).filter(w => w && !stop.has(w));
+  //     // single word frequency
+  //     tokens.forEach(w => { freq[w] = (freq[w]||0)+1; });
+  //     // bi-grams for phrase context
+  //     for (let i=0;i<tokens.length-1;i++) {
+  //       const bi = tokens[i] + ' ' + tokens[i+1];
+  //       freq[bi] = (freq[bi]||0)+1;
+  //     }
+  //     // mark recent phrases if complaint updated recently
+  //     const comp = feedbackComplaints[idx];
+  //     const ts = Date.parse(comp.feedback?.updatedAt || comp.feedback?.createdAt || comp.updatedAt || comp.createdAt || 0);
+  //     if (!isNaN(ts) && (nowTs - ts) <= recentWindowMs) {
+  //       tokens.slice(0,5).forEach(w => recentSet.add(w));
+  //     }
+  //   });
+  //   const toArray = (keywords, label) => {
+  //     const out = [];
+  //     keywords.forEach(k => {
+  //       // consider both keyword and its common bigram forms
+  //       const candidates = Object.keys(freq).filter(fk => fk.includes(k));
+  //       let total = 0;
+  //       candidates.forEach(c => { total += freq[c]; });
+  //       if (total > 0) out.push({ theme: k, count: total });
+  //     });
+  //     out.sort((a,b)=> b.count - a.count);
+  //     return out.slice(0,6);
+  //   };
+  //   const positive = toArray(positiveKeywords,'positive');
+  //   const improvement = toArray(improvementKeywords,'improvement');
+  //   const recent = Array.from(recentSet).map(w => ({ theme: w, count: freq[w]||1 })).sort((a,b)=> b.count - a.count).slice(0,6);
+  //   // top phrases (bi-grams prioritized)
+  //   const topPhrases = Object.keys(freq)
+  //     .filter(k => k.includes(' '))
+  //     .map(k => ({ phrase: k, count: freq[k] }))
+  //     .sort((a,b)=> b.count - a.count)
+  //     .slice(0,5);
+  //   console.log('[Theme Analysis] Positive themes:', positive);
+  //   console.log('[Theme Analysis] Improvement themes:', improvement);
+  //   console.log('[Theme Analysis] Recent themes:', recent);
+  //   console.log('[Theme Analysis] Top phrases:', topPhrases);
+  //   // Normalize casing to Title Case for consistent presentation (keep numeric parts intact)
+  //   const titleCase = (s) => s.split(' ').map(part => part ? part.charAt(0).toUpperCase() + part.slice(1) : part).join(' ');
+  //   const normalizeThemes = (arr) => arr.map(obj => ({ ...obj, theme: titleCase(obj.theme) }));
+  //   const normalizePhrases = (arr) => arr.map(obj => ({ ...obj, phrase: titleCase(obj.phrase) }));
+  //   return { 
+  //     positive: normalizeThemes(positive), 
+  //     improvement: normalizeThemes(improvement), 
+  //     recent: normalizeThemes(recent), 
+  //     topPhrases: normalizePhrases(topPhrases) 
+  //   };
+  // }, [feedbackComplaints]);
 
   // Compute feedback-derived metrics strictly from feedbackComplaints
   const feedbackMetrics = useMemo(() => {
@@ -1958,55 +1958,26 @@ function App() {
         const s = (c.status || "").toString().toLowerCase();
         if (s === "resolved" || s === "closed") map[officerKey].resolved += 1;
 
-        // Calculate Response Time and Resolution Time using reportHistories
+        // Calculate Response Time: from "Admin Assigned" to "Report Acknowledged"
         if (c.reportHistories && Array.isArray(c.reportHistories)) {
           
-          // Sort events by createdAt ascending to find most recent assignment before acknowledgment
+          // Sort events by createdAt ascending
           const sortedEvents = [...c.reportHistories].sort((a, b) => 
             Date.parse(a.createdAt) - Date.parse(b.createdAt)
           );
           
-          // Calculate Response Time: from "Admin Assigned" to "Report Acknowledged"
-          // Find the "Report Acknowledged" event in the timeline
-          const acknowledgedEvent = sortedEvents.find(evt => 
-            evt.actionTitle === "Report Acknowledged"
-          );
+          // Find "Admin Assigned" and "Report Acknowledged" events
+          const assignedEvent = sortedEvents.find(evt => evt.actionTitle === "Admin Assigned");
+          const acknowledgedEvent = sortedEvents.find(evt => evt.actionTitle === "Report Acknowledged");
           
-          if (acknowledgedEvent) {
+          // Calculate response time only if both events exist and in correct order
+          if (assignedEvent && acknowledgedEvent) {
+            const assignedTime = Date.parse(assignedEvent.createdAt);
             const acknowledgedTime = Date.parse(acknowledgedEvent.createdAt);
-            if (!isNaN(acknowledgedTime)) {
-              // Find the most recent "Admin Assigned" event before the acknowledgment time
-              const assignedEvents = sortedEvents.filter(evt => 
-                evt.actionTitle === "Admin Assigned" && 
-                Date.parse(evt.createdAt) < acknowledgedTime
-              );
-              const mostRecentAssignment = assignedEvents[assignedEvents.length - 1];
-              
-              if (mostRecentAssignment) {
-                const assignedTime = Date.parse(mostRecentAssignment.createdAt);
-                if (!isNaN(assignedTime) && acknowledgedTime > assignedTime) {
-                  const responseHrs = (acknowledgedTime - assignedTime) / (1000 * 60 * 60);
-                  map[officerKey].responseTimes.push(responseHrs);
-                } else {
-                  console.log('[Officer Stats][Response] Skipped due to invalid/ordered times', {
-                    officer: map[officerKey]?.name,
-                    assignedTime: assignedTime ? new Date(assignedTime).toISOString() : assignedTime,
-                    acknowledgedTime: acknowledgedEvent.createdAt,
-                    validAssignedTime: !isNaN(assignedTime),
-                    acknowledgedAfterAssigned: acknowledgedTime > assignedTime
-                  });
-                }
-              }
-            }
-          } else {
-            const hasAssignments = sortedEvents.some(evt => evt.actionTitle === "Admin Assigned");
-            if (hasAssignments) {
-              console.log('[Officer Stats][Response] No "Report Acknowledged" event found', {
-                officer: map[officerKey]?.name,
-                reportId: c._id,
-                adminAssignedCount: sortedEvents.filter(evt => evt.actionTitle === 'Admin Assigned').length,
-                historySample: sortedEvents.slice(0, 3).map(evt => ({ actionTitle: evt.actionTitle, createdAt: evt.createdAt }))
-              });
+            
+            if (!isNaN(assignedTime) && !isNaN(acknowledgedTime) && acknowledgedTime > assignedTime) {
+              const responseHrs = (acknowledgedTime - assignedTime) / (1000 * 60 * 60);
+              map[officerKey].responseTimes.push(responseHrs);
             }
           }
 
@@ -2097,18 +2068,6 @@ function App() {
         });
       }
 
-      if (item.responseTimes.length > 0) {
-        const sumResponse = item.responseTimes.reduce((a, b) => a + b, 0);
-        const rawAvg = sumResponse / item.responseTimes.length;
-        console.log(`[Officer Stats][Response] ${item.name}:`, {
-          responseTimesCount: item.responseTimes.length,
-          responseTimesHours: item.responseTimes.map(t => t.toFixed(2)),
-          sumHours: sumResponse.toFixed(4),
-          rawAverage: rawAvg.toFixed(4),
-          avgResponseTime
-        });
-      }
-
       if (item.resolutionTimes.length > 0) {
         console.log(`[Officer Stats] ${item.name}:`, {
           total: item.total,
@@ -2146,15 +2105,6 @@ function App() {
       satSum: acc.satSum + ((it.avgSat || 0) * it.total) 
     }), { total: 0, resolved: 0, responseTimeSum: 0, resolutionTimeSum: 0, satSum: 0 });
     
-    console.log('[Team Averages] Totals:', {
-      officersWithCases: officersWithCases.length,
-      totalCases: totals.total,
-      resolvedCases: totals.resolved,
-      responseTimeSum: totals.responseTimeSum.toFixed(2),
-      resolutionTimeSum: totals.resolutionTimeSum.toFixed(2),
-      avgResolutionTime: totals.total ? (totals.resolutionTimeSum / totals.total).toFixed(2) : 0
-    });
-    
     const teamAvg = {
       total: totals.total && officersWithCases.length ? Math.round((totals.total / officersWithCases.length) * 10) / 10 : 0,
       resolved: Math.round(totals.resolved),
@@ -2165,8 +2115,8 @@ function App() {
     };
     
     console.log('[Team Averages] Final:', {
-      avgResolutionTime: teamAvg.avgResolutionTime,
       avgResponseTime: teamAvg.avgResponseTime,
+      avgResolutionTime: teamAvg.avgResolutionTime,
       resolutionRate: teamAvg.resolutionRate
     });
     
