@@ -135,3 +135,4 @@ export const getChatroomUsers = (reportId, chatroomId) => {
   const chatroomName = `chat:${reportId}:${chatroomId}`;
   const room = io.sockets.adapter.rooms.get(chatroomName);
   return room ? Array.from(room) : [];
+};
