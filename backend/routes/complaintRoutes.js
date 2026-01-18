@@ -4,6 +4,10 @@ import complaintController from '../controllers/complaintController.js';
 import reportController from '../controllers/reportController.js';
 const router = express.Router();
 
+// PERFORMANCE OPTIMIZATION: New filtered endpoint that returns pre-filtered data
+// This endpoint applies all filters on the backend before returning, reducing payload and frontend processing
+router.get('/filtered', authMiddleware, complaintController.getFilteredReports);
+
 router.get('/', authMiddleware, complaintController.getAllComplaints);
 router.get('/:id', authMiddleware, complaintController.getComplaintById);
 router.get('/:id/histories', authMiddleware, reportController.getReportHistories);

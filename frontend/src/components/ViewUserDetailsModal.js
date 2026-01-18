@@ -64,7 +64,16 @@ const ViewUserDetailsModal = ({ isOpen, onClose, userDetails, isLoading }) => {
                     <FontAwesomeIcon icon={faUser} className="text-sm" />
                     <span className="text-sm font-medium">Full Name</span>
                   </div>
-                  <p className="text-gray-900 font-semibold">{userDetails.name || "N/A"}</p>
+                  <p className="text-gray-900 font-semibold">{userDetails.username || userDetails.name || "N/A"}</p>
+                </div>
+
+                {/* Matric Number */}
+                <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                  <div className="flex items-center gap-2 text-gray-600 mb-1">
+                    <FontAwesomeIcon icon={faIdCard} className="text-sm" />
+                    <span className="text-sm font-medium">Matric Number</span>
+                  </div>
+                  <p className="text-gray-900 font-semibold">{userDetails.matricNumber || "N/A"}</p>
                 </div>
 
                 {/* Gender */}
@@ -92,15 +101,6 @@ const ViewUserDetailsModal = ({ isOpen, onClose, userDetails, isLoading }) => {
                     <span className="text-sm font-medium">Phone Number</span>
                   </div>
                   <p className="text-gray-900 font-semibold">{userDetails.phoneNumber || "N/A"}</p>
-                </div>
-
-                {/* Matric Number */}
-                <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-                  <div className="flex items-center gap-2 text-gray-600 mb-1">
-                    <FontAwesomeIcon icon={faIdCard} className="text-sm" />
-                    <span className="text-sm font-medium">Matric Number</span>
-                  </div>
-                  <p className="text-gray-900 font-semibold">{userDetails.matricNumber || "N/A"}</p>
                 </div>
 
                 {/* Faculty */}

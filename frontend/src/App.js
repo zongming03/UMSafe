@@ -11,6 +11,7 @@ import UserManagement from "./pages/UserManagement";
 import ComplaintCategory from "./pages/ComplaintCategory";
 import RoomManagement from "./pages/RoomManagement";
 import AnalyticDashboard from "./pages/AnalyticDashboard";
+import FeedbackClassifier from "./pages/FeedbackClassifier";
 import LoadingOverlay from "./components/LoadingOverlay";
 import NotFoundPages from "./components/NotFoundPages";
 import ForgotPasswordPage from "./components/ForgotPasswordPage";
@@ -37,6 +38,7 @@ const { user, loading } = useContext(AuthContext);
             { path: "dashboard", element: <Dashboard /> },
             { path: "users", element: <UserManagement /> },
             { path: "analytics", element: <AnalyticDashboard /> },
+            { path: "nlp-demo", element: <FeedbackClassifier /> },
             { path: "categories", element: <ComplaintCategory /> },
             { path: "rooms", element: <RoomManagement /> },
             { path: "forgot-password", element: <ForgotPasswordPage /> },

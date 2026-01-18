@@ -219,6 +219,7 @@ const ComplaintChat = () => {
 
           return {
             ...c,
+            id: c.id || c._id || `${c.senderId}-${c.createdAt}`,
             timestamp: c.createdAt || c.updatedAt,
             content: c.message || c.content,
             isAdmin: adminIds.has(c.senderId),
@@ -306,11 +307,18 @@ const ComplaintChat = () => {
         // Update messages if there are new ones (compare by ID or timestamp)
         setMessages((prevMessages) => {
           // Create a set of existing message IDs/timestamps to avoid duplicates
-          const existingIds = new Set(prevMessages.map(m => m.id || m.createdAt));
-          const newMessages = mapped.filter(m => !existingIds.has(m.id || m.createdAt));
+          // Use both id and createdAt as unique identifiers
+          const existingIds = new Set(prevMessages.map(m => m.id || m._id || `${m.senderId}-${m.createdAt}`));
+          
+          const newMessages = mapped.filter(m => {
+            const msgId = m.id || m._id || `${m.senderId}-${m.createdAt}`;
+            return !existingIds.has(msgId);
+          });
           
           if (newMessages.length > 0) {
             console.log(`📨 Polling: Found ${newMessages.length} new message(s)`);
+            console.log("New message IDs:", newMessages.map(m => m.id || m._id));
+            console.log("Existing message IDs:", Array.from(existingIds));
             
             // Show notification for each new message (excluding system messages)
             newMessages.forEach(msg => {

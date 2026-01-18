@@ -212,6 +212,17 @@ const ComplaintDetails = () => {
           const mapped = mapReportToComplaintDetail(report);
           setComplaint(mapped);
           
+          // Extract student details from the report response if available
+          const userData = res.data?.user;
+          if (userData) {
+            console.log("📋 Student Details from Report:", userData);
+            console.log("📌 Matric Number:", userData?.matricNumber);
+            console.log("👤 Gender:", userData?.gender);
+            console.log("📧 Email:", userData?.email);
+            console.log("📞 Phone Number:", userData?.phoneNumber);
+            setUserDetails(userData);
+          }
+          
           if (location.state?.allComplaints) {
             setAllComplaints(location.state.allComplaints);
           }
@@ -377,6 +388,11 @@ const ComplaintDetails = () => {
     try {
       const response = await getUserDetails(complaint.userId);
       const userData = response.data?.user || response.data;
+      console.log("📋 User Details Fetched:", userData);
+      console.log("📌 Matric Number:", userData?.matricNumber);
+      console.log("👤 Gender:", userData?.gender);
+      console.log("📧 Email:", userData?.email);
+      console.log("📞 Phone Number:", userData?.phoneNumber);
       setUserDetails(userData);
     } catch (error) {
       console.error("Failed to fetch user details:", error);
@@ -768,6 +784,13 @@ const ComplaintDetails = () => {
               />
 
               {/* Complaint Details Card */}
+              {console.log("🎫 Props being passed to ComplaintDetailsCard:", {
+                matricNumber: userDetails?.matricNumber,
+                gender: userDetails?.gender,
+                email: userDetails?.email,
+                phoneNumber: userDetails?.phoneNumber,
+                userDetailsState: userDetails
+              })}
               <ComplaintDetailsCard
                 title={displayedTitle}
                 description={displayedDescription}
@@ -780,6 +803,10 @@ const ComplaintDetails = () => {
                 category={complaint?.category.name || "Unknown"}
                 location={displayedLocation}
                 attachments={displayedAttachments}
+                matricNumber={userDetails?.matricNumber}
+                gender={userDetails?.gender}
+                email={userDetails?.email}
+                phoneNumber={userDetails?.phoneNumber}
               />
 
               {/* Acknowledge banner (only assigned admin/officer and not yet acknowledged and not Resolved/Closed) */}

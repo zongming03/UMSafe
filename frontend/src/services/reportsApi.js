@@ -42,6 +42,66 @@ export const fetchAdminReports = async (includeFeedback = true, skipCache = fals
 };
 
 /**
+ * PERFORMANCE OPTIMIZATION: Fetch filtered reports from backend
+ * Backend applies all filters before returning, reducing payload and frontend processing.
+ * Parameters are passed as query strings to enable efficient backend filtering.
+ * 
+ * @param {Object} filters - Filter criteria
+ * @param {string} filters.from - Start date (YYYY-MM-DD)
+ * @param {string} filters.to - End date (YYYY-MM-DD)
+ * @param {string} filters.category - Category name
+ * @param {string} filters.block - Faculty block
+ * @param {string} filters.room - Room name
+ * @param {string} filters.status - Complaint status
+ * @param {string} filters.priority - Priority level
+ * @param {string} filters.officer - Officer/Admin ID
+ * @param {string} filters.faculty - Faculty name
+ * @param {boolean} filters.includeFeedback - Include feedback data
+ * @param {boolean} skipCache - Skip cache
+ */
+export const fetchFilteredAdminReports = async (filters = {}, skipCache = false) => {
+  const {
+    from = '',
+    to = '',
+    category = 'all',
+    block = 'all',
+    room = 'all',
+    status = '',
+    priority = '',
+    officer = 'all',
+    faculty = '',
+    includeFeedback = true
+  } = filters;
+
+  // Build cache key from filter parameters for better cache granularity
+  const cacheKey = `admin_reports_filtered_${from}_${to}_${category}_${block}_${room}_${status}_${priority}_${officer}_${includeFeedback}`;
+
+  if (skipCache) {
+    apiCache.invalidate(cacheKey);
+  }
+
+  const cached = apiCache.get(cacheKey, 30000);
+  if (cached) return cached;
+
+  const params = {
+    from,
+    to,
+    category,
+    block,
+    room,
+    status,
+    priority,
+    officer,
+    faculty,
+    includeFeedback
+  };
+
+  const result = await api.get("/complaints/filtered", { params });
+  apiCache.set(cacheKey, result);
+  return result;
+};
+
+/**
  * GET /reports/{id} - Get single report details (cached for 20s)
  */
 export const getReport = async (reportId, skipCache = false) => {

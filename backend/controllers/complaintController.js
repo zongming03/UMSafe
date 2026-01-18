@@ -607,11 +607,158 @@ const getChatroomMessages = async (req, res) => {
   }
 };
 
+/**
+ * GET /admin/reports/filtered?from=YYYY-MM-DD&to=YYYY-MM-DD&category=...&block=...&room=...&status=...&priority=...&officer=...
+ * 
+ * PERFORMANCE OPTIMIZATION: Filter reports on the backend before returning to frontend.
+ * This reduces network payload and frontend processing time significantly.
+ * 
+ * Query Parameters:
+ * - from (string): Start date (YYYY-MM-DD)
+ * - to (string): End date (YYYY-MM-DD)
+ * - category (string): Category name to filter by
+ * - block (string): Faculty block name
+ * - room (string): Room name
+ * - status (string): Complaint status
+ * - priority (string): Priority level
+ * - officer (string): Officer/Admin ID to filter by
+ * - faculty (string): Faculty name to filter by (required for security)
+ * - includeFeedback (boolean): Include feedback data
+ */
+const getFilteredReports = async (req, res) => {
+  try {
+    const {
+      from,
+      to,
+      category,
+      block,
+      room,
+      status,
+      priority,
+      officer,
+      faculty,
+      includeFeedback = true
+    } = req.query;
+
+    console.log('[getFilteredReports] Filters received:', { from, to, category, block, room, status, priority, officer, faculty, includeFeedback });
+
+    // Fetch all reports from partner API with optional feedback
+    const PARTNER_API_BASE_URL = (process.env.PARTNER_API_BASE_URL || '').trim().replace(/\/$/, '');
+    if (!PARTNER_API_BASE_URL) {
+      console.error('[getFilteredReports] Partner API not configured');
+      return res.status(500).json({ message: 'Partner API not configured' });
+    }
+
+    // PARTNER_API_BASE_URL already includes /admin, so we only append /reports
+    const partnerUrl = `${PARTNER_API_BASE_URL}/reports${includeFeedback === 'true' ? '?includeFeedback=true' : ''}`;
+    console.log('[getFilteredReports] Fetching from partner API:', partnerUrl);
+
+    const partnerRes = await axios.get(partnerUrl, {
+      headers: { 'Authorization': req.headers.authorization || '' }
+    });
+
+    console.log('[getFilteredReports] Partner API response received, data keys:', Object.keys(partnerRes.data || {}));
+
+    let reports = partnerRes.data?.reports || partnerRes.data?.data || partnerRes.data || [];
+    if (!Array.isArray(reports)) {
+      reports = [];
+    }
+
+    console.log('[getFilteredReports] Total reports before filtering:', reports.length);
+
+    // Apply filters on backend (PERFORMANCE: this reduces payload sent to frontend)
+    const filtered = reports.filter((report) => {
+      try {
+        // Date range filter
+        if (from || to) {
+          const fromTs = from ? Date.parse(from) : null;
+          const toTs = to ? Date.parse(to) : null;
+          const created = report.createdAt ? Date.parse(report.createdAt) : NaN;
+
+          if (!isNaN(created)) {
+            if (fromTs && created < fromTs) return false;
+            if (toTs && created > toTs + 24 * 60 * 60 * 1000) return false;
+          }
+        }
+
+        // Faculty filter (security)
+        if (faculty) {
+          const reportFaculty = (report.facultyLocation?.faculty || report.facultyLocation?.facultyName || '').toString().trim().toLowerCase();
+          const normalizedFaculty = faculty.toString().trim().toLowerCase();
+          if (!reportFaculty || reportFaculty !== normalizedFaculty) return false;
+        }
+
+        // Category filter
+        if (category && category !== 'all') {
+          const reportCategory = (report.category?.name || report.category?.title || report.category_id?.name || '').toLowerCase();
+          if (!reportCategory.includes(category.toLowerCase())) return false;
+        }
+
+        // Block filter
+        if (block && block !== 'all') {
+          const reportBlock = (report.facultyLocation?.facultyBlock || report.facultyLocation?.block || '').toLowerCase();
+          if (reportBlock !== block.toLowerCase()) return false;
+        }
+
+        // Room filter
+        if (room && room !== 'all') {
+          const reportRoom = (report.facultyLocation?.facultyBlockRoom || report.facultyLocation?.room || '').toLowerCase();
+          if (reportRoom !== room.toLowerCase()) return false;
+        }
+
+        // Status filter
+        if (status && status !== '') {
+          const reportStatus = (report.status || '').toString().toLowerCase();
+          if (!reportStatus.includes(status.toLowerCase())) return false;
+        }
+
+        // Priority filter
+        if (priority && priority !== '') {
+          const reportPriority = (report.priority || report.category?.priority || '').toString().toLowerCase();
+          if (!reportPriority.includes(priority.toLowerCase())) return false;
+        }
+
+        // Officer filter
+        if (officer && officer !== 'all') {
+          const reportOfficerId = report.adminId || report.assignedTo || report.assigned_to || '';
+          if (officer.toLowerCase() === 'unassigned') {
+            if (reportOfficerId && String(reportOfficerId).toLowerCase() !== 'unassigned') return false;
+          } else {
+            // Match by ID
+            if (String(reportOfficerId) !== String(officer)) return false;
+          }
+        }
+
+        return true;
+      } catch (e) {
+        console.warn('Error applying filter to report:', e.message);
+        return true; // Include if filter evaluation fails
+      }
+    });
+
+    console.log('[getFilteredReports] Filtered reports count:', filtered.length);
+
+    res.json({ 
+      reports: filtered,
+      count: filtered.length,
+      total: reports.length
+    });
+  } catch (error) {
+    console.error('[getFilteredReports] Error:', error.message);
+    console.error('[getFilteredReports] Stack:', error.stack);
+    res.status(500).json({ 
+      message: 'Failed to fetch filtered reports', 
+      error: error.message 
+    });
+  }
+};
+
 export default {
   getAllComplaints,
   getComplaintById,
   updateComplaintStatus,
   assignComplaint,
   getChatroomMessages,
-  notifyAdminsNewComplaint
+  notifyAdminsNewComplaint,
+  getFilteredReports
 };
