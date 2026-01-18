@@ -52,6 +52,13 @@ app.use('/admin/mobileAdmin', authMiddleware);
 const PARTNER_API_BASE_URL = (process.env.PARTNER_API_BASE_URL || '').trim();
 registerPartnerProxy(app, PARTNER_API_BASE_URL);
 
+// Fallback route for verification emails accessed directly (not via frontend)
+app.get('/verify-email/:token', (req, res) => {
+  const token = req.params.token;
+  const frontendUrl = process.env.HOSTNAME || 'http://localhost:3000';
+  res.redirect(`${frontendUrl}/verify-email/${token}`);
+});
+
 // Initialize HTTP server and Socket.IO
 const server = http.createServer(app);
 initSocket(server);

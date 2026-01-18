@@ -61,39 +61,28 @@ export const uploadFilesToCloudinary = async (req, res) => {
 
     // multer-storage-cloudinary already uploaded files, convert response format
     const uploadedFiles = req.files.map((file) => {
-      let url = file.path; // CloudinaryStorage provides 'path' with the secure URL
+      // CloudinaryStorage provides 'path' with the secure URL
+      let url = file.path;
       
-      // For PDFs and raw files, ensure the URL has proper format for downloads
-      if (file.mimetype === 'application/pdf') {
-        // Ensure PDF extension is present
-        if (!url.endsWith('.pdf')) {
-          // Extract the public_id and add .pdf extension
-          const urlParts = url.split('/upload/');
-          if (urlParts.length === 2) {
-            url = urlParts[0] + '/upload/fl_attachment/' + urlParts[1] + '.pdf';
-          }
-        } else {
-          // Add fl_attachment flag to make it downloadable
-          const urlParts = url.split('/upload/');
-          if (urlParts.length === 2 && !url.includes('fl_attachment')) {
-            url = urlParts[0] + '/upload/fl_attachment/' + urlParts[1];
-          }
-        }
-      } else if (file.resource_type === 'raw') {
-        // For other raw files, add fl_attachment flag
-        const urlParts = url.split('/upload/');
-        if (urlParts.length === 2 && !url.includes('fl_attachment')) {
-          url = urlParts[0] + '/upload/fl_attachment/' + urlParts[1];
-        }
+      console.log(`📄 Processing file: ${file.originalname}`);
+      console.log(`   Mimetype: ${file.mimetype}`);
+      console.log(`   Resource Type: ${file.resource_type}`);
+      console.log(`   Original URL: ${url}`);
+      
+      // Ensure URL uses HTTPS for security (Cloudinary best practice)
+      if (url && url.startsWith('http://')) {
+        url = url.replace('http://', 'https://');
       }
-
+      
       return {
-        url: url,
+        url: url, // Use the Cloudinary URL with HTTPS
+        path: url,
         filename: file.originalname,
         name: file.originalname,
         mimetype: file.mimetype,
         type: file.mimetype,
         size: file.size,
+        resource_type: file.resource_type,
       };
     });
 

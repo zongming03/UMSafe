@@ -1,6 +1,8 @@
 import { io } from "socket.io-client";
 
 let socket = null;
+let reconnectionAttempts = 0;
+const MAX_RECONNECTION_ATTEMPTS = 10;
 
 // Derive a socket base URL without app-specific path segments (e.g. '/admin')
 const getSocketBaseUrl = () => {
@@ -19,7 +21,11 @@ const getSocketBaseUrl = () => {
 };
 
 export const initSocket = (token) => {
-  if (socket) return socket;
+  // If socket already exists and is connected, return it
+  if (socket && socket.connected) {
+    console.log("✅ Socket already connected, reusing existing connection");
+    return socket;
+  }
 
   // Don't initialize socket if no token available
   if (!token) {
@@ -36,34 +42,73 @@ export const initSocket = (token) => {
     auth: { token: authToken },
     transports: ["websocket"],
     withCredentials: false,
-    // Be gentle with reconnects to avoid noisy errors
+    // Aggressive reconnection settings for reliability
     reconnection: true,
-    reconnectionAttempts: 5,
-    reconnectionDelay: 500,
-    reconnectionDelayMax: 2000,
+    reconnectionAttempts: MAX_RECONNECTION_ATTEMPTS,
+    reconnectionDelay: 1000,
+    reconnectionDelayMax: 5000,
+    // Increase timeout to allow slow connections
+    connectTimeout: 10000,
+  });
+
+  socket.on("connect", () => {
+    console.log("🔌 Socket connected successfully!");
+    reconnectionAttempts = 0;
+  });
+
+  socket.on("disconnect", (reason) => {
+    console.warn(`🔌 Socket disconnected: ${reason}`);
+  });
+
+  socket.on("reconnect_attempt", () => {
+    reconnectionAttempts++;
+    console.log(`🔄 Attempting to reconnect... (attempt ${reconnectionAttempts}/${MAX_RECONNECTION_ATTEMPTS})`);
+  });
+
+  socket.on("reconnect_failed", () => {
+    console.error("❌ Failed to reconnect to socket after multiple attempts");
   });
 
   socket.on("connect_error", (err) => {
     // Suppress hard errors for expected cases like logout/expired token
     const msg = (err && err.message) || "unknown error";
     if (msg === "Unauthorized") {
-      console.warn("Socket auth failed (likely logged out or expired)");
+      console.warn("⚠️ Socket auth failed (likely logged out or expired)");
     } else {
-      console.warn("Socket connection issue:", msg);
+      console.warn("⚠️ Socket connection issue:", msg);
     }
   });
 
   return socket;
 };
 
-export const getSocket = () => socket;
+export const getSocket = () => {
+  if (!socket || !socket.connected) {
+    console.warn("⚠️ Socket not connected. Initialize with initSocket(token) first.");
+  }
+  return socket;
+};
+
+export const isSocketConnected = () => {
+  return socket && socket.connected;
+};
 
 export const disconnectSocket = () => {
   if (socket) {
     try {
+      console.log("🔌 Disconnecting socket...");
       socket.removeAllListeners();
     } catch {}
     socket.disconnect();
     socket = null;
   }
 };
+
+// Helper to ensure socket is initialized before using it
+export const ensureSocketConnected = (token) => {
+  if (!isSocketConnected()) {
+    return initSocket(token);
+  }
+  return socket;
+};
+

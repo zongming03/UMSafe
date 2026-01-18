@@ -210,11 +210,21 @@ const ComplaintChat = () => {
                 url: single.url,
                 type: single.type,
                 // Give PDFs a friendly name with extension so downloads open correctly
-                name: single.name || (single.type?.toLowerCase() === 'pdf' ? `pdf${idx + 1}.pdf` : `${single.type || 'file'}${idx + 1}`),
+                name: single.name 
+                  ? (single.type?.toLowerCase() === 'pdf' && !single.name.toLowerCase().endsWith('.pdf') ? `${single.name}.pdf` : single.name)
+                  : (single.type?.toLowerCase() === 'pdf' ? `pdf${idx + 1}.pdf` : 
+                     single.type?.toLowerCase() === 'image' ? `image${idx + 1}.jpg` :
+                     single.type?.toLowerCase() === 'video' ? `video${idx + 1}.mp4` :
+                     `file${idx + 1}.bin`),
               }]
             : plural.map((att, aIdx) => ({
                 ...att,
-                name: att.name || (att.type?.toLowerCase() === 'pdf' ? `pdf${aIdx + 1}.pdf` : `${att.type || 'file'}${aIdx + 1}`),
+                name: att.name
+                  ? (att.type?.toLowerCase() === 'pdf' && !att.name.toLowerCase().endsWith('.pdf') ? `${att.name}.pdf` : att.name)
+                  : (att.type?.toLowerCase() === 'pdf' ? `pdf${aIdx + 1}.pdf` : 
+                     att.type?.toLowerCase() === 'image' ? `image${aIdx + 1}.jpg` :
+                     att.type?.toLowerCase() === 'video' ? `video${aIdx + 1}.mp4` :
+                     `file${aIdx + 1}.bin`),
               }));
 
           return {
@@ -287,11 +297,21 @@ const ComplaintChat = () => {
             ? [{
                 url: single.url,
                 type: single.type,
-                name: single.name || (single.type?.toLowerCase() === 'pdf' ? `pdf${idx + 1}.pdf` : `${single.type || 'file'}${idx + 1}`),
+                name: single.name
+                  ? (single.type?.toLowerCase() === 'pdf' && !single.name.toLowerCase().endsWith('.pdf') ? `${single.name}.pdf` : single.name)
+                  : (single.type?.toLowerCase() === 'pdf' ? `pdf${idx + 1}.pdf` : 
+                     single.type?.toLowerCase() === 'image' ? `image${idx + 1}.jpg` :
+                     single.type?.toLowerCase() === 'video' ? `video${idx + 1}.mp4` :
+                     `file${idx + 1}.bin`),
               }]
             : plural.map((att, aIdx) => ({
                 ...att,
-                name: att.name || (att.type?.toLowerCase() === 'pdf' ? `pdf${aIdx + 1}.pdf` : `${att.type || 'file'}${aIdx + 1}`),
+                name: att.name
+                  ? (att.type?.toLowerCase() === 'pdf' && !att.name.toLowerCase().endsWith('.pdf') ? `${att.name}.pdf` : att.name)
+                  : (att.type?.toLowerCase() === 'pdf' ? `pdf${aIdx + 1}.pdf` : 
+                     att.type?.toLowerCase() === 'image' ? `image${aIdx + 1}.jpg` :
+                     att.type?.toLowerCase() === 'video' ? `video${aIdx + 1}.mp4` :
+                     `file${aIdx + 1}.bin`),
               }));
 
           return {
@@ -320,13 +340,8 @@ const ComplaintChat = () => {
             console.log("New message IDs:", newMessages.map(m => m.id || m._id));
             console.log("Existing message IDs:", Array.from(existingIds));
             
-            // Show notification for each new message (excluding system messages)
-            newMessages.forEach(msg => {
-              if (!msg.system && msg.content) {
-                const senderName = msg.senderName || (msg.isAdmin ? "Admin" : complaint?.username || "User");
-                NotificationService.showNewMessageNotification(senderName, msg.content);
-              }
-            });
+            // Don't show notification here - useChatUpdates hook already handles notifications via socket
+            // This prevents duplicate notifications when socket is connected
             
             return [...prevMessages, ...newMessages];
           }
@@ -716,9 +731,21 @@ const ComplaintChat = () => {
     let fileName = attachment.name || 'download';
     const contentType = attachment.type || 'application/octet-stream';
     
+    // Ensure PDF files always have .pdf extension
+    const isPDF = contentType.toLowerCase() === 'pdf' || contentType.includes('pdf');
+    
+    // If no name provided, try to extract from URL
+    if (fileName === 'download' && attachment.url) {
+      const urlParts = attachment.url.split('/');
+      const lastPart = urlParts[urlParts.length - 1];
+      if (lastPart && lastPart.length > 0) {
+        fileName = lastPart;
+      }
+    }
+    
     // If filename doesn't have an extension, infer from content type
     if (!fileName.includes('.')) {
-      if (contentType.includes('pdf')) fileName += '.pdf';
+      if (isPDF) fileName += '.pdf';
       else if (contentType.includes('image')) {
         const ext = contentType.split('/')[1]?.split(';')[0] || 'jpg';
         fileName += '.' + ext;
@@ -730,7 +757,15 @@ const ComplaintChat = () => {
       else if (contentType.includes('word')) fileName += '.docx';
       else if (contentType.includes('excel') || contentType.includes('spreadsheet')) fileName += '.xlsx';
       else fileName += '.bin';
+    } else if (isPDF && !fileName.toLowerCase().endsWith('.pdf')) {
+      // If it's a PDF but doesn't end with .pdf, append .pdf
+      fileName += '.pdf';
     }
+    
+    console.log("📥 Downloading file:", fileName);
+    console.log("📄 File type:", contentType);
+    console.log("🔗 File URL:", attachment.url);
+    console.log("📦 Original attachment name:", attachment.name);
     
     // For Cloudinary URLs, ensure they have the fl_attachment flag for proper downloads
     let downloadUrl = attachment.url;
@@ -741,14 +776,7 @@ const ComplaintChat = () => {
       }
     }
     
-    // For PDFs from Cloudinary, open in new tab to allow browser viewing or downloading
-    if (contentType.includes('pdf') && downloadUrl.includes('cloudinary.com')) {
-      // Create URL with fl_attachment for download or viewer can choose to view
-      window.open(downloadUrl, '_blank');
-      return;
-    }
-    
-    // Fetch and download the file
+    // Fetch and download the file with proper filename
     fetch(downloadUrl)
       .then(res => res.blob())
       .then(blob => {
@@ -756,8 +784,11 @@ const ComplaintChat = () => {
         const link = document.createElement('a');
         link.href = url;
         link.download = fileName;
+        console.log("✅ Setting download attribute to:", fileName);
+        console.log("🔍 Link element download attribute:", link.download);
         document.body.appendChild(link);
         link.click();
+        console.log("✔️ Download triggered for:", fileName);
         document.body.removeChild(link);
         window.URL.revokeObjectURL(url);
       })

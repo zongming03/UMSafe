@@ -1,5 +1,5 @@
 import { useEffect, useCallback } from "react";
-import { getSocket } from "../services/socket";
+import { getSocket, isSocketConnected, initSocket } from "../services/socket";
 import { NotificationService } from "../utils/NotificationService";
 
 /**
@@ -23,6 +23,7 @@ export const useChatUpdates = (
 ) => {
   const handleNewMessage = useCallback(
     (payload) => {
+      console.log("📨 Chat message received via socket:", payload);
       // Show notification for new message
       if (showNotifications && payload.message && !payload.system) {
         const displayName = reportDisplayId ? `Complaint #${reportDisplayId}` : "New message";
@@ -45,8 +46,23 @@ export const useChatUpdates = (
   );
 
   useEffect(() => {
-    const socket = getSocket();
-    if (!socket || !reportId || !chatroomId) return;
+    let socket = getSocket();
+    
+    // If socket doesn't exist, try to get token and initialize it
+    if (!socket || !isSocketConnected()) {
+      const token = localStorage.getItem("token") || sessionStorage.getItem("token");
+      if (token) {
+        console.log("🔄 Socket not connected, attempting to initialize...");
+        socket = initSocket(token);
+      }
+    }
+    
+    if (!socket || !reportId || !chatroomId) {
+      console.warn("⚠️ Cannot setup chat listeners - socket not connected or missing reportId/chatroomId");
+      return;
+    }
+
+    console.log(`📡 Setting up chat listeners for report ${reportId}, chatroom ${chatroomId}`);
 
     // Listen for new messages in the current chatroom
     const messageEventName = `chat:${reportId}:${chatroomId}:new-message`;
@@ -59,11 +75,16 @@ export const useChatUpdates = (
     socket.on("chat:new-message", handleNewMessage);
     socket.on("chat:message-delivered", handleMessageDelivered);
 
+    console.log(`✅ Chat listeners registered for report ${reportId}`);
+
     return () => {
-      socket.off(messageEventName, handleNewMessage);
-      socket.off(deliveryEventName, handleMessageDelivered);
-      socket.off("chat:new-message", handleNewMessage);
-      socket.off("chat:message-delivered", handleMessageDelivered);
+      if (socket) {
+        socket.off(messageEventName, handleNewMessage);
+        socket.off(deliveryEventName, handleMessageDelivered);
+        socket.off("chat:new-message", handleNewMessage);
+        socket.off("chat:message-delivered", handleMessageDelivered);
+      }
     };
   }, [reportId, chatroomId, handleNewMessage, handleMessageDelivered]);
 };
+

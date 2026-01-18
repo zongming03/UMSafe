@@ -72,7 +72,12 @@ export const addOfficer = async (req, res) => {
     const savedUser = await newUser.save();
     console.log("[addOfficer] User saved with verification pending");
 
-    const verificationLink = `${HOSTNAME}/verify-email/${verificationToken}`;
+    // Build frontend verification URL - ensure it points to frontend, not backend
+    // HOSTNAME should be the frontend URL (http://localhost:3000)
+    const frontendBase = process.env.frontendBase || 'http://localhost:3000';
+    const verificationLink = `${frontendBase}/verify-email/${verificationToken}`;
+    console.log("[addOfficer] Verification link:", verificationLink);
+    console.log("[addOfficer] HOSTNAME env:", process.env.HOSTNAME);
 
     const mailOptions = {
       from: `"UMSafe Admin" <${process.env.EMAIL_USER}>`,

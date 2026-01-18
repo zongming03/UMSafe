@@ -13,5 +13,13 @@ router.post('/verify-email/:token', verifyEmail);
 router.get('/verify-email/:token', verifyEmail);
 router.post('/refresh', refreshToken);
 
+// Fallback: catch /verify-email requests without /auth prefix and redirect
+router.get('/verify-email', (req, res) => {
+  res.status(400).json({
+    error: 'Invalid verification link. Token is missing.',
+    message: 'Please use the complete verification link from the email.'
+  });
+});
+
 export default router;
 
