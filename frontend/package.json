@@ -26,7 +26,7 @@
     "socket.io-client": "^4.7.5",
     "web-vitals": "^2.1.4"
   },
-  "proxy": " https://nonprolifically-godly-kermit.ngrok-free.dev/admin",
+  "proxy": "https://nonprolifically-godly-kermit.ngrok-free.dev/admin",
   "scripts": {
     "start": "react-scripts start",
     "build": "react-scripts build",

@@ -1,7 +1,6 @@
 import axios from 'axios';
 import Chat from '../models/Chat.js'; 
 import User from '../models/User.js';
-import { emitChatMessage } from '../realtime/socket.js';
 
 export const enrichAssignAdminBody = async (req) => {
   if (req.method !== 'PATCH' || !req.originalUrl.includes('/assign-admin')) return;
