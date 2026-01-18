@@ -1513,15 +1513,11 @@ function App() {
   }, [complaints]);
 
   // Month/period-over-period growth for Total Complaints based on current filters
-  // NOTE: Backend now pre-filters data, so we only need to calculate growth from the already-filtered dataset
+  // Compares current time range with the same length time range from previous period
   const totalGrowth = useMemo(() => {
     try {
       // Use the already-filtered complaints data
       const base = Array.isArray(complaints) ? complaints : [];
-
-      if (base.length === 0) {
-        return { delta: 0, dir: "flat", current: 0, previous: 0, percent: 0 };
-      }
 
       // Build current period from state dateRange
       const fromStr = dateRange?.from;
@@ -1536,10 +1532,11 @@ function App() {
       const start = new Date(from.getFullYear(), from.getMonth(), from.getDate());
       const end = new Date(to.getFullYear(), to.getMonth(), to.getDate());
       const oneDay = 24 * 60 * 60 * 1000;
-      const periodMs = Math.max(oneDay, (end.getTime() - start.getTime()) + oneDay);
+      const periodMs = (end.getTime() - start.getTime()) + oneDay;
 
-      const prevEnd = new Date(start.getTime() - oneDay);
-      const prevStart = new Date(prevEnd.getTime() - (periodMs - oneDay));
+      // Calculate previous period with same length
+      const prevEnd = new Date(start.getTime() - 1); // Day before current start
+      const prevStart = new Date(prevEnd.getTime() - periodMs + oneDay);
 
       const createdTs = (c) => {
         const v = c.createdAt || c.created_at;
@@ -1549,25 +1546,33 @@ function App() {
 
       const inRange = (t, a, b) => t >= a.getTime() && t <= (b.getTime() + (oneDay - 1));
 
-      // Count records in current period (these are already filtered by backend)
+      // Count records in current period
       const currentCount = base.filter((c) => {
         const t = createdTs(c);
         if (isNaN(t)) return false;
         return inRange(t, start, end);
       }).length;
 
-      // For previous period, fetch unfiltered data to get fair comparison
-      // or estimate based on current period ratio
-      // For now, use current count as baseline
-      const previousCount = currentCount > 0 ? currentCount : 0;
+      // Count records in previous period (same length as current)
+      const previousCount = base.filter((c) => {
+        const t = createdTs(c);
+        if (isNaN(t)) return false;
+        return inRange(t, prevStart, prevEnd);
+      }).length;
+
+      // Handle edge cases
+      if (previousCount === 0 && currentCount === 0) {
+        return { delta: 0, dir: "flat", current: 0, previous: 0, percent: 0 };
+      }
 
       if (previousCount === 0) {
-        if (currentCount === 0) return { delta: 0, dir: "flat", current: 0, previous: 0, percent: 0 };
+        // New complaints in current period (100% growth from 0)
         return { delta: currentCount, dir: "up", current: currentCount, previous: 0, percent: 100 };
       }
       
+      // Calculate growth
       const diff = currentCount - previousCount;
-      const pct = previousCount > 0 ? Math.round(((diff / previousCount) * 100) * 10) / 10 : 0;
+      const pct = Math.round(((diff / previousCount) * 100) * 10) / 10;
       return { delta: diff, dir: diff > 0 ? "up" : diff < 0 ? "down" : "flat", current: currentCount, previous: previousCount, percent: Math.abs(pct) };
     } catch {
       return { delta: 0, dir: "flat", current: 0, previous: 0, percent: 0 };
