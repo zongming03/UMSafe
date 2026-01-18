@@ -1,6 +1,7 @@
 import axios from 'axios';
 import Chat from '../models/Chat.js'; 
 import User from '../models/User.js';
+import { emitChatMessage } from '../realtime/socket.js';
 
 export const enrichAssignAdminBody = async (req) => {
   if (req.method !== 'PATCH' || !req.originalUrl.includes('/assign-admin')) return;
@@ -76,6 +77,24 @@ export const maybeSaveChatMessage = async (req) => {
     });
     await newChat.save();
     console.log(`💾 Saved chat message to MongoDB: ${reportId}/${chatroomId}`);
+    
+    // Emit socket event to notify all connected users about the new message
+    try {
+      emitChatMessage(reportId, chatroomId, {
+        messageId: newChat._id,
+        senderId: newChat.senderId,
+        receiverId: newChat.receiverId,
+        message: newChat.message,
+        content: newChat.message,
+        attachment: newChat.attachment,
+        createdAt: newChat.createdAt,
+        timestamp: newChat.createdAt,
+        system: false,
+      });
+      console.log(`📡 Emitted chat:new-message event for ${reportId}/${chatroomId}`);
+    } catch (socketErr) {
+      console.warn('⚠️ Failed to emit socket event:', socketErr.message);
+    }
   } catch (err) {
     console.warn('⚠️ Failed to save message to MongoDB:', err.message);
   }
