@@ -143,16 +143,26 @@ export const deleteRoom = async (req, res) => {
     const faculty = await FacultyModel.findById(facultyId);
     if (!faculty) return res.status(404).json({ msg: "Faculty not found" });
 
-    const block = faculty.faculty_blocks.id(blockId);
-    if (!block) return res.status(404).json({ msg: "Block not found" });
+    // Find the block by ID
+    const blockIndex = faculty.faculty_blocks.findIndex(
+      (b) => String(b._id) === String(blockId)
+    );
+    if (blockIndex === -1) return res.status(404).json({ msg: "Block not found" });
 
-    // Remove the room from the block
-    block.faculty_block_rooms.pull(roomId);
+    const block = faculty.faculty_blocks[blockIndex];
+
+    // Find and remove the room from the block
+    const roomIndex = block.faculty_block_rooms.findIndex(
+      (r) => String(r._id) === String(roomId)
+    );
+    if (roomIndex === -1) return res.status(404).json({ msg: "Room not found" });
+
+    block.faculty_block_rooms.splice(roomIndex, 1);
 
     let blockRemoved = false;
     // If no rooms left in this block, remove the block as well
-    if (!block.faculty_block_rooms || block.faculty_block_rooms.length === 0) {
-      block.remove();
+    if (block.faculty_block_rooms.length === 0) {
+      faculty.faculty_blocks.splice(blockIndex, 1);
       blockRemoved = true;
     }
 
@@ -160,6 +170,7 @@ export const deleteRoom = async (req, res) => {
 
     res.json({ msg: "Room deleted", blockRemoved });
   } catch (err) {
+    console.error("[deleteRoom] Error:", err);
     res.status(500).json({ msg: "Error deleting room", error: err.message });
   }
 };

@@ -5,7 +5,6 @@ import {
   faArrowLeft, 
   faBars,
   faUser,
-
 } from "@fortawesome/free-solid-svg-icons";
 import StatusBanner from "../components/StatusBanner";
 import ComplaintDetailsCard from "../components/ComplaintDetailsCard";
@@ -114,12 +113,12 @@ const ComplaintDetails = () => {
       const matchesId = payload.complaintId === complaint?.id || 
                         payload.complaintId === complaint?.displayId ||
                         payload.complaintId === params?.id;
-      
       if (matchesId) {
         console.log("Status change applies to current complaint, updating...");
         const mappedStatus = normalizeStatus(payload.status);
+        // Update the currentStatus state for immediate UI update (real-time)
+        setCurrentStatus(mappedStatus);
         const targetId = complaint?.id || complaint?.displayId || params?.id;
-
         // Update complaint object
         setComplaint((prev) => {
           if (!prev) return prev;
@@ -127,10 +126,6 @@ const ComplaintDetails = () => {
           console.log("Updated complaint with new status:", payload.status);
           return updated;
         });
-
-        // Update the currentStatus state for immediate UI update
-        setCurrentStatus(mappedStatus);
-
         // Keep sidebar list in sync
         if (targetId && allComplaints && allComplaints.length) {
           setAllComplaints((prev) => prev.map((c) => {
@@ -138,7 +133,6 @@ const ComplaintDetails = () => {
             return matches ? { ...c, status: mappedStatus } : c;
           }));
         }
-
         // Refresh full complaint data and histories
         if (targetId) {
           (async () => {
@@ -268,6 +262,7 @@ const ComplaintDetails = () => {
   const [isCloseConfirmationOpen, setIsCloseConfirmationOpen] = useState(false);
   const [isCloseReportModalOpen, setIsCloseReportModalOpen] = useState(false);
   const [statusPendingConfirmation, setStatusPendingConfirmation] = useState(null);
+  const [isStatusUpdating, setIsStatusUpdating] = useState(false);
 
   const statusRef = useRef(null);
   const assignRef = useRef(null);
@@ -610,23 +605,26 @@ const ComplaintDetails = () => {
     }
 
     if (status !== currentStatus) {
-      // Optimistically update the UI first
-      setCurrentStatus(status);
+      setIsStatusUpdating(true);
       updateHistory(`Status changed to "${status}"`);
-      
-      const onSuccess = async () => {
+
+      const onSuccess = async (payload) => {
+        // If backend returns a payload with status, update locally
+        if (payload && payload.status) {
+          const mappedStatus = normalizeStatus(payload.status);
+          setCurrentStatus(mappedStatus);
+        }
         // Refresh from backend
         const refreshed = await refreshComplaintFromPartner(complaint.id, complaint);
         if (refreshed) {
-          // Update complaint state with refreshed data
           setComplaint(refreshed);
-          // Ensure status is synced with the refreshed data
           const refreshedStatus = normalizeStatus(refreshed.status);
           setCurrentStatus(refreshedStatus);
         }
         await fetchAndSetHistories(complaint.id);
+        setIsStatusUpdating(false);
       };
-      
+
       updateComplaintStatus(complaint.id, status, onSuccess);
     }
     setIsStatusDropdownOpen(false);
@@ -846,54 +844,66 @@ const ComplaintDetails = () => {
             <div className="w-full lg:w-80 space-y-6" style={{ overflow: 'visible' }}>
               {/* Quick Actions Card */}
               {shouldShowQuickActions && (
-                <QuickActionsCard
-                  complaint={complaint}
-                  statusRef={statusRef}
-                  assignRef={assignRef}
-                  isStatusDropdownOpen={isStatusDropdownOpen}
-                  setIsStatusDropdownOpen={setIsStatusDropdownOpen}
-                  isAssignDropdownOpen={isAssignDropdownOpen}
-                  setIsAssignDropdownOpen={setIsAssignDropdownOpen}
-                  statusOptions={statusOptions}
-                  currentStatus={currentStatus}
-                  handleStatusChange={handleStatusChange}
-                  staffMembers={staffMembers}
-                  assignedTo={assignedToName}
-                  handleAssignChange={handleAssignChange}
-                  handleRevokeAssignment={() => {
-                    // Prevent revocation if complaint is in terminated state (Resolved or Closed)
-                    const isTerminated = currentStatus === 'Resolved' || currentStatus === 'Closed';
-                    if (isTerminated) {
-                      toast.error(`Cannot revoke assignment for ${currentStatus.toLowerCase()} (terminated) complaints.`);
-                      return;
-                    }
+                <>
+                  {isStatusUpdating && (
+                    <div className="mb-2 flex items-center justify-center">
+                      <span className="text-blue-600 text-sm font-medium">Updating status...</span>
+                      <svg className="animate-spin ml-2 h-4 w-4 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path>
+                      </svg>
+                    </div>
+                  )}
+                  <QuickActionsCard
+                    complaint={complaint}
+                    statusRef={statusRef}
+                    assignRef={assignRef}
+                    isStatusDropdownOpen={isStatusDropdownOpen}
+                    setIsStatusDropdownOpen={setIsStatusDropdownOpen}
+                    isAssignDropdownOpen={isAssignDropdownOpen}
+                    setIsAssignDropdownOpen={setIsAssignDropdownOpen}
+                    statusOptions={statusOptions}
+                    currentStatus={currentStatus}
+                    handleStatusChange={isStatusUpdating ? () => {} : handleStatusChange}
+                    staffMembers={staffMembers}
+                    assignedTo={assignedToName}
+                    handleAssignChange={handleAssignChange}
+                    handleRevokeAssignment={() => {
+                      // Prevent revocation if complaint is in terminated state (Resolved or Closed)
+                      const isTerminated = currentStatus === 'Resolved' || currentStatus === 'Closed';
+                      if (isTerminated) {
+                        toast.error(`Cannot revoke assignment for ${currentStatus.toLowerCase()} (terminated) complaints.`);
+                        return;
+                      }
 
-                    const onSuccess = async () => {
-                      setAssignedToId('');
-                      setAssignedToName('Unassigned');
-                      setAssignedToEmail('');
-                      setCurrentStatus('Open');
-                      updateHistory(`Assignment revoked`);
+                      const onSuccess = async () => {
+                        setAssignedToId('');
+                        setAssignedToName('Unassigned');
+                        setAssignedToEmail('');
+                        setCurrentStatus('Open');
+                        updateHistory(`Assignment revoked`);
+                        
+                        const refreshed = await refreshComplaintFromPartner(complaint.id, complaint);
+                        setComplaint(refreshed);
+                        await fetchAndSetHistories(complaint.id);
+                      };
                       
-                      const refreshed = await refreshComplaintFromPartner(complaint.id, complaint);
-                      setComplaint(refreshed);
-                      await fetchAndSetHistories(complaint.id);
-                    };
-                    
-                    revokeAssignedStaff(complaint.id, onSuccess);
-                  }}
-                  isReportModalOpen={isReportModalOpen}
-                  setIsReportModalOpen={setIsReportModalOpen}
-                  reportFormat={reportFormat}
-                  setReportFormat={setReportFormat}
-                  reportContent={reportContent}
-                  setReportContent={setReportContent}
-                  isGenerating={isGenerating}
-                  handleGenerateReport={handleGenerateReport}
-                  isAnonymous={isAnonymous}
-                  handleOpenChatroom={handleOpenChatroom}
-                  shouldShowReassign={shouldShowReassign}
-                />
+                      revokeAssignedStaff(complaint.id, onSuccess);
+                    }}
+                    isReportModalOpen={isReportModalOpen}
+                    setIsReportModalOpen={setIsReportModalOpen}
+                    reportFormat={reportFormat}
+                    setReportFormat={setReportFormat}
+                    reportContent={reportContent}
+                    setReportContent={setReportContent}
+                    isGenerating={isGenerating}
+                    handleGenerateReport={handleGenerateReport}
+                    isAnonymous={isAnonymous}
+                    handleOpenChatroom={handleOpenChatroom}
+                    shouldShowReassign={shouldShowReassign}
+                    disabled={isStatusUpdating}
+                  />
+                </>
               )}
 
               {/* Assigned Staff Card */}

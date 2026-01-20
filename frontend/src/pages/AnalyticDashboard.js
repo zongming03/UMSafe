@@ -3221,7 +3221,7 @@ function App() {
                               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{cat}</td>
                               <td className="px-6 py-4 whitespace-nowrap">{renderStars(fb?.q1Rating)}</td>
                               <td className="px-6 py-4 whitespace-nowrap">{renderStars(fb?.q2Rating)}</td>
-                              <td className="px-6 py-4 text-sm text-gray-500 max-w-xs truncate" title={fb?.overallComment}>{fb?.overallComment || '—'}</td>
+                              <td className="px-6 py-4 text-sm text-gray-500 whitespace-pre-line break-words" title={fb?.overallComment}>{fb?.overallComment || '—'}</td>
                               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{formatFriendlyDate(dateStr)}</td>
                             </tr>
                           );
